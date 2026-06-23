@@ -1,0 +1,1 @@
+# stdlib-only MVP: no Python packages required

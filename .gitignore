@@ -1,0 +1,17 @@
+# Local runtime data and secrets
+app_data/
+*.db
+.env
+.env.local
+anthropic_key.txt
+elevenlabs_key.txt
+*.key
+*.pem
+
+# Python/cache
+__pycache__/
+*.pyc
+.DS_Store
+
+# Generated archives
+*.zip

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: hancock-live-marketing-studio
+    env: docker
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: hancock-live-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: APP_DATA_DIR
+        value: /var/data
+      - key: HOST
+        value: 0.0.0.0
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
