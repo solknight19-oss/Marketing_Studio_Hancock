@@ -33,8 +33,8 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '').strip()
 EMAIL_FROM = os.environ.get('EMAIL_FROM', 'Hancock Marketing Studio <studio@hancockclaims.com>').strip()
 USERS = [
     ('admin', 'rknight@hancockclaims.com', 'Ryan Knight', 'owner'),
-    ('cassie', '', 'Cassie Tant', 'admin'),
-    ('jennifer', '', 'Jennifer Walker', 'admin'),
+    ('cassie', 'ctant@hancockclaims.com', 'Cassie Tant', 'admin'),
+    ('jennifer', 'jwalker@hancockclaims.com', 'Jennifer Walker', 'admin'),
 ]
 PASSWORD_ENV_VARS = {
     'admin': 'ADMIN_PASSWORD',
@@ -142,7 +142,8 @@ def init_db():
         cur.execute('alter table users add column password_reset_required integer not null default 0')
     cur.execute('create unique index if not exists users_email_unique on users(lower(email)) where email is not null and email != ""')
     cur.execute("update users set email=?,role='owner' where username='admin'", ('rknight@hancockclaims.com',))
-    cur.execute("update users set password_reset_required=1 where username in ('cassie','jennifer') and (email is null or email='')")
+    cur.execute("update users set password_reset_required=case when email is null or email='' then 1 else password_reset_required end,email=?,role='admin' where username='cassie'", ('ctant@hancockclaims.com',))
+    cur.execute("update users set password_reset_required=case when email is null or email='' then 1 else password_reset_required end,email=?,role='admin' where username='jennifer'", ('jwalker@hancockclaims.com',))
     if cur.execute('select count(*) as n from users').fetchone()['n'] == 0:
         lines=['# Initial Live Studio Owner Login','','Use this only for initial owner access, then use the secure reset flow.','']
         ids={}
