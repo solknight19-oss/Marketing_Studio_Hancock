@@ -3,7 +3,8 @@
 This folder is the deployable site package for the next phase.
 
 Included:
-- Login-gated shared workspace for Ryan, Cassie, and Jennifer
+- Email-based login for Ryan, Cassie, and Jennifer
+- Secure admin invitations and one-time password setup/reset links
 - Shared drafts and task board
 - Chad guidance connected to the bot council
 - Live industry scan action using `marketing_bot.py`
@@ -20,7 +21,7 @@ python3 server.py
 
 Open `http://127.0.0.1:8765`.
 
-Initial generated logins are written to `app_data/INITIAL_LOGINS.md` on first run.
+Local-only bootstrap logins are written to `app_data/INITIAL_LOGINS.md` on first run.
 
 ## Deploy on Render
 
@@ -28,12 +29,20 @@ Initial generated logins are written to `app_data/INITIAL_LOGINS.md` on first ru
 2. Create a Render Blueprint/Web Service from `render.yaml`.
 3. Set `ANTHROPIC_API_KEY` privately if you want AI drafting.
 4. Keep the persistent disk mounted at `/var/data` so logins, tasks, sessions, and drafts survive deploys.
-5. Set `ADMIN_PASSWORD`, `CASSIE_PASSWORD`, and `JENNIFER_PASSWORD` in Render. These values reset the matching login whenever the service starts.
+5. Set `RESEND_API_KEY` privately for invitations and password-reset email.
+6. Verify `hancockclaims.com` in Resend and set `EMAIL_FROM` to an address on that verified domain.
+7. Set `ADMIN_PASSWORD` once as Ryan's bootstrap password. After Ryan signs in, he can invite the team from Admin. Do not set Cassie or Jennifer passwords; they create their own.
 
 ## Production hardening
 
-Before broad use:
-- Add email invites/password reset.
+Security included:
+- Passwords stored only as salted PBKDF2 hashes
+- One-time, hashed setup and reset tokens
+- 24-hour invitation expiry and one-hour reset expiry
+- Hancock-domain restriction and request rate limiting
+- Secure, HTTP-only production session cookies
+
+Before broader use:
 - Add managed backups for `/var/data/studio.db`.
 - Move to Postgres if usage grows.
 - Keep API keys only in environment variables.

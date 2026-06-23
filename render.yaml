@@ -17,9 +17,13 @@ services:
         generateValue: true
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: BASE_URL
+        value: https://hancock-live-marketing-studio.onrender.com
+      - key: ALLOWED_EMAIL_DOMAIN
+        value: hancockclaims.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Hancock Marketing Studio <studio@hancockclaims.com>
       - key: ADMIN_PASSWORD
-        sync: false
-      - key: CASSIE_PASSWORD
-        sync: false
-      - key: JENNIFER_PASSWORD
         sync: false
