@@ -23,6 +23,11 @@ SESSION_DAYS = 7
 PORT = int(os.environ.get('PORT', '8765'))
 HOST = os.environ.get('HOST', '0.0.0.0')
 USERS = [('admin', 'Ryan Knight', 'admin'), ('cassie', 'Cassie Tant', 'admin'), ('jennifer', 'Jennifer Walker', 'admin')]
+PASSWORD_ENV_VARS = {
+    'admin': 'ADMIN_PASSWORD',
+    'cassie': 'CASSIE_PASSWORD',
+    'jennifer': 'JENNIFER_PASSWORD',
+}
 SERVICE_LINES = ['Storm / CAT Damage','Underwriting Inspection','Contents','Engineering','Commercial','Residential','4-Point Inspection','Ladder Assist','Loss Control','DI / UDI Inspections']
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -70,7 +75,7 @@ def init_db():
         lines=['# Initial Live Studio Logins','','Temporary local passwords. Change before public deployment.','']
         ids={}
         for username, name, role in USERS:
-            pw=secrets.token_urlsafe(9)
+            pw=os.environ.get(PASSWORD_ENV_VARS[username], '').strip() or secrets.token_urlsafe(9)
             cur.execute('insert into users(username,name,role,password_hash,created_at) values(?,?,?,?,?)',(username,name,role,password_hash(pw),now()))
             ids[username]=cur.lastrowid
             lines.append(f'- {name}: username `{username}`, password `{pw}`')
@@ -79,6 +84,11 @@ def init_db():
         except Exception: pass
         cur.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',("Review today's Industry Radar",'Pick one live trend and turn it into a Hancock post or article.','todo',ids.get('cassie'),ids.get('admin'),now(),now()))
         cur.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',('Complete first article draft','Use the bot suggestions, add the Hancock angle, and move the draft to Ready for Review.','todo',ids.get('jennifer'),ids.get('admin'),now(),now()))
+    for username, env_name in PASSWORD_ENV_VARS.items():
+        configured_password = os.environ.get(env_name, '').strip()
+        if configured_password:
+            cur.execute('update users set password_hash=? where username=?',
+                        (password_hash(configured_password), username))
     con.commit(); con.close()
 def log_action(user_id, action, meta=''):
     con=db(); con.execute('insert into activity(user_id,action,meta,created_at) values(?,?,?,?)',(user_id,action,meta,now())); con.commit(); con.close()

@@ -28,7 +28,7 @@ Initial generated logins are written to `app_data/INITIAL_LOGINS.md` on first ru
 2. Create a Render Blueprint/Web Service from `render.yaml`.
 3. Set `ANTHROPIC_API_KEY` privately if you want AI drafting.
 4. Keep the persistent disk mounted at `/var/data` so logins, tasks, sessions, and drafts survive deploys.
-5. After first deploy, retrieve `INITIAL_LOGINS.md` from `/var/data` or set users/passwords manually later.
+5. Set `ADMIN_PASSWORD`, `CASSIE_PASSWORD`, and `JENNIFER_PASSWORD` in Render. These values reset the matching login whenever the service starts.
 
 ## Production hardening
 
