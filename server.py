@@ -250,7 +250,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
         if path=='/healthz': self.send_json({'ok': True, 'service': 'hancock-live-site'}); return
-        if path=='/': self.redirect('/dashboard' if self.current_user() else '/login'); return
+        if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
         if path=='/login': self.send_html(LOGIN_HTML); return
         if path=='/forgot': self.send_html(FORGOT_HTML); return
         if path=='/reset':
@@ -297,7 +297,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             token=secrets.token_urlsafe(32); expires=(dt.datetime.now()+dt.timedelta(days=SESSION_DAYS)).isoformat(timespec='seconds')
             con.execute('insert into sessions(token,user_id,expires_at) values(?,?,?)',(token,row['id'],expires)); con.commit(); con.close(); log_action(row['id'],'logged in')
             secure='; Secure' if self.secure_cookie() else ''
-            self.send_response(302); self.send_header('Location','/dashboard'); self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}'); self.end_headers()
+            self.send_response(302); self.send_header('Location','/studio'); self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}'); self.end_headers()
         else:
             con.close(); self.send_html(LOGIN_HTML.replace('<!--ERR-->','<div class="err">Login failed. Check your email and password, or use Forgot password.</div>'),401)
     def lookup_access_token(self, token):
