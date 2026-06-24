@@ -73,7 +73,7 @@
     + '<div class="cw-brief" id="cwBrief" style="display:none"></div>'
     + '<div class="cw-msgs" id="cwMsgs"></div>'
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
-    + '<button class="cw-chip" data-q="what is my next step">My next step</button>'
+    + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
     + '<button class="cw-chip" data-q="run the studio">Run the studio</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
@@ -151,7 +151,14 @@
   function loadBrief() {
     if (!USER) return;
     fetch(API + "/api/state").then(function (r) { return r.json(); })
-      .then(function (d) { if (d.welcome) { brief.style.display = "block"; brief.textContent = d.welcome; } })
+      .then(function (d) {
+        if (d.chadBriefing) {
+          brief.style.display = "block";
+          brief.textContent = d.chadBriefing.headline + " — " + d.chadBriefing.proposal;
+        } else if (d.welcome) {
+          brief.style.display = "block"; brief.textContent = d.welcome;
+        }
+      })
       .catch(function () {});
   }
 
@@ -161,10 +168,20 @@
   function firstGreet() {
     if (!USER) { showPicker(); return; }
     greeted = true; loadBrief();
-    var hi = "Hello, " + USER + ". I'm here whenever you need me — ask for a briefing or just talk.";
-    bubble("Hello, <b>" + esc(USER) + "</b>. I'm here whenever you need me — ask me for a briefing, or just talk.", "chad");
+    var hi = "Good to see you, " + USER + ". I am pulling your briefing.";
     fetch(API + "/api/state").then(function (r) { return r.json(); })
-      .then(function (d) { speak("Hello, " + USER + ". " + (d.welcome || hi)); }).catch(function () { speak(hi); });
+      .then(function (d) {
+        var message=d.welcome || hi;
+        bubble(esc(message), "chad");
+        speak(message);
+      }).catch(function () { bubble(esc(hi), "chad"); speak(hi); });
+  }
+  function autoOpen() {
+    if (!USER) return;
+    var key="chad_auto_open_"+USER+"_"+new Date().toISOString().slice(0,10);
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key,"1");
+    setTimeout(open,1200);
   }
   function showPicker() {
     var p = document.createElement("div"); p.className = "cw-pick";
@@ -190,5 +207,6 @@
   };
 
   /* ---------- public API (for a docked "Chad tab") ---------- */
-  window.ChadWidget = { open: open, close: close, setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); }, send: send };
+  window.ChadWidget = { open: open, close: close, setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); }, send: send };
+  if (USER) autoOpen();
 })();

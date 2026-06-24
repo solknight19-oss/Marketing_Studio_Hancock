@@ -443,18 +443,150 @@ def bot_scheduler():
         except Exception as exc:
             print('Scheduled bot cycle failed:',exc)
         time.sleep(300)
+def proactive_briefing(user, tasks, drafts, activity):
+    feed=chad_feed()
+    specialists={item.get('bot'):item for item in feed.get('bots') or []}
+    storm=specialists.get('Storm Watch Bot') or {}
+    alerts=storm.get('recommendations') or []
+    states=[]
+    events=[]
+    for alert in alerts:
+        state=alert.get('state')
+        event=alert.get('event')
+        if state and state not in states: states.append(state)
+        if event and event not in events: events.append(event)
+    radar=specialists.get('Industry Radar Bot') or {}
+    signal=(radar.get('recommendations') or [{}])[0]
+    doing=[t for t in tasks if t.get('status')=='doing']
+    open_tasks=[t for t in tasks if t.get('status') in ('todo','review')]
+    recent=[a for a in activity if a.get('user_id')!=user['id']][:1]
+    if alerts:
+        event_text=', '.join(events[:2]).lower() or 'severe weather'
+        state_text=', '.join(states[:6])
+        headline=f"{len(alerts)} active weather alerts across {state_text}"
+        situation=f"I am tracking {event_text} affecting {state_text}. While threats are active, our message should lead with preparation and safety, not selling."
+        proposal="I can prepare a safety-first storm-readiness post now, then hold the post-event inspection guidance for review."
+        action_label='Prepare storm post'
+        action_prompt='prepare the suggested post'
+    elif signal.get('title'):
+        headline='A market signal is ready for action'
+        situation=f"The strongest current signal is: {signal['title']}."
+        proposal=f"I can prepare a Hancock article using this angle: {signal.get('hancock_angle') or 'clear communication, defensible documentation, and property intelligence'}"
+        action_label='Prepare article'
+        action_prompt='prepare the suggested post'
+    else:
+        headline='Your daily briefing is ready'
+        situation='No urgent weather or market signal is blocking the team.'
+        proposal='I can prepare a useful evergreen property-inspection post from the current keyword clusters.'
+        action_label='Prepare a post'
+        action_prompt='prepare the suggested post'
+    work=''
+    if doing:
+        work=f" Open work: {doing[0]['title']} is currently in progress."
+    elif open_tasks:
+        work=f" Next team task: {open_tasks[0]['title']}."
+    if recent:
+        work+=f" Team update: {recent[0].get('user_name') or 'A teammate'} {recent[0].get('action')} {recent[0].get('meta') or ''}."
+    return {
+        'headline':headline,
+        'situation':situation,
+        'work':work.strip(),
+        'proposal':proposal,
+        'action_label':action_label,
+        'action_prompt':action_prompt,
+        'alert_count':len(alerts),
+        'states':states,
+        'generated_at':feed.get('generatedAt') or '',
+    }
 def bot_welcome(user, tasks, drafts, activity):
-    feed = chad_feed().get('mainSpeakingBot', {})
-    open_tasks=[t for t in tasks if t.get('status')!='done']; doing=[t for t in tasks if t.get('status')=='doing']; recent=[a for a in activity if a.get('user_id')!=user['id']][:2]
-    parts=[f"Hi {user['name'].split()[0]}. Chad has the latest bot briefing ready."]
-    if feed.get('priority'):
-        parts.append(f"Priority: {feed['priority']}")
-    if doing: parts.append(f"Active work: {doing[0]['title']}. Let's complete that before starting another item.")
-    elif open_tasks: parts.append(f"Best next step: {open_tasks[0]['title']}.")
-    else: parts.append('No open tasks are blocking you. Pick a fresh radar trend and start the next draft.')
-    if drafts: parts.append(f"Latest draft: {drafts[0]['title']} ({drafts[0]['status']}).")
-    if recent: parts.append(f"Workspace update: {recent[0].get('user_name') or 'Someone'} {recent[0].get('action')} {recent[0].get('meta') or ''}.")
+    briefing=proactive_briefing(user,tasks,drafts,activity)
+    parts=[
+        f"Good to see you, {user['name'].split()[0]}. Here is what you need to know.",
+        briefing['situation'],
+    ]
+    if briefing['work']: parts.append(briefing['work'])
+    parts.append(briefing['proposal'])
     return ' '.join(parts)
+def prepare_recommended_draft(user):
+    state=collect_state()
+    feed=chad_feed()
+    specialists={item.get('bot'):item for item in feed.get('bots') or []}
+    storm=specialists.get('Storm Watch Bot') or {}
+    alerts=storm.get('recommendations') or []
+    if alerts:
+        states=[]
+        events=[]
+        for alert in alerts:
+            if alert.get('state') and alert['state'] not in states: states.append(alert['state'])
+            if alert.get('event') and alert['event'] not in events: events.append(alert['event'])
+        state_text=', '.join(states[:6])
+        event_text=' and '.join(events[:2]) or 'Severe Weather'
+        title=f"Property Storm Readiness: Preparing for {event_text}"
+        line='Storm / CAT Damage'
+        prompt=f"""Prepare a review-ready Hancock Claims Consultants blog post about active {event_text} alerts affecting {state_text}.
+Lead with public safety and property preparation. Do not sell services while the threat is active. Explain practical documentation steps before and after the event, original-photo preservation, clear communication, and the difference between inspection documentation and carrier coverage decisions. Include SEO title, meta description, short answer block, headings, FAQs, LinkedIn copy, and a review note. Do not claim Hancock observed damage at any property."""
+        fallback=f"""# {title}
+
+## Before the Weather Arrives
+Follow official emergency guidance first. When it is safe, document the property's current condition with clear, original photos of exterior elevations, roofing components visible from a safe location, drainage, and known vulnerable areas.
+
+## Preserve Clear Information
+Keep original image files, note dates and locations, and avoid entering unsafe areas. Good documentation helps create a clearer starting point if a property inspection is needed later.
+
+## After the Event
+Wait until authorities say conditions are safe. Record visible changes without assuming cause or coverage. Inspection findings document conditions; the carrier makes coverage decisions.
+
+## Hancock Perspective
+Clear communication and consistent documentation reduce uncertainty. Documentation should answer questions before they are asked.
+
+## Suggested Social Copy
+Severe weather is affecting {state_text}. Safety comes first. When conditions allow, preserve original photos and clear notes about the property's condition. Accurate documentation creates a stronger starting point for the next conversation.
+
+*Prepared by Chad for team review. Verify alert timing and affected areas before publishing.*"""
+    else:
+        stories=state['botData'].get('stories') or []
+        story=stories[0] if stories else {}
+        title=f"What {story.get('title') or 'Today’s Property Trends'} Means for Property Inspection Teams"
+        line=story.get('line') or 'Property Inspection'
+        prompt=f"""Prepare a review-ready Hancock Claims Consultants article from this current signal: {story.get('title') or 'current property inspection trends'}.
+Source summary: {story.get('summary') or 'No source summary available.'}
+Hancock angle: {story.get('angle') or 'trust, communication, consistency, and defensible documentation'}.
+Include SEO title, meta description, direct answer, headings, FAQs, LinkedIn copy, and a review note. Label the source as an observed signal, not an established industry fact."""
+        fallback=f"""# {title}
+
+## What We Are Watching
+{story.get('summary') or 'Property inspection teams continue to balance speed, communication, and documentation quality.'}
+
+## Hancock Perspective
+{story.get('angle') or 'The strongest files combine clear communication, consistent field standards, and defensible documentation.'}
+
+## Practical Takeaway
+Treat this as an observed market signal. Verify the source, compare it with operational data, and build content around what carriers and property teams can use.
+
+*Prepared by Chad for team review. Verify all source claims before publishing.*"""
+    body=fallback
+    if ANTHROPIC_API_KEY:
+        try:
+            system=CHAD_PERSONA+'\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook()
+            body=anthropic_message(system,prompt,1800)
+        except Exception as exc:
+            print('Chad draft fallback:',exc)
+    con=db()
+    existing=con.execute(
+        "select id,title from drafts where title=? and status!='published' order by id desc limit 1",(title,)
+    ).fetchone()
+    if existing:
+        con.close()
+        return {'id':existing['id'],'title':existing['title'],'created':False}
+    stamp=now()
+    cur=con.execute(
+        'insert into drafts(title,body,content_type,service_line,status,owner_id,updated_by,created_at,updated_at) values(?,?,?,?,?,?,?,?,?)',
+        (title,body,'Blog Post + LinkedIn',line,'draft',user['id'],user['id'],stamp,stamp)
+    )
+    draft_id=cur.lastrowid
+    con.commit(); con.close()
+    log_action(user['id'],'asked Chad to prepare draft',title)
+    return {'id':draft_id,'title':title,'created':True}
 def bot_reply(user, message, state):
     lower=message.lower(); tasks=state['tasks']; bot_data=state['botData']; activity=state['activity']
     if any(w in lower for w in ['cassie','jennifer','other','working']):
@@ -665,7 +797,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for item in collection:
                 for key in ('created_at','updated_at'):
                     if key in item: item[key+'_human']=human_time(item.get(key))
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'activity':activity,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(user,tasks,drafts,activity)})
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'activity':activity,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(user,tasks,drafts,activity),'chadBriefing':proactive_briefing(user,tasks,drafts,activity)})
     def api_save_draft(self,user):
         data=self.read_body(); title=(data.get('title') or 'Untitled draft').strip()[:160]; body=data.get('body') or ''; ctype=(data.get('content_type') or 'Blog Post')[:60]; line=(data.get('service_line') or '')[:80]; status=(data.get('status') or 'draft')[:40]; draft_id=data.get('id')
         con=db()
@@ -692,6 +824,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             result=run_bot_cycle('chad',user['id'])
             reply='The specialist bots finished their scan and I refreshed the briefing.' if result['ok'] else result.get('output') or 'The bot cycle could not finish.'
             self.send_json({'reply':reply,'mode':'action','bots':result.get('overview')}); return
+        if any(phrase in lower for phrase in ('prepare the suggested post','prepare storm post','prepare the post','draft the suggested post','get the post ready')):
+            draft=prepare_recommended_draft(user)
+            verb='prepared' if draft['created'] else 'already have'
+            reply=f"I {verb} “{draft['title']}” in the shared Drafts workspace. It is not published. Review the facts and alert timing, then move it forward when the team is comfortable."
+            self.send_json({'reply':reply,'mode':'action','draft':draft}); return
         if remembered and not ANTHROPIC_API_KEY:
             reply=f'I will remember that: {remembered}.'
             log_action(user['id'],'taught Chad',remembered[:140]); self.send_json({'reply':reply,'mode':'memory'}); return
