@@ -20,6 +20,8 @@
   var API = (CFG.apiBase || "").replace(/\/$/, "");
   var USER = CFG.user || localStorage.getItem("chad_widget_user") || null;
   var muted = localStorage.getItem("chad_widget_mute") === "1";
+  var conversationMode = localStorage.getItem("chad_widget_conversation") !== "0";
+  var minimized = localStorage.getItem("chad_widget_minimized") === "1";
   var greeted = false;
 
   /* ---------- styles ---------- */
@@ -35,13 +37,16 @@
     + '#chadw .cw-spin3{transform-box:fill-box;transform-origin:center;animation:cwspin 9s linear infinite}'
     + '@keyframes cwspin{to{transform:rotate(360deg)}}'
     + '#chadw #cwCore{transform-box:fill-box;transform-origin:center;transition:transform .07s linear}'
-    + '#chadw .cw-panel{position:absolute;right:0;bottom:120px;width:340px;max-width:88vw;height:460px;max-height:72vh;'
+    + '#chadw .cw-panel{position:fixed;right:22px;bottom:142px;width:340px;max-width:88vw;height:460px;max-height:72vh;'
     + 'background:linear-gradient(180deg,#0d2c4a,#0a2236);border:1px solid rgba(79,147,224,.35);border-radius:16px;'
     + 'box-shadow:0 24px 70px rgba(4,12,22,.6);display:none;flex-direction:column;overflow:hidden}'
     + '#chadw.cw-open .cw-panel{display:flex;animation:cwrise .22s ease both}'
+    + '#chadw.cw-min .cw-panel{height:auto;min-height:0}'
+    + '#chadw.cw-min .cw-brief,#chadw.cw-min .cw-msgs,#chadw.cw-min .cw-chips,#chadw.cw-min .cw-comp{display:none!important}'
     + '@keyframes cwrise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}'
-    + '#chadw .cw-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(79,147,224,.25)}'
+    + '#chadw .cw-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(79,147,224,.25);cursor:move;user-select:none;touch-action:none}'
     + '#chadw .cw-head .t{font-size:13.5px;font-weight:800;color:#eaf2fb}#chadw .cw-head .t span{color:#4f93e0;font-size:10px;font-weight:700;letter-spacing:1px}'
+    + '#chadw .cw-actions{display:flex;align-items:center;gap:3px}'
     + '#chadw .cw-x{background:none;border:none;color:#9fb4c9;font-size:18px;cursor:pointer;line-height:1}'
     + '#chadw .cw-x.ready{color:#55d6a5;text-shadow:0 0 10px rgba(85,214,165,.6)}'
     + '#chadw .cw-brief{font-size:12px;color:#bcd2ea;padding:10px 13px;border-bottom:1px solid rgba(79,147,224,.18);line-height:1.5;background:rgba(47,111,191,.08)}'
@@ -62,7 +67,8 @@
     + '#chadw .cw-pick{padding:14px 13px;color:#cfe0f2;font-size:13px}#chadw .cw-pick b{color:#fff}'
     + '#chadw .cw-pick .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}'
     + '#chadw .cw-pick button{background:rgba(47,111,191,.2);border:1px solid rgba(79,147,224,.5);color:#eaf2fb;font-weight:700;font-size:13px;padding:9px 14px;border-radius:10px;cursor:pointer}'
-    + '#chadw .cw-pick button:hover{background:#2f6fbf;color:#fff}';
+    + '#chadw .cw-pick button:hover{background:#2f6fbf;color:#fff}'
+    + '@media(max-width:600px){#chadw .cw-panel{left:10px!important;right:10px!important;top:auto!important;bottom:126px!important;width:auto;max-width:none;height:min(520px,70vh)}}';
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
 
   /* ---------- markup ---------- */
@@ -70,15 +76,16 @@
   root.innerHTML =
     '<div class="cw-panel">'
     + '<div class="cw-head"><div class="t">Chad <span id="cwState">ONLINE</span></div>'
-    + '<div><button class="cw-x" id="cwHear" title="Play or replay Chad">&#9654;</button> '
+    + '<div class="cw-actions"><button class="cw-x" id="cwHear" title="Play or replay Chad">&#9654;</button> '
     + '<button class="cw-x" id="cwMute" title="Mute">' + (muted ? '&#128263;' : '&#128266;') + '</button> '
+    + '<button class="cw-x" id="cwMin" title="Minimize">&#8722;</button> '
     + '<button class="cw-x" id="cwClose" title="Close">&#10005;</button></div></div>'
     + '<div class="cw-brief" id="cwBrief" style="display:none"></div>'
     + '<div class="cw-msgs" id="cwMsgs"></div>'
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
     + '<button class="cw-chip" data-q="run the studio">Run the studio</button>'
-    + '<button class="cw-chip" id="cwConversation">Conversation off</button></div>'
+    + '<button class="cw-chip' + (conversationMode ? ' on' : '') + '" id="cwConversation">' + (conversationMode ? 'Conversation on' : 'Conversation off') + '</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
     + '<div class="cw-orbwrap" id="cwOrbWrap"><div class="cw-lbl"><b>CHAD</b></div>'
@@ -116,7 +123,9 @@
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null;
-  var recognition = null, conversationMode = false, requestNumber = 0, activeRequest = null;
+  var recognition = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
+  var panel = root.querySelector(".cw-panel"), head = root.querySelector(".cw-head");
+  if (minimized) root.classList.add("cw-min");
 
   function setState(s) { stateEl.textContent = s; }
   function bubble(t, who) { var d = document.createElement("div"); d.className = "cw-m " + who; d.innerHTML = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
@@ -151,6 +160,18 @@
     }
     vizStop();
   }
+  function clearListenTimer() {
+    if (listenTimer) window.clearTimeout(listenTimer);
+    listenTimer=null;
+  }
+  function queueListening(delay) {
+    clearListenTimer();
+    if (!conversationMode || curSource || activeRequest || recognition || !root.classList.contains("cw-open")) return;
+    listenTimer=window.setTimeout(function () {
+      listenTimer=null;
+      startListening(false);
+    },delay || 350);
+  }
   function playBuffer(buffer) {
     if (!buffer || muted) return;
     ensureAudioContext().then(function () {
@@ -160,7 +181,7 @@
       source.onended=function () {
         if (curSource!==source) return;
         curSource=null; vizStop();
-        if (conversationMode) setTimeout(startListening,350);
+        queueListening(350);
       };
       source.start(0); vizStart();
     }).catch(function () {
@@ -169,7 +190,7 @@
     });
   }
   function speak(text) {
-    if (muted) return;
+    if (muted) { queueListening(250); return; }
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
       .then(function (r) {
         if (r.ok) return r.arrayBuffer();
@@ -187,7 +208,7 @@
       }).catch(function (error) {
         var quota=error && /quota|credit/i.test(error.message || "");
         setState(quota ? "VOICE CREDITS NEEDED" : "VOICE UNAVAILABLE");
-        if (conversationMode) setTimeout(startListening, 500);
+        queueListening(500);
       });
   }
   function vizStart() {
@@ -214,6 +235,7 @@
   function send(text) {
     if (!text.trim()) return;
     ensureAudioContext().catch(function () {});
+    clearListenTimer();
     stopSpeech();
     if (recognition) { try { recognition.abort(); } catch (e) {} recognition = null; }
     if (activeRequest) { try { activeRequest.abort(); } catch (e) {} }
@@ -234,7 +256,7 @@
         var reply = d.reply || "…";
         bubble(esc(reply), "chad");
         speak(reply);
-        setState("ONLINE");
+        if (!curSource) setState("ONLINE");
         if (d.ui_action) setTimeout(function () { navigate(d.ui_action); }, 450);
       })
       .catch(function (error) {
@@ -243,6 +265,7 @@
         activeRequest=null;
         bubble("I can't reach my brain right now — is the Chad service running?", "chad");
         setState("OFFLINE");
+        queueListening(1000);
       });
   }
   function loadBrief() {
@@ -260,8 +283,44 @@
   }
 
   /* ---------- open / greet ---------- */
-  function open() { ensureAudioContext().catch(function () {}); root.classList.add("cw-open"); if (!greeted) firstGreet(); }
-  function close() { root.classList.remove("cw-open"); }
+  function restorePanelPosition() {
+    if (window.innerWidth <= 600) return;
+    try {
+      var saved=JSON.parse(localStorage.getItem("chad_widget_position") || "null");
+      if (!saved || typeof saved.left !== "number" || typeof saved.top !== "number") return;
+      var maxLeft=Math.max(8,window.innerWidth-panel.offsetWidth-8);
+      var maxTop=Math.max(8,window.innerHeight-panel.offsetHeight-8);
+      panel.style.left=Math.min(Math.max(8,saved.left),maxLeft)+"px";
+      panel.style.top=Math.min(Math.max(8,saved.top),maxTop)+"px";
+      panel.style.right="auto"; panel.style.bottom="auto";
+    } catch (e) {}
+  }
+  function open() {
+    ensureAudioContext().catch(function () {});
+    root.classList.add("cw-open");
+    restorePanelPosition();
+    if (!greeted) firstGreet();
+    else queueListening(300);
+  }
+  function close() {
+    root.classList.remove("cw-open");
+    clearListenTimer();
+    if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+  }
+  function toggleMinimize() {
+    minimized=!root.classList.contains("cw-min");
+    root.classList.toggle("cw-min",minimized);
+    localStorage.setItem("chad_widget_minimized",minimized ? "1" : "0");
+    root.querySelector("#cwMin").innerHTML=minimized ? "&#9633;" : "&#8722;";
+    root.querySelector("#cwMin").title=minimized ? "Restore" : "Minimize";
+    if (minimized) {
+      clearListenTimer();
+      if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+    } else {
+      restorePanelPosition();
+      queueListening(300);
+    }
+  }
   function firstGreet() {
     if (!USER) { showPicker(); return; }
     greeted = true; loadBrief();
@@ -293,48 +352,102 @@
   /* ---------- wire events ---------- */
   root.querySelector("#cwOrbWrap").onclick = function () { root.classList.contains("cw-open") ? close() : open(); };
   root.querySelector("#cwClose").onclick = close;
+  root.querySelector("#cwMin").onclick = function (ev) { ev.stopPropagation(); toggleMinimize(); };
+  root.querySelector("#cwMin").innerHTML=minimized ? "&#9633;" : "&#8722;";
+  root.querySelector("#cwMin").title=minimized ? "Restore" : "Minimize";
   root.querySelector("#cwHear").onclick = function () {
     muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
     localStorage.setItem("chad_widget_mute","0");
     ensureAudioContext().then(function () { playBuffer(lastAudioBuffer); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
   };
-  root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) stopSpeech(); };
+  root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) { stopSpeech(); queueListening(250); } };
   root.querySelector("#cwSend").onclick = function () { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; };
   input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; } });
   root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
-  function startListening() {
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); return; }
+  function startListening(force) {
+    if (!conversationMode && !force) return;
+    if (!root.classList.contains("cw-open") || root.classList.contains("cw-min") || curSource || activeRequest || recognition) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); conversationMode=false; updateConversationControl(); return; }
     stopSpeech();
-    if (recognition) { try { recognition.abort(); } catch (e) {} }
     var rec = new SR(); recognition=rec; rec.lang = "en-US"; rec.interimResults=false; rec.continuous=false;
-    var btn=root.querySelector("#cwMic"), heard="";
+    var btn=root.querySelector("#cwMic"), heard="", denied=false;
     rec.onstart = function () { btn.classList.add("on"); setState("LISTENING"); };
     rec.onresult = function (ev2) { heard=ev2.results[0][0].transcript; input.value=heard; };
-    rec.onerror = function () { recognition=null; btn.classList.remove("on"); setState("MIC READY"); };
+    rec.onerror = function (ev3) {
+      denied=ev3 && (ev3.error === "not-allowed" || ev3.error === "service-not-allowed");
+      if (denied) {
+        conversationMode=false; updateConversationControl(); setState("MIC PERMISSION NEEDED");
+        if (!micDeniedNotice) {
+          micDeniedNotice=true;
+          bubble("Microphone access is off. Use the microphone button and allow access when your browser asks.", "chad");
+        }
+      }
+    };
     rec.onend = function () {
       recognition=null; btn.classList.remove("on");
       if (heard.trim()) { input.value=""; send(heard); }
-      else setState(conversationMode ? "CONVERSATION" : "ONLINE");
+      else {
+        setState(conversationMode ? "CONVERSATION" : "ONLINE");
+        if (!denied) queueListening(550);
+      }
     };
     try { rec.start(); } catch (e) { recognition=null; setState("MIC UNAVAILABLE"); }
   }
   root.querySelector("#cwMic").onclick = function () {
     ensureAudioContext().catch(function () {});
-    startListening();
+    startListening(true);
   };
+  function updateConversationControl() {
+    var control=root.querySelector("#cwConversation");
+    control.textContent=conversationMode ? "Conversation on" : "Conversation off";
+    control.classList.toggle("on",conversationMode);
+    localStorage.setItem("chad_widget_conversation",conversationMode ? "1" : "0");
+  }
   root.querySelector("#cwConversation").onclick = function () {
-    conversationMode=!conversationMode;
-    this.textContent=conversationMode ? "Conversation on" : "Conversation off";
-    this.classList.toggle("on",conversationMode);
+    conversationMode=!conversationMode; updateConversationControl();
     if (conversationMode) {
       muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
       localStorage.setItem("chad_widget_mute","0");
-      ensureAudioContext().then(startListening).catch(function () { setState("AUDIO UNAVAILABLE"); });
+      ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
     } else {
       if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
       stopSpeech(); setState("ONLINE");
     }
   };
+
+  /* ---------- drag the panel by its header ---------- */
+  var drag=null;
+  function dragStart(ev) {
+    if (ev.target.closest && ev.target.closest("button")) return;
+    if (window.innerWidth <= 600) return;
+    var point=ev.touches ? ev.touches[0] : ev;
+    var rect=panel.getBoundingClientRect();
+    drag={dx:point.clientX-rect.left,dy:point.clientY-rect.top};
+    panel.style.left=rect.left+"px"; panel.style.top=rect.top+"px";
+    panel.style.right="auto"; panel.style.bottom="auto";
+    if (ev.cancelable) ev.preventDefault();
+  }
+  function dragMove(ev) {
+    if (!drag) return;
+    var point=ev.touches ? ev.touches[0] : ev;
+    var left=Math.min(Math.max(8,point.clientX-drag.dx),window.innerWidth-panel.offsetWidth-8);
+    var top=Math.min(Math.max(8,point.clientY-drag.dy),window.innerHeight-panel.offsetHeight-8);
+    panel.style.left=left+"px"; panel.style.top=top+"px";
+    if (ev.cancelable) ev.preventDefault();
+  }
+  function dragEnd() {
+    if (!drag) return;
+    drag=null;
+    var rect=panel.getBoundingClientRect();
+    localStorage.setItem("chad_widget_position",JSON.stringify({left:Math.round(rect.left),top:Math.round(rect.top)}));
+  }
+  head.addEventListener("mousedown",dragStart);
+  head.addEventListener("touchstart",dragStart,{passive:false});
+  window.addEventListener("mousemove",dragMove);
+  window.addEventListener("touchmove",dragMove,{passive:false});
+  window.addEventListener("mouseup",dragEnd);
+  window.addEventListener("touchend",dragEnd);
+  window.addEventListener("resize",function () { if (root.classList.contains("cw-open")) restorePanelPosition(); });
 
   /* ---------- public API (for a docked "Chad tab") ---------- */
   window.ChadWidget = { open: open, close: close, setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); }, send: send };
