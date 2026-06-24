@@ -73,7 +73,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '2.5'
+CHAD_AGENT_VERSION = '2.6'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')

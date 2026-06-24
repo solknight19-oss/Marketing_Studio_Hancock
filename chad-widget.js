@@ -86,7 +86,7 @@
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
     + '<button class="cw-chip" data-q="run the studio">Run the studio</button>'
-    + '<button class="cw-chip' + (conversationMode ? ' on' : '') + '" id="cwConversation">' + (conversationMode ? 'Conversation on' : 'Conversation off') + '</button></div>'
+    + '<button class="cw-chip' + (conversationMode ? ' on' : '') + '" id="cwConversation" title="Keep the microphone listening until you turn voice off">' + (conversationMode ? 'Always listening' : 'Voice off') + '</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
     + '<div class="cw-orbwrap" id="cwOrbWrap"><div class="cw-lbl"><b>CHAD</b></div>'
@@ -124,7 +124,7 @@
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null, lastSpokenText = "";
-  var recognition = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
+  var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
   var panel = root.querySelector(".cw-panel"), head = root.querySelector(".cw-head");
   if (minimized) root.classList.add("cw-min");
 
@@ -170,6 +170,20 @@
     if (listenTimer) window.clearTimeout(listenTimer);
     listenTimer=null;
   }
+  function clearListenSilenceTimer() {
+    if (listenSilenceTimer) window.clearTimeout(listenSilenceTimer);
+    listenSilenceTimer=null;
+  }
+  function stopRecognition() {
+    clearListenSilenceTimer();
+    recognitionGeneration++;
+    if (recognition) {
+      var current=recognition;
+      recognition=null;
+      try { current.abort(); } catch (e) {}
+    }
+    root.querySelector("#cwMic").classList.remove("on");
+  }
   function stopBargeIn() {
     if (bargeTimer) window.clearTimeout(bargeTimer);
     bargeTimer=null;
@@ -192,7 +206,7 @@
   }
   function startBargeIn(spokenText,delay) {
     stopBargeIn();
-    if (!conversationMode || muted || !root.classList.contains("cw-open") || root.classList.contains("cw-min")) return;
+    if (!conversationMode || muted) return;
     var SR=window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     bargeTimer=window.setTimeout(function () {
@@ -228,7 +242,7 @@
   }
   function queueListening(delay) {
     clearListenTimer();
-    if (!conversationMode || curSource || activeRequest || recognition || !root.classList.contains("cw-open")) return;
+    if (!conversationMode || curSource || activeRequest || recognition) return;
     listenTimer=window.setTimeout(function () {
       listenTimer=null;
       startListening(false);
@@ -318,7 +332,7 @@
     ensureAudioContext().catch(function () {});
     clearListenTimer();
     stopSpeech();
-    if (recognition) { try { recognition.abort(); } catch (e) {} recognition = null; }
+    stopRecognition();
     if (activeRequest) { try { activeRequest.abort(); } catch (e) {} }
     var thisRequest=++requestNumber;
     var requestId=Date.now().toString(36)+"-"+thisRequest.toString(36);
@@ -388,8 +402,11 @@
   function close() {
     root.classList.remove("cw-open");
     clearListenTimer();
-    stopBargeIn();
-    if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+    if (conversationMode) queueListening(250);
+    else {
+      stopBargeIn();
+      stopRecognition();
+    }
   }
   function toggleMinimize() {
     minimized=!root.classList.contains("cw-min");
@@ -398,8 +415,7 @@
     root.querySelector("#cwMin").innerHTML=minimized ? "&#9633;" : "&#8722;";
     root.querySelector("#cwMin").title=minimized ? "Restore" : "Minimize";
     if (minimized) {
-      clearListenTimer();
-      if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+      if (conversationMode) queueListening(250);
     } else {
       restorePanelPosition();
       queueListening(300);
@@ -450,13 +466,38 @@
   root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
   function startListening(force) {
     if (!conversationMode && !force) return;
-    if (!root.classList.contains("cw-open") || root.classList.contains("cw-min") || curSource || activeRequest || recognition) return;
+    if (curSource || activeRequest || recognition) return;
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); conversationMode=false; updateConversationControl(); return; }
     stopSpeech();
-    var rec = new SR(); recognition=rec; rec.lang = "en-US"; rec.interimResults=false; rec.continuous=false;
-    var btn=root.querySelector("#cwMic"), heard="", denied=false;
+    var rec = new SR(), generation=++recognitionGeneration;
+    recognition=rec; rec.lang = "en-US"; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
+    var btn=root.querySelector("#cwMic"), committed="", latest="", denied=false, submitted=false;
+    function submitAfterPause(delay) {
+      clearListenSilenceTimer();
+      listenSilenceTimer=window.setTimeout(function () {
+        listenSilenceTimer=null;
+        var heard=(committed+" "+latest).trim();
+        if (!heard || submitted || generation!==recognitionGeneration) return;
+        submitted=true;
+        input.value="";
+        stopRecognition();
+        send(heard);
+      },delay);
+    }
     rec.onstart = function () { btn.classList.add("on"); setState("LISTENING"); };
-    rec.onresult = function (ev2) { heard=ev2.results[0][0].transcript; input.value=heard; };
+    rec.onresult = function (ev2) {
+      if (generation!==recognitionGeneration) return;
+      latest="";
+      for (var i=ev2.resultIndex;i<ev2.results.length;i++) {
+        var phrase=(ev2.results[i][0].transcript || "").trim();
+        if (!phrase) continue;
+        if (ev2.results[i].isFinal) committed=(committed+" "+phrase).trim();
+        else latest=(latest+" "+phrase).trim();
+      }
+      var visible=(committed+" "+latest).trim();
+      if (visible) input.value=visible;
+      submitAfterPause(latest ? 950 : 650);
+    };
     rec.onerror = function (ev3) {
       denied=ev3 && (ev3.error === "not-allowed" || ev3.error === "service-not-allowed");
       if (denied) {
@@ -465,25 +506,35 @@
           micDeniedNotice=true;
           bubble("Microphone access is off. Use the microphone button and allow access when your browser asks.", "chad");
         }
+      } else if (generation===recognitionGeneration) {
+        setState("RECONNECTING MIC");
       }
     };
     rec.onend = function () {
-      recognition=null; btn.classList.remove("on");
-      if (heard.trim()) { input.value=""; send(heard); }
-      else {
-        setState(conversationMode ? "CONVERSATION" : "ONLINE");
-        if (!denied) queueListening(550);
-      }
+      if (generation!==recognitionGeneration) return;
+      recognition=null; btn.classList.remove("on"); clearListenSilenceTimer();
+      var heard=(committed+" "+latest).trim();
+      if (heard && !submitted) { submitted=true; input.value=""; send(heard); return; }
+      setState(conversationMode ? "RECONNECTING MIC" : "ONLINE");
+      if (!denied) queueListening(250);
     };
-    try { rec.start(); } catch (e) { recognition=null; setState("MIC UNAVAILABLE"); }
+    try { rec.start(); } catch (e) {
+      if (generation===recognitionGeneration) recognition=null;
+      setState(conversationMode ? "RECONNECTING MIC" : "MIC UNAVAILABLE");
+      if (conversationMode) queueListening(400);
+    }
   }
   root.querySelector("#cwMic").onclick = function () {
     ensureAudioContext().catch(function () {});
+    if (!conversationMode) {
+      conversationMode=true;
+      updateConversationControl();
+    }
     startListening(true);
   };
   function updateConversationControl() {
     var control=root.querySelector("#cwConversation");
-    control.textContent=conversationMode ? "Conversation on" : "Conversation off";
+    control.textContent=conversationMode ? "Always listening" : "Voice off";
     control.classList.toggle("on",conversationMode);
     localStorage.setItem("chad_widget_conversation",conversationMode ? "1" : "0");
   }
@@ -495,10 +546,19 @@
       ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
     } else {
       stopBargeIn();
-      if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+      stopRecognition();
       stopSpeech(); setState("ONLINE");
     }
   };
+  document.addEventListener("visibilitychange",function () {
+    if (!document.hidden && conversationMode) queueListening(200);
+  });
+  window.addEventListener("focus",function () {
+    if (conversationMode) queueListening(200);
+  });
+  window.addEventListener("online",function () {
+    if (conversationMode) queueListening(250);
+  });
 
   /* ---------- drag the panel by its header ---------- */
   var drag=null;
