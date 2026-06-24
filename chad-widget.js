@@ -138,13 +138,27 @@
     } catch (e) {}
   }
   function vizStop() { if (raf) cancelAnimationFrame(raf); raf = null; coreEl.style.transform = ""; setState("ONLINE"); }
+  function navigate(action) {
+    if (!action || !action.target) return;
+    if (action.type === "tab" && typeof window.showTab === "function") {
+      window.showTab(action.target);
+      return;
+    }
+    if (action.type === "url") window.location.href = action.target;
+  }
 
   /* ---------- talk to the brain ---------- */
   function send(text) {
     if (!text.trim()) return; bubble(esc(text), "me"); setState("…");
     fetch(API + "/api/bot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) })
       .then(function (r) { return r.json(); })
-      .then(function (d) { var reply = d.reply || "…"; bubble(esc(reply), "chad"); speak(reply); setState("ONLINE"); if (/run the studio|refresh the radar/i.test(text)) {} })
+      .then(function (d) {
+        var reply = d.reply || "…";
+        bubble(esc(reply), "chad");
+        speak(reply);
+        setState("ONLINE");
+        if (d.ui_action) setTimeout(function () { navigate(d.ui_action); }, 450);
+      })
       .catch(function () { bubble("I can't reach my brain right now — is the Chad service running?", "chad"); setState("OFFLINE"); });
   }
   function loadBrief() {
@@ -173,6 +187,9 @@
         var message=d.welcome || hi;
         bubble(esc(message), "chad");
         speak(message);
+        if (d.chadBriefing && d.chadBriefing.ui_action) {
+          setTimeout(function () { navigate(d.chadBriefing.ui_action); }, 650);
+        }
       }).catch(function () { bubble(esc(hi), "chad"); speak(hi); });
   }
   function autoOpen() {
