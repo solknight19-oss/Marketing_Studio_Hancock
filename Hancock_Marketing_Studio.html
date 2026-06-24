@@ -150,6 +150,8 @@ function exportSettings(){downloadText("hancock-studio-settings.json",localStora
 function copyShareNote(){navigator.clipboard.writeText("Open the Hancock Marketing Studio through the secure live site. Use Customize & Share to edit branding. Live AI and Chad are provided securely by the server; users never handle API keys.")}
 function analyzePhoto(){const file=$("visionFile").files&&$("visionFile").files[0];if(!file){setStatus("visionStatus","Choose a photo first.","err");return}setStatus("visionStatus","Chad is reviewing the photo...");const reader=new FileReader();reader.onload=async function(){try{const r=await fetch("/api/vision",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({image:reader.result,prompt:$("visionPrompt").value})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Photo review failed");$("visionOut").innerHTML=textToHtml(d.reply);setStatus("visionStatus","Review ready.","ok")}catch(e){setStatus("visionStatus",e.message,"err")}};reader.readAsDataURL(file)}
 init();
+const initialStudioTab=location.hash.slice(1);
+if(TABS.some(function(tab){return tab[0]===initialStudioTab}))showTab(initialStudioTab);
 </script>
 <script>window.CHAD_CONFIG={apiBase:""};</script>
 <script src="/chad-widget.js"></script>

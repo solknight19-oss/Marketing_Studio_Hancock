@@ -51,6 +51,8 @@
     + '#chadw .cw-x{background:none;border:none;color:#9fb4c9;font-size:18px;cursor:pointer;line-height:1}'
     + '#chadw .cw-x.ready{color:#55d6a5;text-shadow:0 0 10px rgba(85,214,165,.6)}'
     + '#chadw .cw-brief{font-size:12px;color:#bcd2ea;padding:10px 13px;border-bottom:1px solid rgba(79,147,224,.18);line-height:1.5;background:rgba(47,111,191,.08)}'
+    + '#chadw .cw-transcript{display:none;padding:8px 13px;border-bottom:1px solid rgba(79,147,224,.18);background:rgba(85,214,165,.08);color:#d8f8ea;font-size:12px;line-height:1.4}'
+    + '#chadw .cw-transcript.on{display:block}'
     + '#chadw .cw-msgs{flex:1;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}'
     + '#chadw .cw-m{max-width:85%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5;animation:cwrise .2s ease both}'
     + '#chadw .cw-m.chad{align-self:flex-start;background:rgba(47,111,191,.22);border:1px solid rgba(79,147,224,.4);color:#eaf2fb;border-bottom-left-radius:4px}'
@@ -84,6 +86,7 @@
     + '<button class="cw-x" id="cwMin" title="Minimize">&#8722;</button> '
     + '<button class="cw-x" id="cwClose" title="Close">&#10005;</button></div></div>'
     + '<div class="cw-brief" id="cwBrief" style="display:none"></div>'
+    + '<div class="cw-transcript" id="cwTranscript"></div>'
     + '<div class="cw-msgs" id="cwMsgs"></div>'
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
@@ -124,7 +127,7 @@
   svg.appendChild(core);
 
   /* ---------- refs + state ---------- */
-  var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
+  var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), transcript = root.querySelector("#cwTranscript"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null, lastSpokenText = "";
   var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false, lastStudioFocus = null;
@@ -132,6 +135,11 @@
   if (minimized) root.classList.add("cw-min");
 
   function setState(s) { stateEl.textContent = s; }
+  function setTranscript(text) {
+    var value=String(text || "").replace(/\s+/g," ").trim();
+    transcript.textContent=value ? 'Hearing: "'+value+'"' : "";
+    transcript.classList.toggle("on",!!value);
+  }
   function bubble(t, who) {
     var d = document.createElement("div"); d.className = "cw-m " + who;
     d.innerHTML = who === "chad" ? t.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>') : t;
@@ -278,6 +286,16 @@
     var overlap=heardWords.filter(function (word) { return spokenMap[word]; }).length;
     return overlap/heardWords.length >= .75;
   }
+  function mergeTranscript(base,next) {
+    base=String(base || "").trim();
+    next=String(next || "").trim();
+    if (!base) return next;
+    if (!next) return base;
+    var lowerBase=base.toLowerCase(), lowerNext=next.toLowerCase();
+    if (lowerNext.indexOf(lowerBase)===0) return next;
+    if (lowerBase.indexOf(lowerNext)>=0) return base;
+    return base+" "+next;
+  }
   function startBargeIn(spokenText,delay) {
     stopBargeIn();
     if (!conversationMode || muted || standby) return;
@@ -301,8 +319,14 @@
         try { rec.abort(); } catch (e) {}
         setState("INTERRUPTED");
         stopSpeech();
-        input.value="";
-        send(heard);
+        if (activeRequest) {
+          try { activeRequest.abort(); } catch (e) {}
+          activeRequest=null;
+          requestNumber++;
+        }
+        input.value=heard;
+        setTranscript(heard);
+        window.setTimeout(function () { startListening(true,heard); },160);
       };
       rec.onerror=function () {
         if (bargeRecognition===rec) bargeRecognition=null;
@@ -381,6 +405,15 @@
       window.showTab(action.target);
       return;
     }
+    if (action.type === "tab" && typeof window.openTab === "function") {
+      var workspaceTarget=action.target==="dashboard" ? "dash" : action.target;
+      if (document.getElementById(workspaceTarget)) {
+        window.openTab(workspaceTarget);
+        return;
+      }
+      window.location.href="/studio#"+encodeURIComponent(action.target);
+      return;
+    }
     if (action.type === "external") {
       var opened=window.open(action.target,"_blank","noopener,noreferrer");
       if (!opened) window.location.href=action.target;
@@ -408,6 +441,7 @@
   function enterStandby(showMessage) {
     standby=true;
     clearListenTimer();
+    setTranscript("");
     stopSpeech();
     stopRecognition();
     stopBargeIn();
@@ -454,6 +488,7 @@
       return;
     }
     ensureAudioContext().catch(function () {});
+    setTranscript("");
     clearListenTimer();
     stopSpeech();
     stopRecognition();
@@ -523,6 +558,16 @@
     if (!greeted) firstGreet();
     else queueListening(300);
   }
+  function ask(text) {
+    ensureAudioContext().catch(function () {});
+    root.classList.add("cw-open");
+    restorePanelPosition();
+    if (!greeted) {
+      greeted=true;
+      loadBrief();
+    }
+    send(text);
+  }
   function close() {
     root.classList.remove("cw-open");
     clearListenTimer();
@@ -554,7 +599,7 @@
         var message=d.welcome || hi;
         bubble(esc(message), "chad");
         speak(message);
-        if (d.chadBriefing && d.chadBriefing.ui_action) {
+        if (d.chadBriefing && d.chadBriefing.ui_action && !CFG.holdBriefingNavigation) {
           setTimeout(function () { navigate(d.chadBriefing.ui_action); }, 650);
         }
       }).catch(function () { bubble(esc(hi), "chad"); speak(hi); });
@@ -593,7 +638,7 @@
   root.querySelector("#cwSend").onclick = function () { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; };
   input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; } });
   root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
-  function startListening(force) {
+  function startListening(force,seedText) {
     if (standby) return;
     if (!conversationMode && !force) return;
     if (curSource || activeRequest || recognition) return;
@@ -601,7 +646,7 @@
     stopSpeech();
     var rec = new SR(), generation=++recognitionGeneration;
     recognition=rec; rec.lang = "en-US"; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
-    var btn=root.querySelector("#cwMic"), committed="", latest="", denied=false, submitted=false;
+    var btn=root.querySelector("#cwMic"), committed=String(seedText || "").trim(), latest="", denied=false, submitted=false;
     function submitAfterPause(delay) {
       clearListenSilenceTimer();
       listenSilenceTimer=window.setTimeout(function () {
@@ -614,24 +659,32 @@
         send(heard);
       },delay);
     }
-    rec.onstart = function () { btn.classList.add("on"); setState("LISTENING"); };
+    rec.onstart = function () {
+      btn.classList.add("on");
+      setState("LISTENING");
+      setTranscript((committed+" "+latest).trim());
+    };
     rec.onresult = function (ev2) {
       if (generation!==recognitionGeneration) return;
       latest="";
       for (var i=ev2.resultIndex;i<ev2.results.length;i++) {
         var phrase=(ev2.results[i][0].transcript || "").trim();
         if (!phrase) continue;
-        if (ev2.results[i].isFinal) committed=(committed+" "+phrase).trim();
+        if (ev2.results[i].isFinal) committed=mergeTranscript(committed,phrase);
         else latest=(latest+" "+phrase).trim();
       }
       var visible=(committed+" "+latest).trim();
-      if (visible) input.value=visible;
-      submitAfterPause(latest ? 950 : 650);
+      if (visible) {
+        input.value=visible;
+        setTranscript(visible);
+      }
+      submitAfterPause(latest ? 1600 : 1100);
     };
     rec.onerror = function (ev3) {
       denied=ev3 && (ev3.error === "not-allowed" || ev3.error === "service-not-allowed");
       if (denied) {
         conversationMode=false; updateConversationControl(); setState("MIC PERMISSION NEEDED");
+        setTranscript("");
         if (!micDeniedNotice) {
           micDeniedNotice=true;
           bubble("Microphone access is off. Use the microphone button and allow access when your browser asks.", "chad");
@@ -645,6 +698,7 @@
       recognition=null; btn.classList.remove("on"); clearListenSilenceTimer();
       var heard=(committed+" "+latest).trim();
       if (heard && !submitted) { submitted=true; input.value=""; send(heard); return; }
+      setTranscript("");
       setState(conversationMode ? "RECONNECTING MIC" : "ONLINE");
       if (!denied) queueListening(250);
     };
@@ -732,9 +786,19 @@
     close: close,
     standby: function () { enterStandby(true); },
     resumeVoice: function () { leaveStandby(true); },
+    startVoice: function () {
+      open();
+      if (standby) leaveStandby(false);
+      if (!conversationMode) {
+        conversationMode=true;
+        updateConversationControl();
+      }
+      ensureAudioContext().then(function () { startListening(true); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
+    },
     pageContext: collectStudioPageContext,
     setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
-    send: send
+    send: send,
+    ask: ask
   };
   if (USER) autoOpen();
 })();
