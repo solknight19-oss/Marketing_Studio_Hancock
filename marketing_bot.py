@@ -56,6 +56,10 @@ QUERIES = [
     "direct inspection property claims",
     "contents inventory insurance claim",
     "repairability roof shingles insurance",
+    "property insurance marketing trends SEO AEO",
+    "insurance inspection content marketing trends",
+    "AI search answer engine optimization insurance",
+    "property claims customer communication trends",
 ]
 
 STOP = set("""the a an and or of for to in on at by with from as is are be this that

@@ -293,7 +293,23 @@
       window.showTab(action.target);
       return;
     }
+    if (action.type === "external") {
+      var opened=window.open(action.target,"_blank","noopener,noreferrer");
+      if (!opened) window.location.href=action.target;
+      return;
+    }
     if (action.type === "url") window.location.href = action.target;
+  }
+  function sourceButtons(sources) {
+    if (!sources || !sources.length) return;
+    var wrap=document.createElement("div"); wrap.className="cw-chips";
+    sources.slice(0,4).forEach(function (source,index) {
+      var button=document.createElement("button"); button.className="cw-chip";
+      button.textContent="Open source "+(index+1)+(source.name ? " · "+source.name : "");
+      button.onclick=function () { navigate({type:"external",target:source.url}); };
+      wrap.appendChild(button);
+    });
+    msgs.appendChild(wrap); msgs.scrollTop=msgs.scrollHeight;
   }
 
   /* ---------- talk to the brain ---------- */
@@ -321,6 +337,7 @@
         activeRequest=null;
         var reply = d.reply || "…";
         bubble(esc(reply), "chad");
+        sourceButtons(d.sources);
         speak(reply);
         if (!curSource) setState("ONLINE");
         if (d.ui_action) setTimeout(function () { navigate(d.ui_action); }, 450);
