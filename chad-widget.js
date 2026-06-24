@@ -191,6 +191,7 @@
   }
   function speak(text) {
     if (muted) { queueListening(250); return; }
+    setState("GETTING VOICE");
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
       .then(function (r) {
         if (r.ok) return r.arrayBuffer();

@@ -38,11 +38,15 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
+ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_flash_v2_5').strip()
+ELEVENLABS_OUTPUT_FORMAT = os.environ.get('ELEVENLABS_OUTPUT_FORMAT', 'mp3_22050_32').strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
 VOICE_HEALTH = {
     'configured': bool(ELEVENLABS_API_KEY),
     'voice': 'Eric',
     'voice_id': ELEVENLABS_VOICE_ID,
+    'model': ELEVENLABS_TTS_MODEL,
+    'output_format': ELEVENLABS_OUTPUT_FORMAT,
     'status': 'configured' if ELEVENLABS_API_KEY else 'not_configured',
 }
 AI_HEALTH = {
@@ -224,11 +228,11 @@ def elevenlabs_audio(text):
         raise RuntimeError('Voice is not configured on the server.')
     payload=json.dumps({
         'text':text[:4000],
-        'model_id':'eleven_multilingual_v2',
+        'model_id':ELEVENLABS_TTS_MODEL,
         'voice_settings':{'stability':0.4,'similarity_boost':0.8,'style':0.3,'use_speaker_boost':True},
     }).encode()
     request=urllib.request.Request(
-        f'https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}',
+        f'https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}?output_format={urllib.parse.quote(ELEVENLABS_OUTPUT_FORMAT)}',
         data=payload,
         headers={'xi-api-key':ELEVENLABS_API_KEY,'Accept':'audio/mpeg','Content-Type':'application/json'},
         method='POST',
@@ -463,7 +467,7 @@ Ryan Knight's Inspection Industry Playbook is your foundational operating model,
 
 Maintain clear epistemic labels: verified internal standard, observed external signal, corroborated emerging pattern, or hypothesis. A single article is a signal, not an industry fact. Prefer primary and reputable sources, compare dates and service-line relevance, and distinguish inspection findings from carrier coverage decisions. Never invent carrier requirements, field observations, team activity, research, sources, or corroboration.
 
-Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question may need one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 40-140 spoken words unless the user asks for depth. Prefer active voice and natural conversational bridges over report language.
+Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question should usually take one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 25-90 spoken words unless the user asks for depth. After a successful tool action, confirm what changed in one or two sentences. Prefer active voice and natural conversational bridges over report language.
 
 Operate like a capable teammate, not a chat wrapper. When the user asks for work that an available tool can safely complete, use the tool instead of merely explaining how they could do it. Follow a practical loop: understand the request, inspect the available context, choose the smallest useful action, perform it, verify the result, and clearly report what changed. Make reasonable low-risk assumptions and act; ask a clarifying question only when a wrong assumption would materially change the work.
 
@@ -942,19 +946,27 @@ def request_is_current(user_id, request_id):
         return CHAT_REQUESTS.get(user_id)==request_id
 
 def chad_agent(user, message, request_id):
-    system=(
-        CHAD_PERSONA+
-        '\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook()+
-        '\n\nLIVE WORKSPACE CONTEXT:\n'+chad_context(user)
-    )
+    # Keep the large, stable foundation cacheable while live workspace context
+    # remains fresh on every turn.
+    system=[
+        {
+            'type':'text',
+            'text':CHAD_PERSONA+'\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook(),
+            'cache_control':{'type':'ephemeral'},
+        },
+        {
+            'type':'text',
+            'text':'LIVE WORKSPACE CONTEXT:\n'+chad_context(user),
+        },
+    ]
     messages=[{'role':'user','content':message}]
     ui_action=None
     artifacts=[]
     tool_summaries=[]
-    for _ in range(4):
+    for _ in range(3):
         if not request_is_current(user['id'],request_id):
             return {'reply':'','mode':'superseded','superseded':True}
-        response=anthropic_request(system,messages,1400,CHAD_TOOLS)
+        response=anthropic_request(system,messages,900,CHAD_TOOLS)
         content=response.get('content') or []
         tool_calls=[part for part in content if part.get('type')=='tool_use']
         text=''.join(part.get('text','') for part in content if part.get('type')=='text').strip()
