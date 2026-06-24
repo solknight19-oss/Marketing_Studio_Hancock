@@ -124,7 +124,7 @@
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null, lastSpokenText = "";
-  var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
+  var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false, lastStudioFocus = null;
   var panel = root.querySelector(".cw-panel"), head = root.querySelector(".cw-head");
   if (minimized) root.classList.add("cw-min");
 
@@ -135,6 +135,77 @@
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
   }
   function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function compactText(value,limit) {
+    return String(value || "").replace(/\s+/g," ").trim().slice(0,limit || 700);
+  }
+  function studioTabLabel(view) {
+    if (!view) return document.title || "Studio";
+    var id=view.id || "";
+    var tab=Array.from(document.querySelectorAll(".tab")).find(function (button) {
+      return button.classList.contains("active") ||
+        (button.getAttribute("onclick") || "").indexOf("'"+id+"'") !== -1;
+    });
+    return compactText(tab ? tab.textContent : (view.querySelector("h1,h2") || {}).textContent || id,120);
+  }
+  function collectStudioPageContext() {
+    var view=document.querySelector(".view.active") || document.querySelector("main") || document.body;
+    var controls=[];
+    Array.from(view.querySelectorAll("input,select,textarea")).slice(0,30).forEach(function (control) {
+      var type=(control.type || "").toLowerCase();
+      if (type==="password" || type==="file" || type==="hidden") return;
+      var value=type==="checkbox" || type==="radio" ? (control.checked ? "selected" : "") : control.value;
+      if (!value) return;
+      var label="";
+      if (control.id) {
+        var explicit=document.querySelector('label[for="'+control.id.replace(/"/g,"")+'"]');
+        if (explicit) label=explicit.textContent;
+      }
+      if (!label && control.previousElementSibling && control.previousElementSibling.tagName==="LABEL") label=control.previousElementSibling.textContent;
+      controls.push({name:compactText(label || control.placeholder || control.id || control.name || "field",100),value:compactText(value,500)});
+    });
+    var selected=[];
+    Array.from(view.querySelectorAll(".chip.gold,.tab.active,.badge.hot,.badge.live,[aria-selected='true']")).slice(0,30).forEach(function (node) {
+      var text=compactText(node.textContent,160);
+      if (text && selected.indexOf(text)===-1) selected.push(text);
+    });
+    var items=[];
+    Array.from(view.querySelectorAll(".card,.panel,.libItem,.updateItem,.task,.draftItem")).slice(0,16).forEach(function (node,index) {
+      if (node.closest("#chadw")) return;
+      var text=compactText(node.innerText || node.textContent,900);
+      if (text) items.push({position:index+1,text:text});
+    });
+    var headings=Array.from(view.querySelectorAll("h1,h2,h3")).slice(0,18).map(function (node) {
+      return compactText(node.textContent,180);
+    }).filter(Boolean);
+    return {
+      page_title:compactText(document.title,160),
+      page_url:location.pathname+location.hash,
+      active_tab_id:view.id || "",
+      active_tab:studioTabLabel(view),
+      headings:headings,
+      selected: selected,
+      controls:controls,
+      visible_items:items,
+      last_interaction:lastStudioFocus,
+      captured_at:new Date().toISOString()
+    };
+  }
+  document.addEventListener("click",function (event) {
+    var target=event.target && event.target.closest ? event.target.closest(".card,.panel,.libItem,.updateItem,.task,.draftItem") : null;
+    var action=event.target && event.target.closest ? event.target.closest("button,a") : null;
+    if ((!target && !action) || (target && target.closest("#chadw")) || (action && action.closest("#chadw"))) return;
+    var activeView=document.querySelector(".view.active");
+    if (target && !target.closest(".view.active,main")) target=null;
+    if (action && !action.closest(".view.active,main")) action=null;
+    if (!target && !action) return;
+    var surrounding=target || (action ? action.closest(".hero,.card,.panel,section") : null);
+    lastStudioFocus={
+      tab:studioTabLabel(activeView),
+      action:compactText(action ? action.textContent : "",160),
+      text:compactText(surrounding ? (surrounding.innerText || surrounding.textContent) : "",1200),
+      captured_at:new Date().toISOString()
+    };
+  },true);
 
   /* ---------- voice (audio-reactive orb) ---------- */
   function ensureAudioContext() {
@@ -342,7 +413,7 @@
     fetch(API + "/api/bot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, request_id: requestId }),
+      body: JSON.stringify({ message: text, request_id: requestId, page_context: collectStudioPageContext() }),
       signal: activeRequest ? activeRequest.signal : undefined
     })
       .then(function (r) { return r.json(); })
@@ -595,6 +666,12 @@
   window.addEventListener("resize",function () { if (root.classList.contains("cw-open")) restorePanelPosition(); });
 
   /* ---------- public API (for a docked "Chad tab") ---------- */
-  window.ChadWidget = { open: open, close: close, setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); }, send: send };
+  window.ChadWidget = {
+    open: open,
+    close: close,
+    pageContext: collectStudioPageContext,
+    setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
+    send: send
+  };
   if (USER) autoOpen();
 })();
