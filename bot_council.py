@@ -23,6 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
+PLAYBOOK = ROOT / 'Ryan_Knight_Inspection_Industry_Playbook.md'
 LATEST_BOT = DATA / 'latest_bot.json'
 OUT_JSON = DATA / 'main_speaking_bot_feed.json'
 OUT_JS = DATA / 'main_speaking_bot_feed.js'
@@ -39,6 +40,14 @@ def load_json(path, fallback):
         return json.loads(path.read_text(encoding='utf-8'))
     except Exception:
         return fallback
+def playbook_status():
+    return {
+        'source': PLAYBOOK.name,
+        'loaded': PLAYBOOK.exists(),
+        'authority': "Ryan Knight's Inspection Industry Playbook",
+        'role': 'Foundational operating model',
+        'rule': 'New learning must be traceable, current, relevant, and clearly labeled by confidence.'
+    }
 
 
 def ensure_marketing_scan():
@@ -94,7 +103,15 @@ def storm_watch_bot():
                     })
         except Exception:
             failed.append(st)
-    severe = sorted(alerts, key=lambda a: {'Extreme':0,'Severe':1,'Moderate':2,'Minor':3}.get(a.get('severity'),4))[:8]
+    unique = {}
+    for alert in alerts:
+        key = (
+            alert.get('event','').strip().lower(),
+            alert.get('headline','').strip().lower(),
+            alert.get('areas','').strip().lower(),
+        )
+        unique.setdefault(key, alert)
+    severe = sorted(unique.values(), key=lambda a: {'Extreme':0,'Severe':1,'Moderate':2,'Minor':3}.get(a.get('severity'),4))[:8]
     if severe:
         action = 'If threat is active, recommend safety-first messaging only. After expiration, suggest post-storm documentation guidance.'
     else:
@@ -192,6 +209,7 @@ def run():
         'purpose': 'Feedback feed for the Main Speaking Bot',
         'bots': [industry, storm, content, seo],
         'mainSpeakingBot': briefing,
+        'doctrine': playbook_status(),
         'rawLatestScan': {
             'generatedHuman': latest.get('generatedHuman'),
             'storyCount': len(latest.get('stories') or []),

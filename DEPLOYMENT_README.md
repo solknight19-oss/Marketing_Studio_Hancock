@@ -7,7 +7,11 @@ Included:
 - Secure admin invitations and one-time password setup/reset links
 - Shared drafts and task board
 - Chad guidance connected to the bot council
+- Chad embedded directly in the approved Studio with authenticated chat and optional ElevenLabs voice
+- Ryan Knight's full Inspection Industry Playbook installed as Chad's learning foundation
+- Traceable learning records with source identifiers, dates, confidence labels, and corroboration counts
 - Live industry scan action using `marketing_bot.py`
+- Daily scheduled runs of the Industry Radar, Storm Watch, Content Opportunity, and SEO/AEO bots
 - Approved Marketing Studio at `/studio`
 - Chad feed endpoint at `/api/chad-feed`
 - Health check at `/healthz`
@@ -28,6 +32,7 @@ Local-only bootstrap logins are written to `app_data/INITIAL_LOGINS.md` on first
 1. Put this folder in a GitHub repo as the repo root.
 2. Create a Render Blueprint/Web Service from `render.yaml`.
 3. Set `ANTHROPIC_API_KEY` privately if you want AI drafting.
+   Set `ELEVENLABS_API_KEY` privately if you want Chad's premium voice.
 4. Keep the persistent disk mounted at `/var/data` so logins, tasks, sessions, and drafts survive deploys.
 5. Set `RESEND_API_KEY` privately for invitations and password-reset email.
 6. Verify `hancockclaims.com` in Resend and set `EMAIL_FROM` to an address on that verified domain.
@@ -38,6 +43,7 @@ Local-only bootstrap logins are written to `app_data/INITIAL_LOGINS.md` on first
 Security included:
 - Passwords stored only as salted PBKDF2 hashes
 - One-time, hashed setup and reset tokens
+- Ryan's Playbook provides the foundation; new learning remains source-linked, confidence-labeled, and reviewable
 - 24-hour invitation expiry and one-hour reset expiry
 - Hancock-domain restriction and request rate limiting
 - Secure, HTTP-only production session cookies

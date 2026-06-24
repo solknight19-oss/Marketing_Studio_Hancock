@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chad — On-Brand Graphic Maker</title>
+<style>
+  :root{--navy:#0a2a45;--navy2:#103a5c;--blue:#2f6fbf;--blue2:#4f93e0;--mut:#9fb4c9}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(900px 600px at 75% 12%,#0e2c4a,#06121f);color:#eaf2fb;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 20px 50px;display:grid;grid-template-columns:330px 1fr;gap:24px;align-items:start}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr}}
+  h1{font-size:18px;font-weight:850;margin:0 0 4px}.sub{font-size:12.5px;color:var(--mut);margin:0 0 16px;line-height:1.5}
+  label{display:block;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7fa0c4;margin:14px 0 5px}
+  input,textarea,select{width:100%;padding:10px 11px;border-radius:10px;border:1px solid #284a6b;background:#0d2740;color:#fff;font-size:14px;font-family:inherit}
+  textarea{resize:vertical;min-height:64px}
+  .row{display:flex;gap:9px}.row>*{flex:1}
+  .btns{display:flex;gap:9px;flex-wrap:wrap;margin-top:18px}
+  button{border:none;border-radius:10px;font-weight:800;font-size:13px;padding:11px 14px;cursor:pointer}
+  .primary{background:var(--blue);color:#fff}.primary:hover{background:var(--blue2)}
+  .ghost{background:rgba(255,255,255,.08);border:1px solid #284a6b;color:#dbeafe}.ghost:hover{background:rgba(255,255,255,.15)}
+  .stage{display:flex;flex-direction:column;align-items:center;gap:12px}
+  #prev{width:100%;max-width:540px;aspect-ratio:1/1;border-radius:14px;overflow:hidden;box-shadow:0 24px 60px rgba(4,12,22,.55)}
+  #prev svg{width:100%;height:100%;display:block}
+  .note{font-size:11.5px;color:var(--mut);line-height:1.5;margin-top:6px;max-width:540px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Chad — On-Brand Graphic Maker</h1>
+    <p class="sub">Make shareable Hancock graphics (LinkedIn / social). Navy + your logo, no design tools. Type, preview, download. <a href="/studio" style="color:#8fc1ff">Back to Studio</a></p>
+    <label>Style</label>
+    <select id="style" onchange="render()">
+      <option value="navy">Navy (default)</option>
+      <option value="blue">Bright blue</option>
+      <option value="storm">Storm (dark)</option>
+    </select>
+    <label>Eyebrow (small label)</label>
+    <input id="kicker" value="LADDER ASSIST" oninput="render()">
+    <label>Headline</label>
+    <textarea id="headline" oninput="render()">Hail claims spike 48 hours after a storm.</textarea>
+    <label>Big stat (optional)</label>
+    <input id="stat" placeholder="e.g. 40%+" oninput="render()">
+    <label>Subline</label>
+    <input id="subline" value="Be inspection-ready before the surge." oninput="render()">
+    <label>Footer tagline</label>
+    <input id="tagline" value="Hancock Claims Consultants" oninput="render()">
+    <div class="btns">
+      <button class="primary" onclick="downloadPNG()">Download PNG</button>
+      <button class="ghost" onclick="downloadSVG()">Download SVG</button>
+      <button class="ghost" id="copyBtn" onclick="askChad()">Ask Chad for a headline</button>
+    </div>
+  </div>
+  <div class="stage">
+    <div id="prev"></div>
+    <div class="note">1080&times;1080 social square. Chad uses Ryan Knight's playbook and the live Studio's private AI connection.</div>
+  </div>
+</div>
+
+<script>
+var LOGO="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAACvCAIAAABo9ksnAAAAA3NCSVQICAjb4U/gAAATzElEQVR4nO2dZ0AUxwKA5yrH0aTj0csdgiCCIggqggqIChKRGBQQuzFRRGMs0ZhojMbETowajQiWYDSAGgHpgogoTQU5mqAQQHrv934sWdYDC3BHmTffr9m92ZnZ+3Znd2dmZ0lAbz9AQAd5uAuAEArIK5wgr3CCvMIJ8gonyCucIK9wgrzCCfIKJ8grnCCvcIK8wgnyCifIK5wgr3CCvMIJ8gonyCucIK9wgrzCCfIKJ8grnCCvcIK8wgnyCifU4S6AEBFn0p1sOK5z9SwmqoQl5AfezQqNz2tr7xzucg0FJPje4xBn0h1t2K72+vbTtEXoFOJPdQ2tIdE5gaGZYfH5cAuGx6uYKM1pFmexnZ79NG2GyAfqobqG1uAo7vWwrND7ee0dXUNTwqFk1HsVE6U52nAW2+nNnf5hnb2pre8WHBYPleDR6lVMlLbAmu1qrz8wnb3BBAeGZoYn5EMgeJR5ZTIwnXpzp+uIMoRy01dT3xIcyQ0MzQpPyO/oHK2CR4dXJoM2f6aOq72+wwxh6exNTX1LUAQ3MDTz3oOCUSd4RHtlMmjzrHRc5+o5zNBhMmjDVYzqupagyOzAu1kRiaNG8Mj1aqKv9OSvlcNdireoa2jVsvWtrGke7oJ8mJHb3iQpLjLcReBHUlxEhD46WnJGrlfEYEBe4QR5hRPkFU6QVzhBXuFkdNy1D5is/IrgSG5SRsksc41P5uiyFCQGmSCPxxNIwYQNhF47Orvin7wKic65ee9FYUkttjIoMvvLH8KMdBUdbdgLrNmTx7NIpIEkThrYZkMOPF5r61tD4/NCorl3YnNr61v7jJOeXZaeXbbvdLyirJjTLI6jNWeWuYZAuoNGGqN+l14W14ZEc0OiuLHJRR/feFtW2Xg2MPVsYKoog2pnqb3Amj1/po6CjJhQizqUjEqvPB549LT4VnROSHTOU275YJJqbukIiswOiswmkYC5kbKjNcfRhqOvLSeoog4Xo8lrc0tHRGJBSDQ3OIr7pqpJsInzeCAxrTgxrXjH0Wh1lpTzbF1Ha870yapUyqh8ZBgFXksrGm7H5IZEc8MT8lvbhmKwWWFJ7bFLj45deiQlITLPSsfRmmM/TVtKYsT1Q7yHkeu1qrb5hzMJd2JzEtOKh6sMtfWtV24/v3L7OQBg9lTN+TN1Wts6hqsw/WLk9r/2iwXW7MS04orqflfOHA0ZloJEzKNCYZRqGBm55+sHkZZkONpwnGw4tpZaYqI0vfm/DcDreB35mydcKmua78TmBkdxQ+/nNbW0C6O0Q8zo86rOklpkO87JhmNprEqhCKaVQHaMqIeToYeTYUtrR+TDlyHR3L8jsgV+azaUjA6vJBIwNWA5zeI42XDG68gLLyOGCHWelc48K53fvnV49LQ4OIobHMnNzKsQXo5CYkR7pdMos6dqOtlwFlizx8qLD2XWJBIwm6BsNkH5gLd1blF1cCQ3OCo7IfV1VxdqHx4cJvpK8QGewh5V+jHN+Dpq0lu8zLZ4mVXXtWjN8a2pbxFqkQTCyH3olhQXGYKhwv1qxpeWZPC9yDViGbleEYMBeYUT5BVOkFc4QV7hBHmFE+QVTpBXOEFe4QR5hZOR2z7cX7JurxvuIowg0PkKJ8grnCCvcIK8wgnyCifIK5wgr3CCvMIJ8gonyCucIK9wgrzCCfIKJ8grnMDTT+e5I6To37r+bjXNRHXfRquPj9+F5m8aYh49LXmRX9nfraQlGf2KTx4l8zehehhOkFc4QV7hBHmFE+QVTpBXOEFe4QR5hRPkFU6QVzhBXuEEeYUT5BVOkFc4Gbn9dDV1LbHJRR8fv6l5IPPLvqlq6lcuQzNh+eCBZF5pBB+oHoYT5BVOkFc4QV7hBHmFE+QVTpBXOEFe4QR5hRPkFU5GbvvwaEedJeXlbISFcwqrLt9+NpS5I6/CQp0l9e2G6Vg4ND5vtHrdtnKqwwwdLHwnNufwhYd8EaQkRIJPueKLy7YFvy7r9+tviI9EYF71tOSsTNWwcG5RVe8IdBoFjwAAYIqiqkKIoPsmOEFe4QR5hRPkFU5G0M3LIttxi+aMMzdSZilIPEwv/jsi+0TAoxvHXWSkRLEIdquvYMOLrv3irCTX/TlYpy8C51uxPZwMp01SpVLIuUXVvlce/3r1Se/09bXlNrhNnmLImqinWFHdlJlXEf/k1ben4ohxNFXGrHYxNtFXMmDLizPpT3PKU7NKA+9mxae86rPMqkqSmz2nmE1Qnmwwtq6hNTOvIj27bOMP4QAAHmEmCuJXY/W15U5+Y0chd59R5VWNq3bfqWtoHfD/1icC80qcUGOelU6MnztfBBr1rbqBOP+GvAzz7pklk8aPxddYmapZmarZWmpOnaiCTwFBJnfP7WBupKzOksLCvrvtl843wDfU15bz3W2vNlZq+5EofCWZTDq0xcbH0wxPQUlOXElOXFdDFveqICN2aIuNu6Mh8dve00xUp5mofrnUNDqpcOvhiJTMUuIu7Fxjuefz6fiXQ+WkmTMmq82YrIZ5JRFmosDzHaclG+PnLi/DxBZLyuu9dt0SuFQgQK/ECTWwf+398Ynzb5zcZUeUioM/EPNlQfzLiFJxtnqZXwrOwL+fvXv9tK1e5u8vw9VfFtqYabyrtNZm6vfOu7HtT1fVNmNrVi6a+IP3zHfF7xMdNem4Sx641ILXNTM9/Qcwh83HMPzX1wXW7E/n6uOLhSW1X+wPc9pw/cLNdL6YeJVArOJ4POB75fG8dX8e9Uvq6OzCVlIoJBc7PSw8afzY3eum4/Efphd/sT9s7ppre07GVtZ0S/JyNiJK/e3PFF2H03IWRzYdCG9p7cBWykiJHt9pi4XVWVLHdszB42fmVWz5KcJ+zdVtP0cWl9X3WUgdNen7AT1SM/MqzJdcFJJUIKR6uLSiIbuAv2mCRiVbGKvgi3j0FZ8Y4StzCqsmL76A1Ush0dy0rLITu2zfn+/Bcw92HosGAPwTl6skJ/7ZvPHYeiU5MSyw1tUYr1pD4/PmrrmGh4/6PcLC65aY4An+evXJhn2hWPhEQHJhSW3QqcXY4rIFBqt2325t6/RcOEGcScdWpmSWmi/5o72jCwAQFp9/+loK3w4CAJQVJOL8PfA6LPlZie3Kq0L9nrdQ6uE7sbmrdt/hiyAvwyyP34wv4tFVlSTxlTuPxhAvNicvJ7s7GZgasPiSItbDF4N6TuuopJe4V1ERGhbQ05bDI5y6/JiYTkNTGxbgaMhggc5OHnaU4ARHcR+mF5sbKWOLupqyGdnlelo9aZ4JTMGk8qVJrOQn6Crg4bQXZTbLL+PRhMTw18Ny0kw8nPeqmu/X6KRCPEwC3X8VsYqrqu056mvre44JvP5QVpDAV5aUN/QuAJ1GGSPRfWtWVtlATAQjt6inVCx5CQCAsmJPmnjFywfpHTN46WvLETULieH3SnSpqTKG71cTfSU8zAPdqt71lxHB64+cwp4rgpYqf/oAgLb2zsKSWizMUpDAz10MKoU8fZIqvoilRmwA11aV7rMAxIPvWc4b/IaLTqOEnfuMuF/CYPi9ZuZW4OGj2+eM05LFFze4TZ49VXOQ6adnl+PhI1+/lT5+jUzN6nmAObPXgUrp+Vt2rbPEn6nqGlqxozCDkOb+TTPxWhoAICZK633UFf1bO3vFlcb/3iASZ9LDf3fjO4AEy/C3S5y9nrp+ySTs1kZtrGTazdUh0dysvAp1lpTnwgmDT//CzTRvjynY07PaWMmMoDXBUdmZuRU0KmWBNdvQ6SwA4ERA8sJZulj8mVPU7wd4hMXnAwA0VcZ4OBniSR33T8YCAbeebVs5day8OABAQoyecNnzVkzOU255VxdvxSdGarNO9i5Galap4+eB4b+7YXsqO0Y0+uIyU9c/Ssr7rsYHyfB7fcot33MyFn8WFKFTFv/3iMLHwOacfJFfufdUHJ4+jUp2sdUDtgAAUFrRfbmNTio8EZC8cZkptmhupEw8BTEyssu///U+Fq6obnLdfDPO3wMrEZlMcrLhONlwsF9JJBKPxyNeLLBwVNLL5TtD/A85YStZChLRF5dZuF3EH7cEyPDXwwCAH88l7DkZS2xswzh3PbWsshFfHPAUsYfOPzh9rY+WRWKOPofubToQ3mfTT1cX70xgipWHP/58DACIT3llv+YqsXgfQ8CtZzuO9txvczRkIv9YymTQ+pXIxyCw8zUoMhu/++Brb8NobGr/zvc+vkg8SHk8sO90/MP04pWLJpobKasqSaZkloZEc/f/Fs99WYVfBds7ut89PeqXhN/BEl97fZ77Bs+CeMns7OR9/n3ovQcF21dbqChKKMmJV9Y0p2aV+gVnEOOcCEgODM3auMwUax+WFBdJzy5LzSq9+HdGn3sUnpBv6HR228qpU41UJo1Xam3rTM0qDYrkYodLYUktXhjivdvBcw9q61sVZcXwNRbGKhGJBe/6YwcGev8VTkZEPYwQOMgrnCCvcCKw+6ZT39gJKqn/N9rau3wO3RNsmgLzev4Gf7caYhgRmFficwVi2EHXVzgZCq9TDFlTDPn7UEcpo2VfKEDeRrApGnIUFtvpTTFkNTa1valuAgCk/b3q3/KGhNTXfcYnkYAhR6G8nw1yfUKlkM0nKn82b7yWqnRZRWPjgGZgez8/b5s9fybbP+SpwFMWLII8X+WkmREXlqbeWLXW1XiTu+mzkLV9jhbjY+Es3Yyg1c6zdQeZu7GeUl74hnvn3RbZjvtpq82r6I2TDfoYC/d/gsDum0QZ1KRrXnQaWdfhNNZJaaSrOI3QI/0u0l6U7fWNi0p6OZjcTQ1YCVc8IxILXDbdaGppBwAsnW/AoAuxt2r7aosty83kLY/2a6u1ria+u+2phgeEVCocge35t5/P0FCWMl70Oz7+IT27LD277IMbFryuIfYHDAzfPXavS+s+2fgXPnyQ+L4plUI25CgU/VsrjB6xkYnA6uG507X/Cn9BHEjQGzqNcu77eXXJX6XcWOntMSXGz12ETtHVlI3xc9dRkxZlUGP83E99Y1cW730/wGOOhWbW7XWvor7c5D4F2/wH75mViT4Jlz3xHh4MOWmmqQHrx3MPcKlE1FlSz0LWpNxY+SbBx9ujOymf5WbXfnEOOrW4MWXb5Z8WijKoAABLE5XkwBWViT5YT+paV5NLBx2x+Gf2OuDbAgDEmfQ1i42lJBjY8HdpScatX12bUr6+d95t11rLa784AwBsLbVi/NyP77StS/4qxs9dbawkAMDbYwqFQorxcxdn0n2Wm5Xe9077e5WCjBgQNALzqs6Syi74wOccD381a7Gd3u4Tseeup+1YY2FlqkYikSTFRKxM1cSZdCqFbGWqNstcc8eRaGM9pfDf3c7fSMvMq/hmnSUAQFVJcucayzN/pma/rOT7CKSm8hgAQJ+5Mxm0e+fdaupb3L8OPuqXdPirWa72egAAjobMp3P101+U7Tsd7zZ//GoXYwDAnvXTW9s6/YIyqFQyAEBHXdpsQnfv+qTxSrqaPQNoOjq78l/XtHd0xjwqBAD8dXyRAVthw77Q2OSiXWunYX3yirJiVqZqKooSn39/d+I4xYM+NgCAnMIqHg/EPCpkiFB/2Tb76p3nj5/9Ky3Vv29afgwCq4cLimuIe94nq12MfzqfeNz/EQBASkLkx83WvYdAHPFLunAzfbG9noqi5M9/PEzKKI7z92Cry7wuqysuq59npbPnZOyr0reGU+e/rgYA6GrKxj3mn0l4/kwdtrqM4rRj5VWNAbee6ahLH9thGxiaBQDILarGXuLwcjbCxrOlZpX5LDf7Jy4Xs/UeWlo7IhILjHQV9vrGaaqMsTHTcN1883pYFgCAoyEzY7IaAAAb77J2792K6qY5FlrYuKo7sbkOM3T2+sZRKCTuy6r5M9nfHI/hvuz3500/iMDO17jHRS624wzY8u+KQKOSRRlUfO6BvKJqQBhiCP57iaWmrgUAUPqmsb6xDQDQ0toJAGAyaM0tHVM/uxiTXHjjuAt27ONU1jRn5lVsX2WBvyqDIy8j1t7R9aa6Ec90rLy4OJNOAiQsIwBAc2s7NlBt+5Eon0P31n5qknpzlTiT3tXFw486MpnUezgHhoQYHQCAj9znGypbXddMzAKns5NnudQv9H7epYOO576f964/bcAIzOuuYzEFxTURF5YucdCXlmTQaZRP5oz7cqkpHqG9o+t57pv1SyaJM+miDOrWFeaAMCT4g0hLMtYvmeT9Y/g/cbm9WwaWbQtWUZKI8/ewNFFhiFDlpJlbvMxmTFZLTHtNo5J3r58OAGCryyx3Nrr/5FVDUxuJ1DNuGy+Dl7NRalbpF/tDVZUkFWXFGpra2OoyKoqSirJiBmwFfKAoH3lF1Y3N7V+tMKdQSAoyYliVjidLeKfora3ERGk+nmZbD0dcuf1cGA0dAquHG5raLN38znzncPVnZ3zl1sMRxDjr9t69e3ZJfviGjs6uN1VN4O3z9f2ojZXascZigTVbT0vOxfsG36+pWaWWS/0uHlgQH+CJreno7LJ080vJLN15LPqAt7WHk6E6Syr/VY3r5pvgHSOQV7lM1FIdQyGT/4nLzXtV7ReU4eVslH13XXt7V2lFw7vaIhqb21fvueN/0Ck3dIOMFKOkvAG7C3v/IDsFWTGf5WaONmw9Lbne70YMHjQOBk5Quz+cIK9wgrzCCfIKJ8grnCCvcIK8wgnyCifIK5wgr3CCvMIJ8gonyCucIK9wgrzCCfIKJ8grnCCvcIK8wgnyCifIK5wgr3CCvMIJ8gon/wOJZCNFvI9G0gAAAABJRU5ErkJggg==";
+var STYLES={
+  navy:{bg1:"#103a5c",bg2:"#0a2a45",accent:"#4f93e0",kicker:"#8fc1ff",stat:"#8fc1ff"},
+  blue:{bg1:"#2f6fbf",bg2:"#163e74",accent:"#bfe0ff",kicker:"#dbeeff",stat:"#ffffff"},
+  storm:{bg1:"#0e2236",bg2:"#05101c",accent:"#4f93e0",kicker:"#7fa9d6",stat:"#8fc1ff"}
+};
+function val(id){return document.getElementById(id).value;}
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function wrap(text,max){var w=(text||"").split(/\s+/),lines=[],cur="";for(var i=0;i<w.length;i++){var t=cur?cur+" "+w[i]:w[i];if(t.length>max&&cur){lines.push(cur);cur=w[i];}else cur=t;}if(cur)lines.push(cur);return lines.slice(0,5);}
+function buildSVG(){
+  var s=STYLES[val("style")]||STYLES.navy;
+  var kicker=esc(val("kicker")),head=val("headline"),stat=esc(val("stat")),sub=esc(val("subline")),tag=esc(val("tagline"));
+  var lines=wrap(head,stat?16:20);
+  var fs=lines.length>=4?72:lines.length===3?84:96;
+  var startY=stat? 560 : 470;
+  var headTspans=lines.map(function(l,i){return '<tspan x="90" dy="'+(i===0?0:fs+10)+'">'+esc(l)+'</tspan>';}).join("");
+  var statBlock=stat? '<text x="90" y="430" font-family="Helvetica,Arial,sans-serif" font-size="190" font-weight="900" fill="'+s.stat+'">'+stat+'</text>' : '';
+  return '<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
+   +'<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="'+s.bg1+'"/><stop offset="1" stop-color="'+s.bg2+'"/></linearGradient></defs>'
+   +'<rect width="1080" height="1080" fill="url(#bg)"/>'
+   +'<rect width="1080" height="1080" fill="none"/>'
+   +'<image x="84" y="74" width="150" height="150" preserveAspectRatio="xMinYMin meet" href="'+LOGO+'" xlink:href="'+LOGO+'"/>'
+   +'<rect x="90" y="300" width="92" height="8" rx="4" fill="'+s.accent+'"/>'
+   +'<text x="90" y="280" font-family="Helvetica,Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="6" fill="'+s.kicker+'">'+kicker.toUpperCase()+'</text>'
+   +statBlock
+   +'<text x="90" y="'+startY+'" font-family="Georgia,\'Times New Roman\',serif" font-size="'+fs+'" font-weight="700" fill="#ffffff">'+headTspans+'</text>'
+   +'<text x="90" y="'+(startY+lines.length*(fs+10)+30)+'" font-family="Helvetica,Arial,sans-serif" font-size="40" fill="#cfe0f4">'+sub+'</text>'
+   +'<rect x="0" y="980" width="1080" height="100" fill="rgba(0,0,0,.18)"/>'
+   +'<text x="90" y="1042" font-family="Helvetica,Arial,sans-serif" font-size="34" font-weight="800" fill="#ffffff">'+tag+'</text>'
+   +'</svg>';
+}
+function render(){document.getElementById("prev").innerHTML=buildSVG();}
+function downloadSVG(){var b=new Blob([buildSVG()],{type:"image/svg+xml"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="hancock-graphic.svg";a.click();}
+function downloadPNG(){
+  var svg=buildSVG();var img=new Image();
+  img.onload=function(){var c=document.createElement("canvas");c.width=1080;c.height=1080;var x=c.getContext("2d");x.drawImage(img,0,0,1080,1080);
+    var a=document.createElement("a");a.href=c.toDataURL("image/png");a.download="hancock-graphic.png";a.click();};
+  img.onerror=function(){alert("Couldn't render PNG — try Download SVG.");};
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+}
+function askChad(){
+  var btn=document.getElementById("copyBtn");btn.textContent="Asking Chad…";
+  fetch("/api/bot",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({message:"Give me ONE punchy 8-12 word marketing headline for a Hancock ladder-assist social graphic. Use Ryan Knight's inspection philosophy. Reply with only the headline, no quotes."})})
+    .then(function(r){return r.json();}).then(function(d){if(d.reply){document.getElementById("headline").value=d.reply.replace(/^["']|["']$/g,"");render();}btn.textContent="Ask Chad for a headline";})
+    .catch(function(){btn.textContent="Ask Chad for a headline";alert("Chad is temporarily unavailable.");});
+}
+render();
+</script>
+</body>
+</html>

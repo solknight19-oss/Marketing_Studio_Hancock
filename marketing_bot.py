@@ -28,6 +28,7 @@ from collections import Counter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
+PLAYBOOK_FILE = os.path.join(HERE, "Ryan_Knight_Inspection_Industry_Playbook.md")
 LATEST_JSON = os.path.join(DATA_DIR, "latest_bot.json")
 LATEST_JS = os.path.join(DATA_DIR, "latest_bot.js")
 LOOKBACK_DAYS = 21
@@ -85,7 +86,17 @@ ANGLE_BY_LINE = {
     "Carrier / Market": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
 }
 
-DOCTRINE = """You write marketing intelligence and draft content for Hancock Claims Consultants using Ryan Knight's inspection industry philosophy. Core doctrine: trust, documentation, defensibility, communication, consistency, reduced cycle time, reduced indemnity leakage. The inspection is only part of the service; the real product is accurate documentation, defensible findings, clear communication, consistent reporting, and carrier-ready files. Use property lifecycle management: pre-loss underwriting/risk, during-loss damage inspection/scope/estimate, and post-loss verification/reinspection. Signature ideas: Nobody should ever wonder where our technician is. Documentation should answer questions before they are asked. The cheapest claim is the one that never happens. Repairability must be tested, not assumed. Price matters; trust matters more. Standards: front/right/rear/left elevations, full roof-system documentation, 10x10 test squares every slope, interior dimensions when reported, original uncompressed photos, captions and annotations, narrative flow Overview -> Exterior -> Roofing -> Damage -> Interior -> Evidence."""
+try:
+    with open(PLAYBOOK_FILE, "r", encoding="utf-8") as playbook:
+        DOCTRINE = (
+            "Ryan Knight's Inspection Industry Playbook is the foundational operating model. Apply it as operational "
+            "judgment while allowing traceable, current, corroborated evidence to refine recommendations. "
+            "Label observed signals and emerging patterns. Do not invent carrier requirements, field observations, "
+            "statistics, sources, corroboration, or coverage decisions.\n\n"
+            + playbook.read()
+        )
+except Exception:
+    DOCTRINE = """Ryan Knight's core doctrine: trust, documentation, defensibility, communication, consistency, reduced cycle time, reduced indemnity leakage. Use property lifecycle management across pre-loss, during-loss, and post-loss. Repairability must be tested. Documentation should answer questions before they are asked. Price matters; trust matters more."""
 
 
 def clean(value):
@@ -238,7 +249,55 @@ def build_stories():
         time.sleep(0.25)
     cutoff = dt.datetime.utcnow() - dt.timedelta(days=LOOKBACK_DAYS)
     raw = [item for item in raw if item["when"] is None or item["when"] >= cutoff]
-    raw.sort(key=lambda item: item["when"] or dt.datetime.min, reverse=True)
+    blocked_sources = {"ad hoc news", "pr newswire", "markets.businessinsider.com"}
+    blocked_phrases = (
+        "(sponsored)", "sponsored content", "press release:",
+        " launches free ", " coordinates post-storm ", " reports growing visibility ",
+    )
+    insurance_signals = (
+        "insurance", "claim", "carrier", "insurer", "underwriting", "loss control",
+        "adjuster", "coverage", "policy",
+    )
+    property_signals = (
+        "property", "roof", "homeowner", "home inspection", "inspector", "residential",
+        "commercial", "building", "hail", "storm", "catastrophe", "landlord", "contents",
+    )
+    platform_signals = ("xactimate", "verisk", "cotality", "hover", "eagleview")
+
+    def is_industry_story(item):
+        title = f" {item['title'].lower()} "
+        return (
+            any(term in title for term in insurance_signals)
+            and any(term in title for term in property_signals)
+        ) or any(term in title for term in platform_signals)
+
+    raw = [
+        item for item in raw
+        if item["source"].strip().lower() not in blocked_sources
+        and not any(phrase in f" {item['title'].lower()} " for phrase in blocked_phrases)
+        and is_industry_story(item)
+    ]
+
+    relevance_terms = (
+        "insurance", "claim", "carrier", "inspection", "property", "roof", "roofing",
+        "underwriting", "loss control", "catastrophe", "storm", "hail", "wind",
+        "commercial", "residential", "adjuster", "xactimate", "verisk", "cotality",
+        "eagleview", "hover", "contents", "repairability", "building code",
+    )
+    trusted_sources = (
+        "insurance journal", "propertycasualty360", "carrier management",
+        "digital insurance", "insurance business", "claims journal",
+        "national weather service", "verisk", "cotality",
+    )
+
+    def rank(item):
+        text = f"{item['title']} {item['summary']}".lower()
+        relevance = sum(1 for term in relevance_terms if term in text)
+        source_bonus = 3 if any(source in item["source"].lower() for source in trusted_sources) else 0
+        timestamp = (item["when"] or dt.datetime.min).timestamp()
+        return relevance + source_bonus, timestamp
+
+    raw.sort(key=rank, reverse=True)
     stories = []
     for item in raw[:MAX_STORIES]:
         summary = item["summary"]

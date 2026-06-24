@@ -1,0 +1,6 @@
+.serverTool{border:1px solid rgba(255,255,255,.24);background:rgba(4,23,46,.38);color:#fff;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:800;text-decoration:none;margin:0}
+.serverTool:hover{background:rgba(255,255,255,.14)}
+.rightTools form{margin:0}
+#botCrew .card{min-height:150px}
+#chadStatus{max-width:760px}
+@media(max-width:900px){.serverTool{flex:1;text-align:center}.rightTools form{display:flex;flex:1}.rightTools form .serverTool{width:100%}}
