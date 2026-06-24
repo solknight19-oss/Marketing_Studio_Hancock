@@ -132,15 +132,19 @@ def send_email(to_email, subject, text, html_body):
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'Email service rejected the message: {detail}') from exc
-def anthropic_message(system, prompt, max_tokens=1200):
+def anthropic_request(system, messages, max_tokens=1200, tools=None):
     if not ANTHROPIC_API_KEY:
         raise RuntimeError('Live AI is not configured on the server.')
-    payload = json.dumps({
+    body = {
         'model': ANTHROPIC_MODEL,
         'max_tokens': min(max(int(max_tokens or 1200), 100), 3000),
         'system': system,
-        'messages': [{'role':'user','content':prompt}],
-    }).encode()
+        'messages': messages,
+    }
+    if tools:
+        body['tools'] = tools
+        body['tool_choice'] = {'type':'auto'}
+    payload = json.dumps(body).encode()
     request = urllib.request.Request(
         'https://api.anthropic.com/v1/messages',
         data=payload,
@@ -153,11 +157,18 @@ def anthropic_message(system, prompt, max_tokens=1200):
     )
     try:
         with urllib.request.urlopen(request, timeout=75) as response:
-            data=json.loads(response.read().decode())
-        return ''.join(part.get('text','') for part in data.get('content',[])).strip()
+            return json.loads(response.read().decode())
     except urllib.error.HTTPError as exc:
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'AI service rejected the request: {detail}') from exc
+
+def anthropic_message(system, prompt, max_tokens=1200):
+    data=anthropic_request(
+        system,
+        [{'role':'user','content':prompt}],
+        max_tokens,
+    )
+    return ''.join(part.get('text','') for part in data.get('content',[]) if part.get('type')=='text').strip()
 def verify_ai_service():
     if not ANTHROPIC_API_KEY:
         return
@@ -453,6 +464,10 @@ Maintain clear epistemic labels: verified internal standard, observed external s
 
 Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question may need one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 40-140 spoken words unless the user asks for depth. Prefer active voice and natural conversational bridges over report language.
 
+Operate like a capable teammate, not a chat wrapper. When the user asks for work that an available tool can safely complete, use the tool instead of merely explaining how they could do it. Follow a practical loop: understand the request, inspect the available context, choose the smallest useful action, perform it, verify the result, and clearly report what changed. Make reasonable low-risk assumptions and act; ask a clarifying question only when a wrong assumption would materially change the work.
+
+Your tools are intentionally bounded. You may inspect workspace status, navigate the Studio, create reviewable drafts and tasks, prepare a recommended draft, check specialist-bot status, and run a fresh bot scan when the user explicitly requests current scanning. You may not publish, send, delete, alter accounts, change permissions, or claim approval. Never pretend a tool ran. Use the returned result as the source of truth and tell the user when something failed.
+
 Use teammate context like a real colleague. When the current topic genuinely overlaps a recorded Cassie, Jennifer, or Ryan conversation, you may naturally say something like, "Ah, Jennifer was asking about this," then accurately summarize what was discussed and connect it to the current question. Never manufacture overlap, imply agreement that was not recorded, or mention unrelated teammate conversations just to sound social.
 
 The user's newest message is always the immediate focus. Answer it directly before referencing earlier work. If the user changes subjects, stop advancing the prior topic unless they explicitly return to it. Use recent conversation for continuity, not to override the newest request.
@@ -720,6 +735,263 @@ def bot_reply(user, message, state):
     if todo: return f"Next step: {todo[0]['title']}. Assign it, set it to Doing, and create one working draft."
     return 'Pick one radar trend, create one draft, assign one owner, and move it to Review.'
 
+CHAD_TOOLS=[
+    {
+        'name':'studio_navigate',
+        'description':"""Move the signed-in user's Studio interface to the most useful tab or shared workspace for the current request. Use this when seeing a specific tool will help the user continue the work. This changes only the visible location; it does not create, edit, publish, or delete data. Valid Studio tabs include radar, storm, answers, social, carrier, content, seo, topics, repurpose, reviews, library, and chad. Dashboard workspaces include dashboard, drafts, and tasks.""",
+        'input_schema':{
+            'type':'object',
+            'properties':{
+                'target':{
+                    'type':'string',
+                    'enum':['radar','storm','answers','social','carrier','content','seo','topics','repurpose','reviews','library','chad','dashboard','drafts','tasks'],
+                    'description':'The Studio tab or shared workspace to display.',
+                },
+                'reason':{'type':'string','description':'Brief reason this location supports the user request.'},
+            },
+            'required':['target'],
+            'additionalProperties':False,
+        },
+    },
+    {
+        'name':'workspace_manage',
+        'description':"""Inspect or create reviewable work in the shared Hancock workspace. Use status to refresh the current tasks, drafts, and activity. Use create_draft when the user asks Chad to write or prepare content and include useful draft text in body. Use prepare_recommended_draft for the current proactive weather or market recommendation. Use create_task when the user asks to assign or record follow-up work. These actions never publish, send, approve, or delete anything.""",
+        'input_schema':{
+            'type':'object',
+            'properties':{
+                'action':{'type':'string','enum':['status','create_draft','prepare_recommended_draft','create_task']},
+                'title':{'type':'string','description':'Clear title for a new draft or task.'},
+                'body':{'type':'string','description':'Reviewable content for a new draft.'},
+                'details':{'type':'string','description':'Useful completion details for a new task.'},
+                'content_type':{'type':'string','description':'Content format, such as Blog Post, LinkedIn Post, FAQ, or Website Update.'},
+                'service_line':{'type':'string','description':'Relevant Hancock service line.'},
+                'assigned_to':{'type':'string','description':'Ryan, Cassie, Jennifer, or a full team member name.'},
+            },
+            'required':['action'],
+            'additionalProperties':False,
+        },
+    },
+    {
+        'name':'specialist_bots',
+        'description':"""Check or run Chad's specialist bot council. Use status to inspect the latest completed Industry Radar, Storm Watch, Content Opportunity, and SEO/AEO bot state. Use run only when the user explicitly asks for a fresh scan, refresh, or current web/radar update; a run may take several minutes. Treat bot findings as signals requiring verification, not automatically established facts.""",
+        'input_schema':{
+            'type':'object',
+            'properties':{
+                'action':{'type':'string','enum':['status','run']},
+                'reason':{'type':'string','description':'Why the bot status or fresh scan is needed.'},
+            },
+            'required':['action'],
+            'additionalProperties':False,
+        },
+    },
+]
+
+def resolve_assignee(name):
+    if not name:
+        return None, ''
+    wanted=name.strip().lower()
+    aliases={
+        'ryan':'ryan knight',
+        'knight':'ryan knight',
+        'cassie':'cassie tant',
+        'jennifer':'jennifer walker',
+        'jen':'jennifer walker',
+    }
+    wanted=aliases.get(wanted,wanted)
+    con=db()
+    users=[dict(r) for r in con.execute('select id,username,email,name from users')]
+    con.close()
+    for candidate in users:
+        values=(candidate['name'].lower(),candidate['username'].lower(),candidate['email'].lower())
+        if wanted in values or wanted == candidate['name'].split()[0].lower():
+            return candidate['id'],candidate['name']
+    return None,''
+
+def execute_chad_tool(name, tool_input, user):
+    tool_input=tool_input if isinstance(tool_input,dict) else {}
+    if name=='studio_navigate':
+        target=tool_input.get('target') or 'chad'
+        dashboard_targets={'dashboard':'/dashboard','drafts':'/dashboard#drafts','tasks':'/dashboard#tasks'}
+        if target in dashboard_targets:
+            action={'type':'url','target':dashboard_targets[target]}
+        else:
+            action={'type':'tab','target':target}
+        return {
+            'ok':True,
+            'summary':f'Opened {target}.',
+            'ui_action':action,
+        }
+    if name=='workspace_manage':
+        action=tool_input.get('action')
+        if action=='status':
+            state=collect_state()
+            return {
+                'ok':True,
+                'summary':'Refreshed the shared workspace.',
+                'tasks':[
+                    {'id':item.get('id'),'title':item.get('title'),'status':item.get('status')}
+                    for item in state['tasks'][:10]
+                ],
+                'drafts':[
+                    {'id':item.get('id'),'title':item.get('title'),'status':item.get('status')}
+                    for item in state['drafts'][:10]
+                ],
+                'recent_activity':[
+                    {'user':item.get('user_name'),'action':item.get('action'),'meta':item.get('meta')}
+                    for item in state['activity'][:8]
+                ],
+            }
+        if action=='prepare_recommended_draft':
+            draft=prepare_recommended_draft(user)
+            return {
+                'ok':True,
+                'summary':f'Prepared reviewable draft: {draft["title"]}.',
+                'artifact':{'kind':'draft',**draft},
+                'ui_action':{'type':'url','target':'/dashboard#drafts'},
+                'safety':'The draft is saved for team review and has not been published.',
+            }
+        if action=='create_draft':
+            title=(tool_input.get('title') or 'Untitled Chad draft').strip()[:160]
+            body=(tool_input.get('body') or '').strip()
+            if not body:
+                return {'ok':False,'error':'A useful draft body is required before creating the draft.'}
+            content_type=(tool_input.get('content_type') or 'Blog Post')[:60]
+            service_line=(tool_input.get('service_line') or 'Property Inspection')[:80]
+            stamp=now()
+            con=db()
+            existing=con.execute(
+                "select id,title from drafts where title=? and status!='published' order by id desc limit 1",
+                (title,),
+            ).fetchone()
+            if existing:
+                con.close()
+                return {
+                    'ok':True,
+                    'summary':f'A reviewable draft named {title} already exists, so I did not duplicate it.',
+                    'artifact':{'kind':'draft','id':existing['id'],'title':existing['title'],'created':False},
+                    'ui_action':{'type':'url','target':'/dashboard#drafts'},
+                    'safety':'The existing draft remains unpublished.',
+                }
+            cur=con.execute(
+                'insert into drafts(title,body,content_type,service_line,status,owner_id,updated_by,created_at,updated_at) values(?,?,?,?,?,?,?,?,?)',
+                (title,body,content_type,service_line,'draft',user['id'],user['id'],stamp,stamp),
+            )
+            draft_id=cur.lastrowid
+            con.commit(); con.close()
+            log_action(user['id'],'asked Chad to create draft',title)
+            return {
+                'ok':True,
+                'summary':f'Created reviewable draft: {title}.',
+                'artifact':{'kind':'draft','id':draft_id,'title':title,'created':True},
+                'ui_action':{'type':'url','target':'/dashboard#drafts'},
+                'safety':'The draft is saved for team review and has not been published.',
+            }
+        if action=='create_task':
+            title=(tool_input.get('title') or 'Untitled Chad task').strip()[:160]
+            details=(tool_input.get('details') or '').strip()[:8000]
+            assignee_id,assignee_name=resolve_assignee(tool_input.get('assigned_to'))
+            if tool_input.get('assigned_to') and not assignee_id:
+                return {'ok':False,'error':f'No team member matched “{tool_input.get("assigned_to")}”. Use Ryan, Cassie, or Jennifer.'}
+            stamp=now()
+            con=db()
+            existing=con.execute(
+                "select id,title from tasks where title=? and status!='done' and assigned_to is ? order by id desc limit 1",
+                (title,assignee_id),
+            ).fetchone()
+            if existing:
+                con.close()
+                return {
+                    'ok':True,
+                    'summary':f'An open task named {title} already exists, so I did not duplicate it.',
+                    'artifact':{'kind':'task','id':existing['id'],'title':existing['title'],'assigned_to':assignee_name or None,'created':False},
+                    'ui_action':{'type':'url','target':'/dashboard#tasks'},
+                }
+            cur=con.execute(
+                'insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',
+                (title,details,'todo',assignee_id,user['id'],stamp,stamp),
+            )
+            task_id=cur.lastrowid
+            con.commit(); con.close()
+            log_action(user['id'],'asked Chad to create task',title)
+            return {
+                'ok':True,
+                'summary':f'Created task: {title}'+(f' for {assignee_name}.' if assignee_name else '.'),
+                'artifact':{'kind':'task','id':task_id,'title':title,'assigned_to':assignee_name or None},
+                'ui_action':{'type':'url','target':'/dashboard#tasks'},
+            }
+        return {'ok':False,'error':'Unsupported workspace action.'}
+    if name=='specialist_bots':
+        action=tool_input.get('action')
+        if action=='status':
+            return {'ok':True,'summary':'Checked the latest specialist bot status.','overview':bot_overview()}
+        if action=='run':
+            result=run_bot_cycle('chad-agent',user['id'])
+            return {
+                'ok':result['ok'],
+                'summary':'The specialist bots completed a fresh scan.' if result['ok'] else 'The specialist bot scan did not complete.',
+                'overview':result.get('overview'),
+                'error':'' if result['ok'] else (result.get('output') or 'Bot run failed.')[-1000:],
+                'ui_action':{'type':'tab','target':'radar'},
+            }
+        return {'ok':False,'error':'Unsupported specialist-bot action.'}
+    return {'ok':False,'error':f'Unknown tool: {name}'}
+
+def request_is_current(user_id, request_id):
+    with CHAT_REQUEST_LOCK:
+        return CHAT_REQUESTS.get(user_id)==request_id
+
+def chad_agent(user, message, request_id):
+    system=(
+        CHAD_PERSONA+
+        '\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook()+
+        '\n\nLIVE WORKSPACE CONTEXT:\n'+chad_context(user)
+    )
+    messages=[{'role':'user','content':message}]
+    ui_action=None
+    artifacts=[]
+    tool_summaries=[]
+    for _ in range(4):
+        if not request_is_current(user['id'],request_id):
+            return {'reply':'','mode':'superseded','superseded':True}
+        response=anthropic_request(system,messages,1400,CHAD_TOOLS)
+        content=response.get('content') or []
+        tool_calls=[part for part in content if part.get('type')=='tool_use']
+        text=''.join(part.get('text','') for part in content if part.get('type')=='text').strip()
+        if not tool_calls:
+            if not text and tool_summaries:
+                text=' '.join(tool_summaries)
+            return {
+                'reply':text or 'I completed the available step.',
+                'mode':'agent',
+                'ui_action':ui_action,
+                'artifacts':artifacts,
+            }
+        messages.append({'role':'assistant','content':content})
+        tool_results=[]
+        for call in tool_calls:
+            if not request_is_current(user['id'],request_id):
+                return {'reply':'','mode':'superseded','superseded':True}
+            result=execute_chad_tool(call.get('name',''),call.get('input') or {},user)
+            if result.get('ui_action'):
+                ui_action=result['ui_action']
+            if result.get('artifact'):
+                artifacts.append(result['artifact'])
+            if result.get('summary'):
+                tool_summaries.append(result['summary'])
+            tool_results.append({
+                'type':'tool_result',
+                'tool_use_id':call.get('id'),
+                'content':json.dumps(result,ensure_ascii=False),
+                'is_error':not result.get('ok',False),
+            })
+        messages.append({'role':'user','content':tool_results})
+    return {
+        'reply':' '.join(tool_summaries) or 'I reached my action limit before I could finish that cleanly.',
+        'mode':'agent',
+        'ui_action':ui_action,
+        'artifacts':artifacts,
+    }
+
 class Handler(http.server.BaseHTTPRequestHandler):
     server_version='HancockLiveStudio/0.1'
     def send_html(self,text,code=200):
@@ -942,24 +1214,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         with CHAT_REQUEST_LOCK:
             CHAT_REQUESTS[user['id']]=request_id
         remembered=maybe_remember(user,msg)
-        lower=msg.lower()
-        if any(phrase in lower for phrase in ('run the bots','run the studio','refresh the radar','run a scan','update the radar')):
-            result=run_bot_cycle('chad',user['id'])
-            reply='The specialist bots finished their scan and I refreshed the briefing.' if result['ok'] else result.get('output') or 'The bot cycle could not finish.'
-            self.send_json({'reply':reply,'mode':'action','bots':result.get('overview'),'ui_action':{'type':'tab','target':'radar'}}); return
-        if any(phrase in lower for phrase in ('prepare the suggested post','prepare storm post','prepare the post','draft the suggested post','get the post ready')):
-            draft=prepare_recommended_draft(user)
-            verb='prepared' if draft['created'] else 'already have'
-            reply=f"I {verb} “{draft['title']}” in the shared Drafts workspace. It is not published. Review the facts and alert timing, then move it forward when the team is comfortable."
-            self.send_json({'reply':reply,'mode':'action','draft':draft,'ui_action':{'type':'url','target':'/dashboard#drafts'}}); return
         if remembered and not ANTHROPIC_API_KEY:
             reply=f'I will remember that: {remembered}.'
             log_action(user['id'],'taught Chad',remembered[:140]); self.send_json({'reply':reply,'mode':'memory','ui_action':chad_ui_action(msg)}); return
+        result={}
         if ANTHROPIC_API_KEY:
             try:
-                system=CHAD_PERSONA+'\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook()+'\n\nLIVE WORKSPACE CONTEXT:\n'+chad_context(user)
-                reply=anthropic_message(system,msg,450)
-                mode='ai'
+                result=chad_agent(user,msg,request_id)
+                if result.get('superseded'):
+                    self.send_json(result)
+                    return
+                reply=result['reply']
+                mode=result.get('mode','agent')
             except Exception as exc:
                 reply="I could not reach my conversational AI just now. I can still run the bots, prepare a draft, or move you to the right Studio tool while the connection recovers."
                 mode='fallback'
@@ -973,7 +1239,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         save_conversation_turn(user['id'],'user',msg)
         save_conversation_turn(user['id'],'assistant',reply)
-        log_action(user['id'],'asked Chad',msg[:140]); self.send_json({'reply':reply,'mode':mode,'remembered':bool(remembered),'ui_action':chad_ui_action(msg)})
+        log_action(user['id'],'asked Chad',msg[:140])
+        self.send_json({
+            'reply':reply,
+            'mode':mode,
+            'remembered':bool(remembered),
+            'ui_action':result.get('ui_action') or chad_ui_action(msg),
+            'artifacts':result.get('artifacts') or [],
+        })
     def api_ai(self,user):
         if self.rate_limited('studio-ai',25,10): self.send_json({'error':'AI request limit reached. Try again shortly.'},429); return
         data=self.read_body(); prompt=(data.get('prompt') or '').strip(); system=(data.get('system') or '').strip()
