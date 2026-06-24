@@ -53,6 +53,7 @@
     + '#chadw .cw-msgs{flex:1;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}'
     + '#chadw .cw-m{max-width:85%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5;animation:cwrise .2s ease both}'
     + '#chadw .cw-m.chad{align-self:flex-start;background:rgba(47,111,191,.22);border:1px solid rgba(79,147,224,.4);color:#eaf2fb;border-bottom-left-radius:4px}'
+    + '#chadw .cw-m.chad a{color:#a9d1ff;text-decoration:underline;overflow-wrap:anywhere}'
     + '#chadw .cw-m.me{align-self:flex-end;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.14);color:#fff;border-bottom-right-radius:4px}'
     + '#chadw .cw-chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 8px}'
     + '#chadw .cw-chip{background:rgba(255,255,255,.07);border:1px solid rgba(79,147,224,.4);color:#dbeafe;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:16px;cursor:pointer}'
@@ -122,13 +123,17 @@
   /* ---------- refs + state ---------- */
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
-  var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null;
-  var recognition = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
+  var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null, lastSpokenText = "";
+  var recognition = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false;
   var panel = root.querySelector(".cw-panel"), head = root.querySelector(".cw-head");
   if (minimized) root.classList.add("cw-min");
 
   function setState(s) { stateEl.textContent = s; }
-  function bubble(t, who) { var d = document.createElement("div"); d.className = "cw-m " + who; d.innerHTML = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
+  function bubble(t, who) {
+    var d = document.createElement("div"); d.className = "cw-m " + who;
+    d.innerHTML = who === "chad" ? t.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>') : t;
+    msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  }
   function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
   /* ---------- voice (audio-reactive orb) ---------- */
@@ -154,6 +159,7 @@
     });
   }
   function stopSpeech() {
+    stopBargeIn();
     if (curSource) {
       try { curSource.onended=null; curSource.stop(0); } catch (e) {}
       curSource = null;
@@ -164,6 +170,62 @@
     if (listenTimer) window.clearTimeout(listenTimer);
     listenTimer=null;
   }
+  function stopBargeIn() {
+    if (bargeTimer) window.clearTimeout(bargeTimer);
+    bargeTimer=null;
+    if (bargeRecognition) {
+      var current=bargeRecognition;
+      bargeRecognition=null;
+      try { current.abort(); } catch (e) {}
+    }
+  }
+  function normalizedWords(text) {
+    return (text || "").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(function (word) { return word.length > 1; });
+  }
+  function likelyChadEcho(heard,spoken) {
+    var heardWords=normalizedWords(heard), spokenWords=normalizedWords(spoken);
+    if (!heardWords.length || !spokenWords.length) return false;
+    var spokenMap={};
+    spokenWords.forEach(function (word) { spokenMap[word]=true; });
+    var overlap=heardWords.filter(function (word) { return spokenMap[word]; }).length;
+    return overlap/heardWords.length >= .75;
+  }
+  function startBargeIn(spokenText,delay) {
+    stopBargeIn();
+    if (!conversationMode || muted || !root.classList.contains("cw-open") || root.classList.contains("cw-min")) return;
+    var SR=window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    bargeTimer=window.setTimeout(function () {
+      bargeTimer=null;
+      if (!conversationMode || recognition || bargeRecognition || (!curSource && !activeRequest)) return;
+      var rec=new SR(), interrupted=false;
+      bargeRecognition=rec;
+      rec.lang="en-US"; rec.interimResults=true; rec.continuous=true;
+      rec.onresult=function (event) {
+        var heard="";
+        for (var i=event.resultIndex;i<event.results.length;i++) {
+          heard+=(event.results[i][0].transcript || "")+" ";
+        }
+        heard=heard.trim();
+        if (interrupted || heard.length<3 || likelyChadEcho(heard,spokenText || lastSpokenText)) return;
+        interrupted=true;
+        bargeRecognition=null;
+        try { rec.abort(); } catch (e) {}
+        setState("INTERRUPTED");
+        stopSpeech();
+        input.value="";
+        send(heard);
+      };
+      rec.onerror=function () {
+        if (bargeRecognition===rec) bargeRecognition=null;
+      };
+      rec.onend=function () {
+        if (bargeRecognition===rec) bargeRecognition=null;
+        if (!interrupted && conversationMode && (curSource || activeRequest)) startBargeIn(spokenText,250);
+      };
+      try { rec.start(); } catch (e) { bargeRecognition=null; }
+    },delay || 450);
+  }
   function queueListening(delay) {
     clearListenTimer();
     if (!conversationMode || curSource || activeRequest || recognition || !root.classList.contains("cw-open")) return;
@@ -172,7 +234,7 @@
       startListening(false);
     },delay || 350);
   }
-  function playBuffer(buffer) {
+  function playBuffer(buffer,spokenText) {
     if (!buffer || muted) return;
     ensureAudioContext().then(function () {
       stopSpeech();
@@ -184,6 +246,7 @@
         queueListening(350);
       };
       source.start(0); vizStart();
+      startBargeIn(spokenText || lastSpokenText,450);
     }).catch(function () {
       setState("TAP PLAY");
       root.querySelector("#cwHear").classList.add("ready");
@@ -205,7 +268,8 @@
       })
       .then(function (buffer) {
         lastAudioBuffer=buffer;
-        playBuffer(buffer);
+        lastSpokenText=text;
+        playBuffer(buffer,text);
       }).catch(function (error) {
         var quota=error && /quota|credit/i.test(error.message || "");
         setState(quota ? "VOICE CREDITS NEEDED" : "VOICE UNAVAILABLE");
@@ -244,6 +308,7 @@
     var requestId=Date.now().toString(36)+"-"+thisRequest.toString(36);
     activeRequest=window.AbortController ? new AbortController() : null;
     bubble(esc(text), "me"); setState("THINKING");
+    startBargeIn("",650);
     fetch(API + "/api/bot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -306,6 +371,7 @@
   function close() {
     root.classList.remove("cw-open");
     clearListenTimer();
+    stopBargeIn();
     if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
   }
   function toggleMinimize() {
@@ -359,7 +425,7 @@
   root.querySelector("#cwHear").onclick = function () {
     muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
     localStorage.setItem("chad_widget_mute","0");
-    ensureAudioContext().then(function () { playBuffer(lastAudioBuffer); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
+    ensureAudioContext().then(function () { playBuffer(lastAudioBuffer,lastSpokenText); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
   };
   root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) { stopSpeech(); queueListening(250); } };
   root.querySelector("#cwSend").onclick = function () { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; };
@@ -411,6 +477,7 @@
       localStorage.setItem("chad_widget_mute","0");
       ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
     } else {
+      stopBargeIn();
       if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
       stopSpeech(); setState("ONLINE");
     }
