@@ -51,6 +51,7 @@
     + '#chadw .cw-chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 12px 8px}'
     + '#chadw .cw-chip{background:rgba(255,255,255,.07);border:1px solid rgba(79,147,224,.4);color:#dbeafe;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:16px;cursor:pointer}'
     + '#chadw .cw-chip:hover{background:#2f6fbf;color:#fff}'
+    + '#chadw .cw-chip.on{background:#1f9d68;border-color:#55d6a5;color:#fff;box-shadow:0 0 12px rgba(85,214,165,.3)}'
     + '#chadw .cw-comp{display:flex;gap:7px;padding:10px 12px;border-top:1px solid rgba(79,147,224,.2);align-items:center}'
     + '#chadw .cw-comp input{flex:1;padding:10px 12px;border-radius:11px;border:1px solid rgba(79,147,224,.3);background:rgba(255,255,255,.06);color:#fff;font-size:13px}'
     + '#chadw .cw-comp input::placeholder{color:#8da6bf}'
@@ -74,7 +75,8 @@
     + '<div class="cw-msgs" id="cwMsgs"></div>'
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
-    + '<button class="cw-chip" data-q="run the studio">Run the studio</button></div>'
+    + '<button class="cw-chip" data-q="run the studio">Run the studio</button>'
+    + '<button class="cw-chip" id="cwConversation">Conversation off</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
     + '<div class="cw-orbwrap" id="cwOrbWrap"><div class="cw-lbl"><b>CHAD</b></div>'
@@ -112,12 +114,20 @@
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curAudio = null;
+  var recognition = null, conversationMode = false, requestNumber = 0, activeRequest = null;
 
   function setState(s) { stateEl.textContent = s; }
   function bubble(t, who) { var d = document.createElement("div"); d.className = "cw-m " + who; d.innerHTML = t; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
   function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
   /* ---------- voice (audio-reactive orb) ---------- */
+  function stopSpeech() {
+    if (curAudio) {
+      try { curAudio.pause(); curAudio.currentTime = 0; } catch (e) {}
+      curAudio = null;
+    }
+    vizStop();
+  }
   function speak(text) {
     if (muted) return;
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
@@ -125,9 +135,15 @@
       .then(function (b) {
         var url = URL.createObjectURL(b); if (curAudio) { try { curAudio.pause(); } catch (e) {} }
         var au = new Audio(url); curAudio = au; setState("SPEAKING");
-        au.onended = function () { vizStop(); URL.revokeObjectURL(url); };
+        au.onended = function () {
+          vizStop(); URL.revokeObjectURL(url); curAudio = null;
+          if (conversationMode) setTimeout(startListening, 350);
+        };
         au.play().then(function () { vizStart(au); }).catch(function () { setState("TAP TO HEAR"); });
-      }).catch(function () { setState("VOICE UNAVAILABLE"); });
+      }).catch(function () {
+        setState("VOICE UNAVAILABLE");
+        if (conversationMode) setTimeout(startListening, 500);
+      });
   }
   function vizStart(au) {
     try {
@@ -149,17 +165,37 @@
 
   /* ---------- talk to the brain ---------- */
   function send(text) {
-    if (!text.trim()) return; bubble(esc(text), "me"); setState("…");
-    fetch(API + "/api/bot", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) })
+    if (!text.trim()) return;
+    stopSpeech();
+    if (recognition) { try { recognition.abort(); } catch (e) {} recognition = null; }
+    if (activeRequest) { try { activeRequest.abort(); } catch (e) {} }
+    var thisRequest=++requestNumber;
+    var requestId=Date.now().toString(36)+"-"+thisRequest.toString(36);
+    activeRequest=window.AbortController ? new AbortController() : null;
+    bubble(esc(text), "me"); setState("THINKING");
+    fetch(API + "/api/bot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, request_id: requestId }),
+      signal: activeRequest ? activeRequest.signal : undefined
+    })
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        if (thisRequest !== requestNumber || d.superseded) return;
+        activeRequest=null;
         var reply = d.reply || "…";
         bubble(esc(reply), "chad");
         speak(reply);
         setState("ONLINE");
         if (d.ui_action) setTimeout(function () { navigate(d.ui_action); }, 450);
       })
-      .catch(function () { bubble("I can't reach my brain right now — is the Chad service running?", "chad"); setState("OFFLINE"); });
+      .catch(function (error) {
+        if (error && error.name === "AbortError") return;
+        if (thisRequest !== requestNumber) return;
+        activeRequest=null;
+        bubble("I can't reach my brain right now — is the Chad service running?", "chad");
+        setState("OFFLINE");
+      });
   }
   function loadBrief() {
     if (!USER) return;
@@ -209,17 +245,41 @@
   /* ---------- wire events ---------- */
   root.querySelector("#cwOrbWrap").onclick = function () { root.classList.contains("cw-open") ? close() : open(); };
   root.querySelector("#cwClose").onclick = close;
-  root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted && window.speechSynthesis) window.speechSynthesis.cancel(); if (muted && curAudio) { try { curAudio.pause(); } catch (e) {} } };
+  root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) stopSpeech(); };
   root.querySelector("#cwSend").onclick = function () { send(input.value); input.value = ""; };
   input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { send(input.value); input.value = ""; } });
-  root.querySelectorAll(".cw-chip").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
-  root.querySelector("#cwMic").onclick = function () {
+  root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
+  function startListening() {
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); return; }
-    var rec = new SR(); rec.lang = "en-US"; var btn = this;
+    stopSpeech();
+    if (recognition) { try { recognition.abort(); } catch (e) {} }
+    var rec = new SR(); recognition=rec; rec.lang = "en-US"; rec.interimResults=false; rec.continuous=false;
+    var btn=root.querySelector("#cwMic"), heard="";
     rec.onstart = function () { btn.classList.add("on"); setState("LISTENING"); };
-    rec.onresult = function (ev2) { input.value = ev2.results[0][0].transcript; };
-    rec.onend = function () { btn.classList.remove("on"); setState("ONLINE"); if (input.value.trim()) { send(input.value); input.value = ""; } };
-    rec.start();
+    rec.onresult = function (ev2) { heard=ev2.results[0][0].transcript; input.value=heard; };
+    rec.onerror = function () { recognition=null; btn.classList.remove("on"); setState("MIC READY"); };
+    rec.onend = function () {
+      recognition=null; btn.classList.remove("on");
+      if (heard.trim()) { input.value=""; send(heard); }
+      else setState(conversationMode ? "CONVERSATION" : "ONLINE");
+    };
+    try { rec.start(); } catch (e) { recognition=null; setState("MIC UNAVAILABLE"); }
+  }
+  root.querySelector("#cwMic").onclick = function () {
+    startListening();
+  };
+  root.querySelector("#cwConversation").onclick = function () {
+    conversationMode=!conversationMode;
+    this.textContent=conversationMode ? "Conversation on" : "Conversation off";
+    this.classList.toggle("on",conversationMode);
+    if (conversationMode) {
+      muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
+      localStorage.setItem("chad_widget_mute","0");
+      startListening();
+    } else {
+      if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
+      stopSpeech(); setState("ONLINE");
+    }
   };
 
   /* ---------- public API (for a docked "Chad tab") ---------- */
