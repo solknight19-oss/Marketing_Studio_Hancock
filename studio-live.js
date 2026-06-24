@@ -132,10 +132,10 @@
       const overdue=mine.filter(i=>this.dateOnly(i.due_date)&&this.dateOnly(i.due_date)<today);
       const due=mine.filter(i=>this.dateOnly(i.due_date)===today);
       const week=mine.filter(i=>{const d=this.dateOnly(i.due_date||i.publish_at);return d>=today&&d<=weekEnd});
-      let message=`${this.state.user.name.split(" ")[0]}, Chad has ${week.length} production item${week.length===1?"":"s"} forecasted for you this week.`;
+      let message=`${this.state.user.name.split(" ")[0]}, Our Marketing Calendar has ${week.length} production item${week.length===1?"":"s"} forecasted for you this week.`;
       if(overdue.length)message=`${this.state.user.name.split(" ")[0]}, ${overdue.length} production item${overdue.length===1?" is":"s are"} overdue. Chad recommends clearing the oldest blocker first: ${overdue[0].title}.`;
       else if(due.length)message=`${this.state.user.name.split(" ")[0]}, today's priority is ${due[0].title}. Complete the asset, move it to the next status, and keep the publish date protected.`;
-      else if(week.length)message+=` Next up: ${week[0].title}.`;
+      else if(week.length)message+=` Chad recommends starting with ${week[0].title}.`;
       q("calendarGuidance").textContent=message;
     },
     renderAgenda(day,weekEnd){
@@ -192,7 +192,7 @@
       return {id:q("calId").value,title:q("calTitle").value,status:q("calStatus").value,priority:q("calPriority").value,content_type:q("calType").value,assigned_to:q("calAssigned").value,due_date:q("calDue").value,publish_at:q("calPublish").value,service_line:q("calService").value,region:q("calRegion").value,platforms:Array.from(q("calPlatforms").querySelectorAll("input:checked")).map(input=>input.value).join(", "),duration:q("calDuration").value,tone:q("calTone").value,location:q("calLocation").value,people:q("calPeople").value,talking_points:q("calTalking").value,cta:q("calCta").value,notes:q("calNotes").value,published_url:q("calPublishedUrl").value,requested_date:new Date().toISOString().slice(0,10),source_type:q("calId").value?"Manual edit":"Manual"};
     },
     async save(){
-      try{await api("/api/calendar",this.payload());this.clear();q("calSaveStatus").textContent="Production brief saved for the team and Chad.";await load();showTab("calendar")}catch(error){q("calSaveStatus").textContent=error.message}
+      try{await api("/api/calendar",this.payload());this.clear();q("calSaveStatus").textContent="Production brief saved to Our Marketing Calendar for the team and Chad.";await load();showTab("calendar")}catch(error){q("calSaveStatus").textContent=error.message}
     },
     async status(id,status){
       await api("/api/calendar-status",{id,status});await load();showTab("calendar");
@@ -201,7 +201,7 @@
       this.useExecutionView();this.clear();showTab("calendar");
       Object.entries(data).forEach(([id,value])=>{if(q(id))q(id).value=value});
       (data.platforms||[]).forEach(name=>{const input=Array.from(q("calPlatforms").querySelectorAll("input")).find(node=>node.value===name);if(input)input.checked=true});
-      q("calFormHeading").textContent="Review Chad's Production Brief";q("calSaveStatus").textContent="Review the brief, assign the owner, and save it to the shared forecast.";
+      q("calFormHeading").textContent="Review Chad's Production Brief";q("calSaveStatus").textContent="Review the brief, assign the owner, and save it to Our Marketing Calendar.";
     },
     async autoForecastStorm(alerts){
       if(!this.state||!alerts||!alerts.length)return;
@@ -235,7 +235,7 @@
       const rows=[["Title","Status","Type","Platforms","Assigned","Priority","Due","Publish","Service Line","Region","Produced"]];
       this.filtered().forEach(i=>rows.push([i.title,i.status,i.content_type,i.platforms,i.assigned_name||"",i.priority,i.due_date,i.publish_at,i.service_line,i.region,i.completed_at||""]));
       const csv=rows.map(row=>row.map(value=>`"${String(value||"").replace(/"/g,'""')}"`).join(",")).join("\n");
-      const blob=new Blob([csv],{type:"text/csv"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hancock-content-calendar.csv";a.click();URL.revokeObjectURL(url);
+      const blob=new Blob([csv],{type:"text/csv"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="hancock-marketing-calendar.csv";a.click();URL.revokeObjectURL(url);
     }
   };
   window.HancockCalendar=calendar;
