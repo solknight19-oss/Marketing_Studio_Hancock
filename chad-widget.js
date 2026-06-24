@@ -21,6 +21,7 @@
   var USER = CFG.user || localStorage.getItem("chad_widget_user") || null;
   var muted = localStorage.getItem("chad_widget_mute") === "1";
   var conversationMode = localStorage.getItem("chad_widget_conversation") !== "0";
+  var standby = false;
   var minimized = localStorage.getItem("chad_widget_minimized") === "1";
   var greeted = false;
 
@@ -59,6 +60,7 @@
     + '#chadw .cw-chip{background:rgba(255,255,255,.07);border:1px solid rgba(79,147,224,.4);color:#dbeafe;font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:16px;cursor:pointer}'
     + '#chadw .cw-chip:hover{background:#2f6fbf;color:#fff}'
     + '#chadw .cw-chip.on{background:#1f9d68;border-color:#55d6a5;color:#fff;box-shadow:0 0 12px rgba(85,214,165,.3)}'
+    + '#chadw .cw-chip.standby{background:#7a3940;border-color:#d77882;color:#fff;box-shadow:0 0 12px rgba(215,120,130,.22)}'
     + '#chadw .cw-comp{display:flex;gap:7px;padding:10px 12px;border-top:1px solid rgba(79,147,224,.2);align-items:center}'
     + '#chadw .cw-comp input{flex:1;padding:10px 12px;border-radius:11px;border:1px solid rgba(79,147,224,.3);background:rgba(255,255,255,.06);color:#fff;font-size:13px}'
     + '#chadw .cw-comp input::placeholder{color:#8da6bf}'
@@ -86,6 +88,7 @@
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
     + '<button class="cw-chip" data-q="run the studio">Run the studio</button>'
+    + '<button class="cw-chip" id="cwStandby" title="Pause Chad voice and microphone">Standby</button>'
     + '<button class="cw-chip' + (conversationMode ? ' on' : '') + '" id="cwConversation" title="Keep the microphone listening until you turn voice off">' + (conversationMode ? 'Always listening' : 'Voice off') + '</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
@@ -277,7 +280,7 @@
   }
   function startBargeIn(spokenText,delay) {
     stopBargeIn();
-    if (!conversationMode || muted) return;
+    if (!conversationMode || muted || standby) return;
     var SR=window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     bargeTimer=window.setTimeout(function () {
@@ -313,14 +316,14 @@
   }
   function queueListening(delay) {
     clearListenTimer();
-    if (!conversationMode || curSource || activeRequest || recognition) return;
+    if (!conversationMode || standby || curSource || activeRequest || recognition) return;
     listenTimer=window.setTimeout(function () {
       listenTimer=null;
       startListening(false);
     },delay || 350);
   }
   function playBuffer(buffer,spokenText) {
-    if (!buffer || muted) return;
+    if (!buffer || muted || standby) return;
     ensureAudioContext().then(function () {
       stopSpeech();
       var source=actx.createBufferSource(); source.buffer=buffer; source.connect(analyser);
@@ -338,7 +341,7 @@
     });
   }
   function speak(text) {
-    if (muted) { queueListening(250); return; }
+    if (muted || standby) { queueListening(250); return; }
     setState("GETTING VOICE");
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
       .then(function (r) {
@@ -396,10 +399,60 @@
     });
     msgs.appendChild(wrap); msgs.scrollTop=msgs.scrollHeight;
   }
+  function updateStandbyControl() {
+    var control=root.querySelector("#cwStandby");
+    control.textContent=standby ? "Resume voice" : "Standby";
+    control.title=standby ? "Resume Chad voice and microphone" : "Pause Chad voice and microphone";
+    control.classList.toggle("standby",standby);
+  }
+  function enterStandby(showMessage) {
+    standby=true;
+    clearListenTimer();
+    stopSpeech();
+    stopRecognition();
+    stopBargeIn();
+    if (activeRequest) {
+      try { activeRequest.abort(); } catch (e) {}
+      activeRequest=null;
+      requestNumber++;
+    }
+    setState("STANDBY");
+    updateStandbyControl();
+    if (showMessage) bubble("Standing by. Voice and microphone are paused. Press Resume voice when you are ready.", "chad");
+  }
+  function leaveStandby(showMessage) {
+    standby=false;
+    setState("ONLINE");
+    updateStandbyControl();
+    if (showMessage) bubble("I am back. Voice conversation is ready.", "chad");
+    if (conversationMode) {
+      ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
+    }
+  }
+  function isStandbyCommand(text) {
+    var value=String(text || "").toLowerCase().replace(/[,.!?]/g," ").replace(/\s+/g," ").trim();
+    return /^(hey |hi )?(chad )?(can you |will you )?(stand ?by|go on standby|pause( your| the)? voice|pause talking|pause for (a |one )?minute|stop talking|be quiet|hold on|give me (a |one )?minute)( please)?( chad)?$/.test(value);
+  }
+  function isResumeCommand(text) {
+    var value=String(text || "").toLowerCase().replace(/[,.!?]/g," ").replace(/\s+/g," ").trim();
+    return /^(hey |hi )?(chad )?(you can |can you |will you )?(resume( voice| talking)?|come back|wake up|start talking|i am back|i'm back)( please)?( chad)?$/.test(value);
+  }
 
   /* ---------- talk to the brain ---------- */
   function send(text) {
     if (!text.trim()) return;
+    if (isStandbyCommand(text)) {
+      bubble(esc(text), "me");
+      enterStandby(true);
+      input.value="";
+      return;
+    }
+    if (isResumeCommand(text)) {
+      bubble(esc(text), "me");
+      leaveStandby(true);
+      input.value="";
+      return;
+    }
     ensureAudioContext().catch(function () {});
     clearListenTimer();
     stopSpeech();
@@ -527,15 +580,21 @@
   root.querySelector("#cwMin").innerHTML=minimized ? "&#9633;" : "&#8722;";
   root.querySelector("#cwMin").title=minimized ? "Restore" : "Minimize";
   root.querySelector("#cwHear").onclick = function () {
+    if (standby) leaveStandby(false);
     muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
     localStorage.setItem("chad_widget_mute","0");
     ensureAudioContext().then(function () { playBuffer(lastAudioBuffer,lastSpokenText); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
   };
   root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) { stopSpeech(); queueListening(250); } };
+  root.querySelector("#cwStandby").onclick = function () {
+    if (standby) leaveStandby(true);
+    else enterStandby(true);
+  };
   root.querySelector("#cwSend").onclick = function () { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; };
   input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; } });
   root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
   function startListening(force) {
+    if (standby) return;
     if (!conversationMode && !force) return;
     if (curSource || activeRequest || recognition) return;
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); conversationMode=false; updateConversationControl(); return; }
@@ -597,6 +656,7 @@
   }
   root.querySelector("#cwMic").onclick = function () {
     ensureAudioContext().catch(function () {});
+    if (standby) leaveStandby(false);
     if (!conversationMode) {
       conversationMode=true;
       updateConversationControl();
@@ -612,6 +672,7 @@
   root.querySelector("#cwConversation").onclick = function () {
     conversationMode=!conversationMode; updateConversationControl();
     if (conversationMode) {
+      if (standby) leaveStandby(false);
       muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
       localStorage.setItem("chad_widget_mute","0");
       ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
@@ -669,6 +730,8 @@
   window.ChadWidget = {
     open: open,
     close: close,
+    standby: function () { enterStandby(true); },
+    resumeVoice: function () { leaveStandby(true); },
     pageContext: collectStudioPageContext,
     setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
     send: send

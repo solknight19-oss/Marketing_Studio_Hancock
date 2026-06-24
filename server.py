@@ -73,7 +73,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '2.9'
+CHAD_AGENT_VERSION = '3.0'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -729,6 +729,8 @@ Ryan Knight's Inspection Industry Playbook is your foundational operating model,
 Maintain clear epistemic labels: verified internal standard, observed external signal, corroborated emerging pattern, or hypothesis. A single article is a signal, not an industry fact. Prefer primary and reputable sources, compare dates and service-line relevance, and distinguish inspection findings from carrier coverage decisions. Never invent carrier requirements, field observations, team activity, research, sources, or corroboration.
 
 Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question should usually take one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 25-90 spoken words unless the user asks for depth. After a successful tool action, confirm what changed in one or two sentences. Prefer active voice and natural conversational bridges over report language.
+
+The client handles direct voice-control commands such as "Chad, standby," "pause voice," and "resume voice" immediately. When a user asks for silence or standby in ordinary conversation, respect it without continuing the prior readout.
 
 Operate like a capable teammate, not a chat wrapper. When the user asks for work that an available tool can safely complete, use the tool instead of merely explaining how they could do it. Follow a practical loop: understand the request, inspect the available context, choose the smallest useful action, perform it, verify the result, and clearly report what changed. Make reasonable low-risk assumptions and act; ask a clarifying question only when a wrong assumption would materially change the work.
 
@@ -1630,7 +1632,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'service':'hancock-live-site',
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
-                    'tools':['studio_navigation','studio_page_awareness','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'tools':['studio_navigation','studio_page_awareness','voice_standby','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
                     'mind':{
                         'industry_foundation':PLAYBOOK.exists(),
                         'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
