@@ -73,7 +73,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '2.3'
+CHAD_AGENT_VERSION = '2.4'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -287,6 +287,8 @@ def init_db():
     create table if not exists chad_memory(id integer primary key autoincrement, user_id integer, scope text not null, text text not null, created_at text not null);
     create table if not exists chad_conversation(id integer primary key autoincrement, user_id integer not null, role text not null, content text not null, created_at text not null);
     create table if not exists chad_knowledge(id integer primary key autoincrement, evidence_id text unique not null, kind text not null, topic text not null, claim text not null, source_name text, source_url text, source_date text, confidence text not null, corroboration_count integer not null default 1, observed_at text not null);
+    create table if not exists chad_updates(id integer primary key autoincrement, title text not null, details text not null, category text not null, status text not null, created_by integer not null, updated_by integer not null, created_at text not null, updated_at text not null);
+    create table if not exists chad_update_comments(id integer primary key autoincrement, update_id integer not null, user_id integer not null, body text not null, created_at text not null);
     create table if not exists bot_runs(id integer primary key autoincrement, trigger text not null, status text not null, details text, started_at text not null, finished_at text);
     """)
     user_columns = {row['name'] for row in cur.execute('pragma table_info(users)')}
@@ -610,6 +612,15 @@ def chad_context(user):
         "select * from chad_memory where scope='team' or user_id=? order by id desc limit 20",(user['id'],))]
     knowledge=[dict(r) for r in con.execute(
         "select * from chad_knowledge order by observed_at desc,id desc limit 20")]
+    updates=[dict(r) for r in con.execute(
+        """select cu.*,u.name creator_name from chad_updates cu
+           left join users u on u.id=cu.created_by
+           order by case cu.status when 'new' then 0 when 'considering' then 1 when 'planned' then 2 else 3 end,
+           cu.updated_at desc limit 12""")]
+    update_comments=[dict(r) for r in con.execute(
+        """select cc.update_id,cc.body,cc.created_at,u.name user_name
+           from chad_update_comments cc left join users u on u.id=cc.user_id
+           order by cc.id desc limit 30""")]
     con.close()
     tasks='\n'.join(f"- {t['title']} [{t['status']}]" for t in state['tasks'][:10]) or '- none'
     activity='\n'.join(f"- {a.get('user_name') or 'System'}: {a['action']} {a.get('meta') or ''}" for a in state['activity'][:10]) or '- none'
@@ -620,6 +631,20 @@ def chad_context(user):
         f"corroboration: {k['corroboration_count']})"
         for k in knowledge
     ) or '- no retained evidence yet'
+    comments_by_update={}
+    for comment in reversed(update_comments):
+        comments_by_update.setdefault(comment['update_id'],[]).append(comment)
+    update_lines=[]
+    for item in updates:
+        update_lines.append(
+            f"- UPDATE #{item['id']} [{item['status']}/{item['category']}] {item['title']} "
+            f"from {item.get('creator_name') or 'team'}: {item['details'][:500]}"
+        )
+        for comment in comments_by_update.get(item['id'],[])[-5:]:
+            update_lines.append(
+                f"  - {comment.get('user_name') or 'Team'} added: {comment['body'][:350]}"
+            )
+    team_updates='\n'.join(update_lines) or '- no Chad Updates submitted yet'
     top=(state['botData'].get('stories') or [])[:4]
     signals='\n'.join(f"- {s.get('title')}: {s.get('angle')}" for s in top) or '- no scan yet'
     priority=(feed.get('mainSpeakingBot') or {}).get('priority','Run the bot council and pick one useful content opportunity.')
@@ -647,7 +672,9 @@ Traceable learned evidence:
 Recent conversation:
 {conversation}
 Recent teammate conversations:
-{teammate_context}"""
+{teammate_context}
+Chad Updates requested by the team:
+{team_updates}"""
 CHAD_PERSONA="""You are Chad, Hancock Claims Consultants' marketing AI teammate. You coordinate specialist bots, brief Ryan, Cassie, and Jennifer on shared work, and move one useful task forward at a time. You are not Codex and must not claim to be Codex, but your collaboration habits are intentionally modeled on a strong pragmatic AI partner: curious before certain, decisive once grounded, proactive with tools, candid about uncertainty, and focused on completing useful work.
 
 Ryan Knight's Inspection Industry Playbook is your foundational operating model, not a ceiling on learning. Use it as the starting framework for judgment, terminology, and quality. You may extend, refine, or challenge a prior assumption when newer evidence is traceable, relevant, current, and preferably corroborated. Never silently overwrite the foundation: identify the evidence ID, explain the correlation, state confidence, and flag meaningful conflicts for Ryan or the team to review.
@@ -801,6 +828,8 @@ def proactive_briefing(user, tasks, drafts, activity):
     }
 def chad_ui_action(message):
     lower=message.lower()
+    if any(term in lower for term in ('chad update','feature request','studio suggestion','workflow improvement')):
+        return {'type':'url','target':'/dashboard#updates'}
     if any(term in lower for term in ('shared draft','drafts workspace','team drafts')):
         return {'type':'url','target':'/dashboard#drafts'}
     tab_terms=[
@@ -938,7 +967,7 @@ CHAD_TOOLS=[
             'properties':{
                 'target':{
                     'type':'string',
-                    'enum':['radar','storm','answers','social','carrier','content','seo','topics','repurpose','reviews','library','chad','dashboard','drafts','tasks'],
+                    'enum':['radar','storm','answers','social','carrier','content','seo','topics','repurpose','reviews','library','chad','dashboard','drafts','tasks','updates'],
                     'description':'The Studio tab or shared workspace to display.',
                 },
                 'reason':{'type':'string','description':'Brief reason this location supports the user request.'},
@@ -949,17 +978,18 @@ CHAD_TOOLS=[
     },
     {
         'name':'workspace_manage',
-        'description':"""Inspect or create reviewable work in the shared Hancock workspace. Use status to refresh the current tasks, drafts, and activity. Use create_draft when the user asks Chad to write or prepare content and include useful draft text in body. Use prepare_recommended_draft for the current proactive weather or market recommendation. Use create_task when the user asks to assign or record follow-up work. These actions never publish, send, approve, or delete anything.""",
+        'description':"""Inspect or create reviewable work in the shared Hancock workspace. Use status to refresh current tasks, drafts, activity, and team-requested Chad Updates. Use create_draft when the user asks Chad to prepare content. Use prepare_recommended_draft for the current proactive recommendation. Use create_task for assigned follow-up work. Use create_update when Ryan, Cassie, or Jennifer proposes a Studio, Chad, bot, workflow, or day-to-day improvement that Ryan should review. These actions never publish, send, approve, or delete anything.""",
         'input_schema':{
             'type':'object',
             'properties':{
-                'action':{'type':'string','enum':['status','create_draft','prepare_recommended_draft','create_task']},
+                'action':{'type':'string','enum':['status','create_draft','prepare_recommended_draft','create_task','create_update']},
                 'title':{'type':'string','description':'Clear title for a new draft or task.'},
                 'body':{'type':'string','description':'Reviewable content for a new draft.'},
                 'details':{'type':'string','description':'Useful completion details for a new task.'},
                 'content_type':{'type':'string','description':'Content format, such as Blog Post, LinkedIn Post, FAQ, or Website Update.'},
                 'service_line':{'type':'string','description':'Relevant Hancock service line.'},
                 'assigned_to':{'type':'string','description':'Ryan, Cassie, Jennifer, or a full team member name.'},
+                'category':{'type':'string','description':'Update category: Chad, Studio, Bots, Content Workflow, Reporting, or Other.'},
             },
             'required':['action'],
             'additionalProperties':False,
@@ -1024,7 +1054,7 @@ def execute_chad_tool(name, tool_input, user):
     tool_input=tool_input if isinstance(tool_input,dict) else {}
     if name=='studio_navigate':
         target=tool_input.get('target') or 'chad'
-        dashboard_targets={'dashboard':'/dashboard','drafts':'/dashboard#drafts','tasks':'/dashboard#tasks'}
+        dashboard_targets={'dashboard':'/dashboard','drafts':'/dashboard#drafts','tasks':'/dashboard#tasks','updates':'/dashboard#updates'}
         if target in dashboard_targets:
             action={'type':'url','target':dashboard_targets[target]}
         else:
@@ -1038,6 +1068,10 @@ def execute_chad_tool(name, tool_input, user):
         action=tool_input.get('action')
         if action=='status':
             state=collect_state()
+            con=db()
+            updates=[dict(r) for r in con.execute(
+                "select id,title,category,status,updated_at from chad_updates order by updated_at desc limit 10")]
+            con.close()
             return {
                 'ok':True,
                 'summary':'Refreshed the shared workspace.',
@@ -1053,6 +1087,7 @@ def execute_chad_tool(name, tool_input, user):
                     {'user':item.get('user_name'),'action':item.get('action'),'meta':item.get('meta')}
                     for item in state['activity'][:8]
                 ],
+                'chad_updates':updates,
             }
         if action=='prepare_recommended_draft':
             draft=prepare_recommended_draft(user)
@@ -1131,6 +1166,39 @@ def execute_chad_tool(name, tool_input, user):
                 'summary':f'Created task: {title}'+(f' for {assignee_name}.' if assignee_name else '.'),
                 'artifact':{'kind':'task','id':task_id,'title':title,'assigned_to':assignee_name or None},
                 'ui_action':{'type':'url','target':'/dashboard#tasks'},
+            }
+        if action=='create_update':
+            title=(tool_input.get('title') or 'Untitled Chad update').strip()[:160]
+            details=(tool_input.get('details') or '').strip()[:10000]
+            category=(tool_input.get('category') or 'Other').strip()[:60]
+            if not details:
+                return {'ok':False,'error':'Describe the day-to-day problem or requested improvement before creating the update.'}
+            stamp=now()
+            con=db()
+            existing=con.execute(
+                "select id,title from chad_updates where title=? and status!='completed' order by id desc limit 1",
+                (title,),
+            ).fetchone()
+            if existing:
+                con.close()
+                return {
+                    'ok':True,
+                    'summary':f'An open Chad Update named {title} already exists, so I did not duplicate it.',
+                    'artifact':{'kind':'chad_update','id':existing['id'],'title':existing['title'],'created':False},
+                    'ui_action':{'type':'url','target':'/dashboard#updates'},
+                }
+            cur=con.execute(
+                'insert into chad_updates(title,details,category,status,created_by,updated_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)',
+                (title,details,category,'new',user['id'],user['id'],stamp,stamp),
+            )
+            update_id=cur.lastrowid
+            con.commit(); con.close()
+            log_action(user['id'],'submitted Chad Update',title)
+            return {
+                'ok':True,
+                'summary':f'Submitted Chad Update: {title}.',
+                'artifact':{'kind':'chad_update','id':update_id,'title':title,'created':True},
+                'ui_action':{'type':'url','target':'/dashboard#updates'},
             }
         return {'ok':False,'error':'Unsupported workspace action.'}
     if name=='specialist_bots':
@@ -1338,7 +1406,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'service':'hancock-live-site',
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
-                    'tools':['studio_navigation','workspace_management','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'tools':['studio_navigation','workspace_management','team_update_collaboration','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
                     'mind':{
                         'industry_foundation':PLAYBOOK.exists(),
                         'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
@@ -1400,6 +1468,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not user: return
         if path=='/api/draft': self.api_save_draft(user); return
         if path=='/api/task': self.api_save_task(user); return
+        if path=='/api/chad-update': self.api_save_chad_update(user); return
+        if path=='/api/chad-update-comment': self.api_chad_update_comment(user); return
         if path=='/api/bot': self.api_bot(user); return
         if path=='/api/ai': self.api_ai(user); return
         if path=='/api/speak': self.api_speak(user); return
@@ -1501,12 +1571,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         drafts=[dict(r) for r in con.execute('select d.*, u.name owner_name, uu.name updated_by_name from drafts d left join users u on u.id=d.owner_id left join users uu on uu.id=d.updated_by order by d.updated_at desc limit 50')]
         tasks=[dict(r) for r in con.execute("select t.*, u.name assigned_name, c.name created_by_name from tasks t left join users u on u.id=t.assigned_to left join users c on c.id=t.created_by order by case t.status when 'doing' then 0 when 'todo' then 1 when 'review' then 2 else 3 end, t.updated_at desc")]
         activity=[dict(r) for r in con.execute('select a.*, u.name user_name from activity a left join users u on u.id=a.user_id order by a.id desc limit 30')]
+        updates=[dict(r) for r in con.execute(
+            """select cu.*,c.name created_by_name,u.name updated_by_name
+               from chad_updates cu left join users c on c.id=cu.created_by left join users u on u.id=cu.updated_by
+               order by case cu.status when 'new' then 0 when 'considering' then 1 when 'planned' then 2 else 3 end,
+               cu.updated_at desc limit 100""")]
+        comments=[dict(r) for r in con.execute(
+            """select cc.*,u.name user_name from chad_update_comments cc
+               left join users u on u.id=cc.user_id order by cc.created_at asc,cc.id asc""")]
         con.close()
-        for collection in (drafts,tasks,activity):
+        comment_map={}
+        for comment in comments:
+            comment['created_at_human']=human_time(comment.get('created_at'))
+            comment_map.setdefault(comment['update_id'],[]).append(comment)
+        for update in updates:
+            update['comments']=comment_map.get(update['id'],[])
+        for collection in (drafts,tasks,activity,updates):
             for item in collection:
                 for key in ('created_at','updated_at'):
                     if key in item: item[key+'_human']=human_time(item.get(key))
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'activity':activity,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(user,tasks,drafts,activity),'chadBriefing':proactive_briefing(user,tasks,drafts,activity)})
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(user,tasks,drafts,activity),'chadBriefing':proactive_briefing(user,tasks,drafts,activity)})
     def api_save_draft(self,user):
         data=self.read_body(); title=(data.get('title') or 'Untitled draft').strip()[:160]; body=data.get('body') or ''; ctype=(data.get('content_type') or 'Blog Post')[:60]; line=(data.get('service_line') or '')[:80]; status=(data.get('status') or 'draft')[:40]; draft_id=data.get('id')
         con=db()
@@ -1523,6 +1607,59 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             cur=con.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',(title,details,status,assigned,user['id'],now(),now())); task_id=cur.lastrowid; action='created task'
         con.commit(); con.close(); log_action(user['id'],action,title); self.send_json({'ok':True,'id':task_id})
+    def api_save_chad_update(self,user):
+        data=self.read_body()
+        title=(data.get('title') or 'Untitled Chad update').strip()[:160]
+        details=(data.get('details') or '').strip()[:10000]
+        category=(data.get('category') or 'Other').strip()[:60]
+        allowed_status={'new','considering','planned','completed'}
+        status=(data.get('status') or 'new').strip().lower()
+        if status not in allowed_status: status='new'
+        update_id=str(data.get('id') or '').strip()
+        if not details:
+            self.send_json({'error':'Describe the requested improvement or day-to-day problem.'},400); return
+        stamp=now(); con=db()
+        if update_id.isdigit():
+            existing=con.execute('select * from chad_updates where id=?',(int(update_id),)).fetchone()
+            if not existing:
+                con.close(); self.send_json({'error':'Chad Update not found.'},404); return
+            if user['role']!='owner' and existing['created_by']!=user['id']:
+                con.close(); self.send_json({'error':'You can comment on this update, but only its creator or Ryan can edit it.'},403); return
+            if user['role']!='owner':
+                status=existing['status']
+            con.execute(
+                'update chad_updates set title=?,details=?,category=?,status=?,updated_by=?,updated_at=? where id=?',
+                (title,details,category,status,user['id'],stamp,int(update_id)),
+            )
+            action='updated Chad Update'
+        else:
+            cur=con.execute(
+                'insert into chad_updates(title,details,category,status,created_by,updated_by,created_at,updated_at) values(?,?,?,?,?,?,?,?)',
+                (title,details,category,'new',user['id'],user['id'],stamp,stamp),
+            )
+            update_id=cur.lastrowid
+            action='submitted Chad Update'
+        con.commit(); con.close()
+        log_action(user['id'],action,title)
+        self.send_json({'ok':True,'id':int(update_id)})
+    def api_chad_update_comment(self,user):
+        data=self.read_body()
+        update_id=str(data.get('update_id') or '').strip()
+        body=(data.get('body') or '').strip()[:5000]
+        if not update_id.isdigit() or not body:
+            self.send_json({'error':'Choose an update and add a comment.'},400); return
+        stamp=now(); con=db()
+        update=con.execute('select id,title from chad_updates where id=?',(int(update_id),)).fetchone()
+        if not update:
+            con.close(); self.send_json({'error':'Chad Update not found.'},404); return
+        con.execute(
+            'insert into chad_update_comments(update_id,user_id,body,created_at) values(?,?,?,?)',
+            (int(update_id),user['id'],body,stamp),
+        )
+        con.execute('update chad_updates set updated_by=?,updated_at=? where id=?',(user['id'],stamp,int(update_id)))
+        con.commit(); con.close()
+        log_action(user['id'],'commented on Chad Update',update['title'])
+        self.send_json({'ok':True})
     def api_bot(self,user):
         data=self.read_body(); msg=(data.get('message') or '').strip()
         if not msg: self.send_json({'error':'message required'},400); return
@@ -1626,7 +1763,7 @@ LOGIN_HTML = auth_shell('Sign in', """<!--ERR--><p>Use your authorized Hancock e
 FORGOT_HTML = auth_shell('Reset password', """<p>Enter your Hancock email. If the account is authorized, we will send a secure one-time reset link.</p><form method='post' action='/forgot'><label>Hancock email</label><input name='email' type='email' autocomplete='email' required><button>Send reset link</button></form><a class='link' href='/login'>Back to sign in</a>""")
 
 DASHBOARD_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hancock Live Marketing Studio</title><style>
-:root{--navy:#1D4F91;--navy2:#163E74;--gold:#4F93E0;--gold2:#D7E8FB;--bg:#EFF2F7;--text:#15243C;--sub:#5B6B82;--border:#E3E9F2;--card:#fff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 400px at 80% -5%,#E4EAF4 0%,var(--bg) 55%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.header{position:sticky;top:0;z-index:10;background:linear-gradient(112deg,#0E2A52 0%,var(--navy2) 44%,var(--navy) 100%);color:#fff;box-shadow:0 10px 28px rgba(14,42,82,.22)}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 24px}.brand h1{margin:0;font-size:21px}.brand p{margin:4px 0 0;color:#A8C2E8;font-size:12px}.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 20px}.tab{border:0;background:transparent;color:#B9C8E0;border-radius:12px 12px 0 0;padding:12px 14px;font-weight:900}.tab.active{background:var(--bg);color:var(--navy)}main{max-width:1280px;margin:0 auto;padding:24px}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.layout{display:grid;grid-template-columns:380px 1fr;gap:18px}.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 25px rgba(21,36,60,.055);padding:18px}.hero{background:linear-gradient(135deg,#0E2A52,var(--navy));color:#fff;border-radius:20px;padding:22px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;margin-bottom:18px}.hero h2{margin:4px 0 6px}.hero p{color:#cfe0f4;margin:0}.eyebrow{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold2)}label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);font-weight:900;margin:14px 0 7px}input,select,textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px;background:#FBFDFF}textarea{min-height:150px;resize:vertical}.btn{border:0;border-radius:12px;background:var(--navy);color:#fff;font-weight:900;padding:11px 14px;margin-top:12px}.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#112b50}.btn.secondary{background:#edf4fb;color:var(--navy);border:1px solid #d6e3f3}.mini{border:1px solid #d8e4f2;background:#fff;color:var(--navy);border-radius:10px;font-size:12px;font-weight:800;padding:8px 10px;margin:5px 5px 0 0}.badge{display:inline-flex;border-radius:7px;background:#eef5ff;color:var(--navy);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;padding:5px 8px}.badge.hot{background:#ffe9e9;color:#9a1a1a}.muted{color:var(--sub);font-size:13px}.activity{display:flex;flex-direction:column;gap:9px}.activity div{border-left:3px solid var(--gold);padding-left:10px;color:#41516a}.task{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;border-top:1px solid var(--border);padding:12px 0}.task:first-child{border-top:0}.botreply{background:#f8fbff;border:1px solid #dce8f7;border-left:4px solid var(--gold);border-radius:14px;padding:13px;line-height:1.45}.chatrow{display:flex;gap:8px;margin-top:10px}.chatrow input{flex:1}.draftList{display:grid;gap:12px}.draftItem{border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff}.out{white-space:pre-wrap;line-height:1.55}.adminbar{display:flex;gap:8px;flex-wrap:wrap}.who{font-size:12px;color:#cfe0f4}.logout{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.25);padding:8px 10px;border-radius:10px}.status{font-size:12px;color:var(--sub);min-height:18px}@media(max-width:900px){.layout,.hero{grid-template-columns:1fr}.top{padding:16px}main{padding:16px}}
+:root{--navy:#1D4F91;--navy2:#163E74;--gold:#4F93E0;--gold2:#D7E8FB;--bg:#EFF2F7;--text:#15243C;--sub:#5B6B82;--border:#E3E9F2;--card:#fff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 400px at 80% -5%,#E4EAF4 0%,var(--bg) 55%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.header{position:sticky;top:0;z-index:10;background:linear-gradient(112deg,#0E2A52 0%,var(--navy2) 44%,var(--navy) 100%);color:#fff;box-shadow:0 10px 28px rgba(14,42,82,.22)}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 24px}.brand h1{margin:0;font-size:21px}.brand p{margin:4px 0 0;color:#A8C2E8;font-size:12px}.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 20px}.tab{border:0;background:transparent;color:#B9C8E0;border-radius:12px 12px 0 0;padding:12px 14px;font-weight:900}.tab.active{background:var(--bg);color:var(--navy)}main{max-width:1280px;margin:0 auto;padding:24px}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.layout{display:grid;grid-template-columns:380px 1fr;gap:18px}.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 25px rgba(21,36,60,.055);padding:18px}.hero{background:linear-gradient(135deg,#0E2A52,var(--navy));color:#fff;border-radius:20px;padding:22px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;margin-bottom:18px}.hero h2{margin:4px 0 6px}.hero p{color:#cfe0f4;margin:0}.eyebrow{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold2)}label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);font-weight:900;margin:14px 0 7px}input,select,textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px;background:#FBFDFF}textarea{min-height:150px;resize:vertical}.btn{border:0;border-radius:12px;background:var(--navy);color:#fff;font-weight:900;padding:11px 14px;margin-top:12px}.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#112b50}.btn.secondary{background:#edf4fb;color:var(--navy);border:1px solid #d6e3f3}.mini{border:1px solid #d8e4f2;background:#fff;color:var(--navy);border-radius:10px;font-size:12px;font-weight:800;padding:8px 10px;margin:5px 5px 0 0}.badge{display:inline-flex;border-radius:7px;background:#eef5ff;color:var(--navy);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;padding:5px 8px}.badge.hot{background:#ffe9e9;color:#9a1a1a}.muted{color:var(--sub);font-size:13px}.activity{display:flex;flex-direction:column;gap:9px}.activity div{border-left:3px solid var(--gold);padding-left:10px;color:#41516a}.task{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;border-top:1px solid var(--border);padding:12px 0}.task:first-child{border-top:0}.botreply{background:#f8fbff;border:1px solid #dce8f7;border-left:4px solid var(--gold);border-radius:14px;padding:13px;line-height:1.45}.chatrow{display:flex;gap:8px;margin-top:10px}.chatrow input{flex:1}.draftList,.updateList{display:grid;gap:12px}.draftItem,.updateItem{border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff}.updateComments{border-top:1px solid var(--border);margin-top:12px;padding-top:10px}.comment{background:#f5f8fc;border-radius:10px;padding:9px 10px;margin-top:7px;font-size:13px}.commentRow{display:flex;gap:7px;margin-top:9px}.commentRow input{flex:1}.out{white-space:pre-wrap;line-height:1.55}.adminbar{display:flex;gap:8px;flex-wrap:wrap}.who{font-size:12px;color:#cfe0f4}.logout{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.25);padding:8px 10px;border-radius:10px}.status{font-size:12px;color:var(--sub);min-height:18px}@media(max-width:900px){.layout,.hero{grid-template-columns:1fr}.top{padding:16px}main{padding:16px}}
 </style></head><body>
 <header class="header"><div class="top"><div class="brand"><h1>Hancock Live Marketing Studio</h1><p>Shared drafts, live scans, task focus, and bot guidance</p></div><div><div class="who" id="who"></div><form method="post" action="/logout" style="display:inline"><button class="logout" style="background:transparent">Logout</button></form></div></div><nav class="tabs" id="tabs"></nav></header>
 <main>
@@ -1634,9 +1771,10 @@ DASHBOARD_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name
 <section id="radar" class="view"><div class="hero"><div><div class="eyebrow">Live Industry Radar</div><h2>Fresh signals from the marketing bot</h2><p id="scanStamp">Loading scan data...</p></div><button class="btn gold" onclick="runScan()">Run Live Scan</button></div><div id="radarGrid" class="grid"></div></section>
 <section id="drafts" class="view"><div class="layout"><div class="card"><h3>Create / Edit Draft</h3><input type="hidden" id="draftId"><label>Title</label><input id="draftTitle"><label>Type</label><select id="draftType"><option>Blog Post</option><option>LinkedIn Post</option><option>Email</option><option>Website Update</option><option>FAQ</option></select><label>Service Line</label><select id="draftLine"></select><label>Status</label><select id="draftStatus"><option>draft</option><option>doing</option><option>review</option><option>approved</option></select><label>Body</label><textarea id="draftBody"></textarea><button class="btn" onclick="saveDraft()">Save Shared Draft</button><button class="btn secondary" onclick="clearDraftForm()">New Blank Draft</button><div class="status" id="draftSaveStatus"></div></div><div class="panel"><h3>Shared Drafts</h3><div id="draftList" class="draftList"></div></div></div></section>
 <section id="tasks" class="view"><div class="layout"><div class="card"><h3>Create / Edit Task</h3><input type="hidden" id="taskId"><label>Task</label><input id="taskTitle"><label>Details</label><textarea id="taskDetails"></textarea><label>Assign To</label><select id="taskAssigned"></select><label>Status</label><select id="taskStatus"><option>todo</option><option>doing</option><option>review</option><option>done</option></select><button class="btn" onclick="saveTask()">Save Task</button><button class="btn secondary" onclick="clearTaskForm()">New Task</button><div class="status" id="taskSaveStatus"></div></div><div class="panel"><h3>Team Tasks</h3><div id="taskList"></div></div></div></section>
+<section id="updates" class="view"><div class="hero"><div><div class="eyebrow">Chad Updates</div><h2>Help Chad and the Studio work better for the team.</h2><p>Share day-to-day friction, feature ideas, bot suggestions, and workflow improvements. Chad carries the discussion into future conversations; Ryan tracks what moves forward.</p></div><button class="btn gold" onclick="clearUpdateForm()">New Suggestion</button></div><div class="layout"><div class="card"><h3>Submit an Update</h3><input type="hidden" id="updateId"><label>Title</label><input id="updateTitle" placeholder="What should work better?"><label>Category</label><select id="updateCategory"><option>Chad</option><option>Studio</option><option>Bots</option><option>Content Workflow</option><option>Reporting</option><option>Other</option></select><label>What is happening and what would help?</label><textarea id="updateDetails" placeholder="Describe the day-to-day problem, who it affects, and the result you would like."></textarea><div id="updateOwnerStatus"><label>Ryan's Status</label><select id="updateStatus"><option value="new">New</option><option value="considering">Considering</option><option value="planned">Planned</option><option value="completed">Completed</option></select></div><button class="btn" onclick="saveUpdate()">Save Chad Update</button><button class="btn secondary" onclick="clearUpdateForm()">Clear</button><div class="status" id="updateSaveStatus"></div></div><div class="panel"><h3>Team Suggestions & Discussion</h3><div id="updateList" class="updateList"></div></div></div></section>
 <section id="admin" class="view"><div class="grid"><div class="card"><h3>Invite Team Member</h3><p class="muted">Send a secure, one-time setup link to an authorized Hancock email. The link expires after 24 hours.</p><label>Team member</label><select id="inviteUser"></select><label>Hancock email</label><input id="inviteEmail" type="email" placeholder="name@hancockclaims.com"><button class="btn" onclick="sendInvite()">Send Secure Invitation</button><div class="status" id="inviteStatus"></div></div><div class="card"><h3>Studio Administration</h3><p class="muted">Ryan is the owner. Cassie and Jennifer have administrator access after accepting their invitations.</p><div class="adminbar"><button class="btn" onclick="location.href='/studio'">Open Approved Studio</button><button class="btn secondary" onclick="runScan()">Run Bot Scan</button></div><pre class="out" id="adminOut"></pre></div></div></section>
 </main><script>
-let STATE={}; const TABLIST=[['dash','Dashboard'],['radar','Industry Radar'],['drafts','Drafts'],['tasks','Tasks'],['admin','Admin']]; function $(id){return document.getElementById(id)} function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))} function openTab(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));} function renderTabs(){ $('tabs').innerHTML=TABLIST.map((t,i)=>`<button class="tab ${i?'':'active'}" data-tab="${t[0]}" onclick="openTab('${t[0]}')">${t[1]}</button>`).join('') } async function api(path, body){let opt=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};let r=await fetch(path,opt);let data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data} async function load(){STATE=await api('/api/state');render()} function render(){ $('who').textContent=STATE.user.name+' · '+STATE.user.role; $('welcomeTitle').textContent='Hi, '+STATE.user.name.split(' ')[0]+'.'; $('welcomeText').textContent=STATE.welcome; $('botReply').textContent=STATE.welcome; renderUsers();renderActivity();renderTasks();renderDrafts();renderRadar()} function renderUsers(){let opts='<option value="">Unassigned</option>'+STATE.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');$('taskAssigned').innerHTML=opts;$('draftLine').innerHTML=STATE.serviceLines.map(x=>`<option>${esc(x)}</option>`).join('');$('inviteUser').innerHTML=STATE.users.map(u=>`<option value="${u.id}" data-email="${esc(u.email||'')}">${esc(u.name)} · ${esc(u.role)}</option>`).join('');$('inviteUser').onchange=()=>{let o=$('inviteUser').selectedOptions[0];$('inviteEmail').value=o?o.dataset.email:''};$('inviteUser').onchange()} function renderActivity(){ $('activity').innerHTML=(STATE.activity||[]).slice(0,8).map(a=>`<div><b>${esc(a.user_name||'System')}</b> ${esc(a.action)} ${esc(a.meta||'')}<br><span class="muted">${esc(a.created_at_human||'')}</span></div>`).join('')||'<p class="muted">No activity yet.</p>'} function taskHtml(t){return `<div class="task"><div><span class="badge">${esc(t.status)}</span><h4>${esc(t.title)}</h4><p class="muted">${esc(t.details||'')}<br>Assigned: ${esc(t.assigned_name||'Unassigned')} · Updated ${esc(t.updated_at_human||'')}</p></div><div><button class="mini" onclick="editTask(${t.id})">Edit</button><button class="mini" onclick="quickTask(${t.id},'doing')">Doing</button><button class="mini" onclick="quickTask(${t.id},'done')">Done</button></div></div>`} function renderTasks(){let open=(STATE.tasks||[]).filter(t=>t.status!=='done');$('taskPreview').innerHTML=open.slice(0,4).map(taskHtml).join('')||'<p class="muted">No open tasks.</p>';$('taskList').innerHTML=(STATE.tasks||[]).map(taskHtml).join('')} function renderDrafts(){ $('draftList').innerHTML=(STATE.drafts||[]).map(d=>`<div class="draftItem"><span class="badge">${esc(d.status)}</span><h3>${esc(d.title)}</h3><p class="muted">${esc(d.content_type)} · ${esc(d.service_line||'')} · owner ${esc(d.owner_name||'')} · updated ${esc(d.updated_at_human||'')}</p><p>${esc((d.body||'').slice(0,260))}...</p><button class="mini" onclick="editDraft(${d.id})">Edit</button><button class="mini" onclick="copyDraft(${d.id})">Copy</button></div>`).join('')||'<p class="muted">No shared drafts yet.</p>'} function renderRadar(){let b=STATE.botData||{};$('scanStamp').textContent=(b.generatedHuman||'No scan yet')+' · '+(b.source||'');$('radarGrid').innerHTML=(b.stories||[]).slice(0,12).map((s,i)=>`<div class="card"><span class="badge ${s.tag==='Hot'?'hot':''}">${esc(s.tag||'Trend')}</span><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><p><b>Hancock angle:</b> ${esc(s.angle)}</p><p class="muted">${esc(s.source||'')} ${s.date?'· '+esc(s.date):''}</p><button class="mini" onclick="draftFromRadar(${i})">Draft from this</button></div>`).join('')||'<div class="card"><p>No scan data yet. Run Live Scan.</p></div>'} function editDraft(id){let d=STATE.drafts.find(x=>x.id===id);if(!d)return;$('draftId').value=d.id;$('draftTitle').value=d.title;$('draftType').value=d.content_type;$('draftLine').value=d.service_line||STATE.serviceLines[0];$('draftStatus').value=d.status;$('draftBody').value=d.body;openTab('drafts')} function copyDraft(id){let d=STATE.drafts.find(x=>x.id===id); if(d)navigator.clipboard.writeText(d.body||'')} function clearDraftForm(){['draftId','draftTitle','draftBody'].forEach(id=>$(id).value='');$('draftStatus').value='draft'} async function saveDraft(){await api('/api/draft',{id:$('draftId').value,title:$('draftTitle').value,content_type:$('draftType').value,service_line:$('draftLine').value,status:$('draftStatus').value,body:$('draftBody').value});$('draftSaveStatus').textContent='Saved.';await load()} function draftFromRadar(i){let s=STATE.botData.stories[i];clearDraftForm();$('draftTitle').value=s.title;$('draftLine').value=s.line||STATE.serviceLines[0];$('draftBody').value='# '+s.title+'\n\n'+s.summary+'\n\n## Hancock angle\n'+s.angle+'\n\n## Next step\nTurn this into a useful post with a clear carrier-facing takeaway.';openTab('drafts')} function editTask(id){let t=STATE.tasks.find(x=>x.id===id);if(!t)return;$('taskId').value=t.id;$('taskTitle').value=t.title;$('taskDetails').value=t.details||'';$('taskAssigned').value=t.assigned_to||'';$('taskStatus').value=t.status;openTab('tasks')} function clearTaskForm(){['taskId','taskTitle','taskDetails'].forEach(id=>$(id).value='');$('taskStatus').value='todo';$('taskAssigned').value=''} async function saveTask(){await api('/api/task',{id:$('taskId').value,title:$('taskTitle').value,details:$('taskDetails').value,assigned_to:$('taskAssigned').value,status:$('taskStatus').value});$('taskSaveStatus').textContent='Saved.';await load()} async function quickTask(id,status){let t=STATE.tasks.find(x=>x.id===id);await api('/api/task',{id:id,title:t.title,details:t.details,assigned_to:t.assigned_to,status:status});await load()} async function askBot(msg){$('botReply').textContent='Thinking...';let r=await api('/api/bot',{message:msg});$('botReply').textContent=r.reply;speak(r.reply)} function sendBot(){let m=$('botInput').value.trim();if(!m)return;askBot(m);$('botInput').value=''} function speak(text){if(!('speechSynthesis' in window))return;let u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(u)} function voiceAsk(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceStatus').textContent='Voice input is not available in this browser. Use the text box.';return}let rec=new SR();rec.lang='en-US';rec.onstart=()=>$('voiceStatus').textContent='Listening...';rec.onerror=()=>$('voiceStatus').textContent='Voice input stopped.';rec.onresult=e=>{let text=e.results[0][0].transcript;$('botInput').value=text;askBot(text)};rec.start()} async function runScan(){let out=$('adminOut');if(out)out.textContent='Running live scan...';let r=await api('/api/run-scan',{});if(out)out.textContent=r.output;await load();openTab('radar')} async function sendInvite(){let status=$('inviteStatus');status.textContent='Sending secure invitation...';try{let r=await api('/api/invite',{user_id:$('inviteUser').value,email:$('inviteEmail').value});status.textContent=r.message;await load()}catch(e){status.textContent=e.message}} renderTabs();load();let initial=location.hash.slice(1);if(TABLIST.some(t=>t[0]===initial))openTab(initial);setInterval(load,6000);
+let STATE={}; const TABLIST=[['dash','Dashboard'],['radar','Industry Radar'],['drafts','Drafts'],['tasks','Tasks'],['updates','Chad Updates'],['admin','Admin']]; function $(id){return document.getElementById(id)} function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))} function openTab(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));} function renderTabs(){ $('tabs').innerHTML=TABLIST.map((t,i)=>`<button class="tab ${i?'':'active'}" data-tab="${t[0]}" onclick="openTab('${t[0]}')">${t[1]}</button>`).join('') } async function api(path, body){let opt=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};let r=await fetch(path,opt);let data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data} async function load(){STATE=await api('/api/state');render()} function render(){ $('who').textContent=STATE.user.name+' · '+STATE.user.role; $('welcomeTitle').textContent='Hi, '+STATE.user.name.split(' ')[0]+'.'; $('welcomeText').textContent=STATE.welcome; $('botReply').textContent=STATE.welcome; renderUsers();renderActivity();renderTasks();renderDrafts();renderRadar();renderUpdates()} function renderUsers(){let opts='<option value="">Unassigned</option>'+STATE.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');$('taskAssigned').innerHTML=opts;$('draftLine').innerHTML=STATE.serviceLines.map(x=>`<option>${esc(x)}</option>`).join('');$('inviteUser').innerHTML=STATE.users.map(u=>`<option value="${u.id}" data-email="${esc(u.email||'')}">${esc(u.name)} · ${esc(u.role)}</option>`).join('');$('inviteUser').onchange=()=>{let o=$('inviteUser').selectedOptions[0];$('inviteEmail').value=o?o.dataset.email:''};$('inviteUser').onchange()} function renderActivity(){ $('activity').innerHTML=(STATE.activity||[]).slice(0,8).map(a=>`<div><b>${esc(a.user_name||'System')}</b> ${esc(a.action)} ${esc(a.meta||'')}<br><span class="muted">${esc(a.created_at_human||'')}</span></div>`).join('')||'<p class="muted">No activity yet.</p>'} function taskHtml(t){return `<div class="task"><div><span class="badge">${esc(t.status)}</span><h4>${esc(t.title)}</h4><p class="muted">${esc(t.details||'')}<br>Assigned: ${esc(t.assigned_name||'Unassigned')} · Updated ${esc(t.updated_at_human||'')}</p></div><div><button class="mini" onclick="editTask(${t.id})">Edit</button><button class="mini" onclick="quickTask(${t.id},'doing')">Doing</button><button class="mini" onclick="quickTask(${t.id},'done')">Done</button></div></div>`} function renderTasks(){let open=(STATE.tasks||[]).filter(t=>t.status!=='done');$('taskPreview').innerHTML=open.slice(0,4).map(taskHtml).join('')||'<p class="muted">No open tasks.</p>';$('taskList').innerHTML=(STATE.tasks||[]).map(taskHtml).join('')} function renderDrafts(){ $('draftList').innerHTML=(STATE.drafts||[]).map(d=>`<div class="draftItem"><span class="badge">${esc(d.status)}</span><h3>${esc(d.title)}</h3><p class="muted">${esc(d.content_type)} · ${esc(d.service_line||'')} · owner ${esc(d.owner_name||'')} · updated ${esc(d.updated_at_human||'')}</p><p>${esc((d.body||'').slice(0,260))}...</p><button class="mini" onclick="editDraft(${d.id})">Edit</button><button class="mini" onclick="copyDraft(${d.id})">Copy</button></div>`).join('')||'<p class="muted">No shared drafts yet.</p>'} function renderRadar(){let b=STATE.botData||{};$('scanStamp').textContent=(b.generatedHuman||'No scan yet')+' · '+(b.source||'');$('radarGrid').innerHTML=(b.stories||[]).slice(0,12).map((s,i)=>`<div class="card"><span class="badge ${s.tag==='Hot'?'hot':'live'}">${esc(s.tag||'Trend')}</span><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><p><b>Hancock angle:</b> ${esc(s.angle)}</p><p class="muted">${esc(s.source||'')} ${s.date?'· '+esc(s.date):''}</p><button class="mini" onclick="draftFromRadar(${i})">Draft from this</button></div>`).join('')||'<div class="card"><p>No scan data yet. Run Live Scan.</p></div>'} function editDraft(id){let d=STATE.drafts.find(x=>x.id===id);if(!d)return;$('draftId').value=d.id;$('draftTitle').value=d.title;$('draftType').value=d.content_type;$('draftLine').value=d.service_line||STATE.serviceLines[0];$('draftStatus').value=d.status;$('draftBody').value=d.body;openTab('drafts')} function copyDraft(id){let d=STATE.drafts.find(x=>x.id===id); if(d)navigator.clipboard.writeText(d.body||'')} function clearDraftForm(){['draftId','draftTitle','draftBody'].forEach(id=>$(id).value='');$('draftStatus').value='draft'} async function saveDraft(){await api('/api/draft',{id:$('draftId').value,title:$('draftTitle').value,content_type:$('draftType').value,service_line:$('draftLine').value,status:$('draftStatus').value,body:$('draftBody').value});$('draftSaveStatus').textContent='Saved.';await load()} function draftFromRadar(i){let s=STATE.botData.stories[i];clearDraftForm();$('draftTitle').value=s.title;$('draftLine').value=s.line||STATE.serviceLines[0];$('draftBody').value='# '+s.title+'\n\n'+s.summary+'\n\n## Hancock angle\n'+s.angle+'\n\n## Next step\nTurn this into a useful post with a clear carrier-facing takeaway.';openTab('drafts')} function editTask(id){let t=STATE.tasks.find(x=>x.id===id);if(!t)return;$('taskId').value=t.id;$('taskTitle').value=t.title;$('taskDetails').value=t.details||'';$('taskAssigned').value=t.assigned_to||'';$('taskStatus').value=t.status;openTab('tasks')} function clearTaskForm(){['taskId','taskTitle','taskDetails'].forEach(id=>$(id).value='');$('taskStatus').value='todo';$('taskAssigned').value=''} async function saveTask(){await api('/api/task',{id:$('taskId').value,title:$('taskTitle').value,details:$('taskDetails').value,assigned_to:$('taskAssigned').value,status:$('taskStatus').value});$('taskSaveStatus').textContent='Saved.';await load()} async function quickTask(id,status){let t=STATE.tasks.find(x=>x.id===id);await api('/api/task',{id:id,title:t.title,details:t.details,assigned_to:t.assigned_to,status:status});await load()} function renderUpdates(){let owner=STATE.user&&STATE.user.role==='owner';$('updateOwnerStatus').style.display=owner?'block':'none';$('updateList').innerHTML=(STATE.chadUpdates||[]).map(u=>{let comments=(u.comments||[]).map(c=>`<div class="comment"><b>${esc(c.user_name||'Team')}</b> · ${esc(c.created_at_human||'')}<br>${esc(c.body)}</div>`).join('');let canEdit=owner||u.created_by===STATE.user.id;let controls=(canEdit?`<button class="mini" onclick="editUpdate(${u.id})">Edit</button>`:'')+(owner?`<button class="mini" onclick="quickUpdate(${u.id},'considering')">Considering</button><button class="mini" onclick="quickUpdate(${u.id},'planned')">Planned</button><button class="mini" onclick="quickUpdate(${u.id},'completed')">Completed</button>`:'');return `<div class="updateItem"><span class="badge">${esc(u.status)}</span> <span class="badge">${esc(u.category)}</span><h3>${esc(u.title)}</h3><p>${esc(u.details)}</p><p class="muted">Submitted by ${esc(u.created_by_name||'Team')} · Updated ${esc(u.updated_at_human||'')}</p>${controls}<div class="updateComments"><b>Discussion</b>${comments||'<p class="muted">No comments yet.</p>'}<div class="commentRow"><input id="comment-${u.id}" placeholder="Add context or build on this idea"><button class="mini" onclick="addUpdateComment(${u.id})">Comment</button></div></div></div>`}).join('')||'<p class="muted">No suggestions yet. Start with the first day-to-day improvement the team needs.</p>'} function clearUpdateForm(){['updateId','updateTitle','updateDetails'].forEach(id=>$(id).value='');$('updateCategory').value='Chad';$('updateStatus').value='new';$('updateSaveStatus').textContent=''} function editUpdate(id){let u=(STATE.chadUpdates||[]).find(x=>x.id===id);if(!u)return;$('updateId').value=u.id;$('updateTitle').value=u.title;$('updateDetails').value=u.details;$('updateCategory').value=u.category;$('updateStatus').value=u.status;openTab('updates')} async function saveUpdate(){try{await api('/api/chad-update',{id:$('updateId').value,title:$('updateTitle').value,details:$('updateDetails').value,category:$('updateCategory').value,status:$('updateStatus').value});clearUpdateForm();$('updateSaveStatus').textContent='Saved for the team and Chad.';await load();openTab('updates')}catch(e){$('updateSaveStatus').textContent=e.message}} async function quickUpdate(id,status){let u=STATE.chadUpdates.find(x=>x.id===id);await api('/api/chad-update',{id:id,title:u.title,details:u.details,category:u.category,status:status});await load();openTab('updates')} async function addUpdateComment(id){let input=$('comment-'+id),body=input.value.trim();if(!body)return;await api('/api/chad-update-comment',{update_id:id,body:body});input.value='';await load();openTab('updates')} async function askBot(msg){$('botReply').textContent='Thinking...';let r=await api('/api/bot',{message:msg});$('botReply').textContent=r.reply;speak(r.reply)} function sendBot(){let m=$('botInput').value.trim();if(!m)return;askBot(m);$('botInput').value=''} function speak(text){if(!('speechSynthesis' in window))return;let u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(u)} function voiceAsk(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceStatus').textContent='Voice input is not available in this browser. Use the text box.';return}let rec=new SR();rec.lang='en-US';rec.onstart=()=>$('voiceStatus').textContent='Listening...';rec.onerror=()=>$('voiceStatus').textContent='Voice input stopped.';rec.onresult=e=>{let text=e.results[0][0].transcript;$('botInput').value=text;askBot(text)};rec.start()} async function runScan(){let out=$('adminOut');if(out)out.textContent='Running live scan...';let r=await api('/api/run-scan',{});if(out)out.textContent=r.output;await load();openTab('radar')} async function sendInvite(){let status=$('inviteStatus');status.textContent='Sending secure invitation...';try{let r=await api('/api/invite',{user_id:$('inviteUser').value,email:$('inviteEmail').value});status.textContent=r.message;await load()}catch(e){status.textContent=e.message}} renderTabs();load();let initial=location.hash.slice(1);if(TABLIST.some(t=>t[0]===initial))openTab(initial);setInterval(load,6000);
 </script></body></html>"""
 
 def run():
