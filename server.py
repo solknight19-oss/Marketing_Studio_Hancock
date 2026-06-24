@@ -39,6 +39,12 @@ ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514').
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
+VOICE_HEALTH = {
+    'configured': bool(ELEVENLABS_API_KEY),
+    'voice': 'Eric',
+    'voice_id': ELEVENLABS_VOICE_ID,
+    'status': 'pending' if ELEVENLABS_API_KEY else 'not_configured',
+}
 USERS = [
     ('admin', 'rknight@hancockclaims.com', 'Ryan Knight', 'owner'),
     ('cassie', 'ctant@hancockclaims.com', 'Cassie Tant', 'admin'),
@@ -194,6 +200,18 @@ def elevenlabs_audio(text):
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         return response.read()
+def verify_voice_service():
+    if not ELEVENLABS_API_KEY:
+        return
+    try:
+        audio=elevenlabs_audio('Chad online.')
+        if len(audio)<1000:
+            raise RuntimeError('ElevenLabs returned an incomplete audio response.')
+        VOICE_HEALTH.update({'status':'verified','verified_at':now(),'audio_bytes':len(audio)})
+        print(f"Chad voice verified: Eric ({ELEVENLABS_VOICE_ID})")
+    except Exception as exc:
+        VOICE_HEALTH.update({'status':'unavailable','checked_at':now(),'error':str(exc)[:180]})
+        print('Chad voice verification failed:',exc)
 def db():
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
@@ -639,7 +657,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return user
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
-        if path=='/healthz': self.send_json({'ok': True, 'service': 'hancock-live-site'}); return
+        if path=='/healthz':
+            self.send_json({'ok': True, 'service': 'hancock-live-site','voice':VOICE_HEALTH})
+            return
         if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
         if path=='/login': self.send_html(LOGIN_HTML); return
         if path=='/forgot': self.send_html(FORGOT_HTML); return
@@ -917,6 +937,7 @@ def run():
     init_db()
     if os.environ.get('DISABLE_BOT_SCHEDULER','').lower() not in ('1','true','yes'):
         threading.Thread(target=bot_scheduler,name='hancock-bot-scheduler',daemon=True).start()
+    threading.Thread(target=verify_voice_service,name='hancock-voice-check',daemon=True).start()
     server=http.server.ThreadingHTTPServer((HOST,PORT),Handler)
     print(f'Hancock Live Site running at http://{HOST}:{PORT}')
     print(f'Initial logins: {INITIAL_LOGINS}')
