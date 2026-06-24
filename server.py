@@ -37,7 +37,7 @@ EMAIL_FROM = os.environ.get('EMAIL_FROM', 'Hancock Marketing Studio <studio@hanc
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
-ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'pNInz6obpgDQGcFmaJgB').strip()
+ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
 USERS = [
     ('admin', 'rknight@hancockclaims.com', 'Ryan Knight', 'owner'),

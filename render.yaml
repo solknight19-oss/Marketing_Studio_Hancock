@@ -22,7 +22,7 @@ services:
       - key: ELEVENLABS_API_KEY
         sync: false
       - key: ELEVENLABS_VOICE_ID
-        value: pNInz6obpgDQGcFmaJgB
+        value: cjVigY5qzO86Huf0OWal
       - key: BOT_SCAN_INTERVAL_HOURS
         value: 24
       - key: BASE_URL

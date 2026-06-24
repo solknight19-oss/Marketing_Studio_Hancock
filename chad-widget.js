@@ -121,15 +121,14 @@
   function speak(text) {
     if (muted) return;
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
-      .then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+      .then(function (r) { if (!r.ok) throw new Error("ElevenLabs unavailable"); return r.blob(); })
       .then(function (b) {
         var url = URL.createObjectURL(b); if (curAudio) { try { curAudio.pause(); } catch (e) {} }
         var au = new Audio(url); curAudio = au; setState("SPEAKING");
         au.onended = function () { vizStop(); URL.revokeObjectURL(url); };
-        au.play().then(function () { vizStart(au); }).catch(function () { browserSay(text); });
-      }).catch(function () { browserSay(text); });
+        au.play().then(function () { vizStart(au); }).catch(function () { setState("TAP TO HEAR"); });
+      }).catch(function () { setState("VOICE UNAVAILABLE"); });
   }
-  function browserSay(text) { if (muted || !window.speechSynthesis) return; var u = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g, "")); window.speechSynthesis.speak(u); }
   function vizStart(au) {
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume();
