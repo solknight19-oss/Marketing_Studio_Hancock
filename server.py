@@ -63,6 +63,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
+CHAD_AGENT_VERSION = '2.0'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
 def human_time(value):
@@ -1030,7 +1031,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
         if path=='/healthz':
-            self.send_json({'ok': True, 'service': 'hancock-live-site','voice':VOICE_HEALTH,'ai':AI_HEALTH})
+            self.send_json({
+                'ok':True,
+                'service':'hancock-live-site',
+                'chad':{
+                    'agent_version':CHAD_AGENT_VERSION,
+                    'tools':['studio_navigation','workspace_management','specialist_bots'],
+                },
+                'voice':VOICE_HEALTH,
+                'ai':AI_HEALTH,
+            })
             return
         if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
         if path=='/login': self.send_html(LOGIN_HTML); return
