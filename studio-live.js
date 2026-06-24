@@ -18,7 +18,7 @@
       if(window.ChadWidget)window.ChadWidget.setUser(state.user.name.split(" ")[0]);
       const mode=q("mode");
       if(mode){
-        mode.textContent=bots.ai?"Live AI + bots":"Bots online · AI key needed";
+        mode.textContent=bots.ai?"Chad AI + bots live":"Bots online · AI unavailable";
         mode.className="mode"+(bots.ai?" live":"");
       }
       renderCrew();

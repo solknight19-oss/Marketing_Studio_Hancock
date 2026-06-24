@@ -35,7 +35,7 @@ ALLOWED_EMAIL_DOMAIN = os.environ.get('ALLOWED_EMAIL_DOMAIN', 'hancockclaims.com
 RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '').strip()
 EMAIL_FROM = os.environ.get('EMAIL_FROM', 'Hancock Marketing Studio <studio@hancockclaims.com>').strip()
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
-ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514').strip()
+ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
@@ -44,6 +44,11 @@ VOICE_HEALTH = {
     'voice': 'Eric',
     'voice_id': ELEVENLABS_VOICE_ID,
     'status': 'pending' if ELEVENLABS_API_KEY else 'not_configured',
+}
+AI_HEALTH = {
+    'configured': bool(ANTHROPIC_API_KEY),
+    'model': ANTHROPIC_MODEL,
+    'status': 'pending' if ANTHROPIC_API_KEY else 'not_configured',
 }
 USERS = [
     ('admin', 'rknight@hancockclaims.com', 'Ryan Knight', 'owner'),
@@ -151,6 +156,22 @@ def anthropic_message(system, prompt, max_tokens=1200):
     except urllib.error.HTTPError as exc:
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'AI service rejected the request: {detail}') from exc
+def verify_ai_service():
+    if not ANTHROPIC_API_KEY:
+        return
+    try:
+        reply=anthropic_message(
+            'Return only the requested status phrase.',
+            'Reply exactly: CHAD AI VERIFIED',
+            50,
+        )
+        if 'CHAD AI VERIFIED' not in reply.upper():
+            raise RuntimeError('The AI service returned an unexpected verification response.')
+        AI_HEALTH.update({'status':'verified','verified_at':now()})
+        print(f'Chad AI verified: {ANTHROPIC_MODEL}')
+    except Exception as exc:
+        AI_HEALTH.update({'status':'unavailable','checked_at':now(),'error':str(exc)[:180]})
+        print('Chad AI verification failed:',exc)
 def anthropic_vision(prompt, image_data_url):
     if not ANTHROPIC_API_KEY:
         raise RuntimeError('Live AI is not configured on the server.')
@@ -688,7 +709,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
         if path=='/healthz':
-            self.send_json({'ok': True, 'service': 'hancock-live-site','voice':VOICE_HEALTH})
+            self.send_json({'ok': True, 'service': 'hancock-live-site','voice':VOICE_HEALTH,'ai':AI_HEALTH})
             return
         if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
         if path=='/login': self.send_html(LOGIN_HTML); return
@@ -888,7 +909,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 reply=anthropic_message(system,msg,700)
                 mode='ai'
             except Exception as exc:
-                reply=bot_reply(user,msg,collect_state()); mode='fallback'
+                reply="I could not reach my conversational AI just now. I can still run the bots, prepare a draft, or move you to the right Studio tool while the connection recovers."
+                mode='fallback'
                 print('Chad AI fallback:',exc)
         else:
             reply=bot_reply(user,msg,collect_state()); mode='rules'
@@ -968,6 +990,7 @@ def run():
     if os.environ.get('DISABLE_BOT_SCHEDULER','').lower() not in ('1','true','yes'):
         threading.Thread(target=bot_scheduler,name='hancock-bot-scheduler',daemon=True).start()
     threading.Thread(target=verify_voice_service,name='hancock-voice-check',daemon=True).start()
+    threading.Thread(target=verify_ai_service,name='hancock-ai-check',daemon=True).start()
     server=http.server.ThreadingHTTPServer((HOST,PORT),Handler)
     print(f'Hancock Live Site running at http://{HOST}:{PORT}')
     print(f'Initial logins: {INITIAL_LOGINS}')
