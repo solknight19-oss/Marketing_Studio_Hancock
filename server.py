@@ -38,8 +38,8 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
-ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_flash_v2_5').strip()
-ELEVENLABS_OUTPUT_FORMAT = os.environ.get('ELEVENLABS_OUTPUT_FORMAT', 'mp3_22050_32').strip()
+ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2').strip()
+ELEVENLABS_OUTPUT_FORMAT = os.environ.get('ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128').strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
 VOICE_HEALTH = {
     'configured': bool(ELEVENLABS_API_KEY),
@@ -963,10 +963,10 @@ def chad_agent(user, message, request_id):
     ui_action=None
     artifacts=[]
     tool_summaries=[]
-    for _ in range(3):
+    for _ in range(4):
         if not request_is_current(user['id'],request_id):
             return {'reply':'','mode':'superseded','superseded':True}
-        response=anthropic_request(system,messages,900,CHAD_TOOLS)
+        response=anthropic_request(system,messages,1400,CHAD_TOOLS)
         content=response.get('content') or []
         tool_calls=[part for part in content if part.get('type')=='tool_use']
         text=''.join(part.get('text','') for part in content if part.get('type')=='text').strip()
