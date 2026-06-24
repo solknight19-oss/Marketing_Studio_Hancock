@@ -30,6 +30,7 @@ DB = APP / 'studio.db'
 SECRET_FILE = APP / '.session_secret'
 INITIAL_LOGINS = APP / 'INITIAL_LOGINS.md'
 PLAYBOOK = ROOT / 'Ryan_Knight_Inspection_Industry_Playbook.md'
+COLLABORATION_PLAYBOOK = ROOT / 'Chad_Collaboration_Playbook.md'
 SESSION_DAYS = 7
 INVITE_HOURS = 24
 RESET_HOURS = 1
@@ -72,7 +73,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '2.2'
+CHAD_AGENT_VERSION = '2.3'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -505,6 +506,12 @@ def ryan_playbook():
     except Exception:
         return """Ryan Knight's core doctrine: trust, communication, consistency, defensibility, accountability, and complete property intelligence. Property lifecycle management spans pre-loss underwriting, during-loss inspection and estimating, and post-loss verification. Documentation should answer questions before they are asked. Repairability must be tested. Price matters; trust matters more."""
 
+def collaboration_playbook():
+    try:
+        return COLLABORATION_PLAYBOOK.read_text(encoding='utf-8')
+    except Exception:
+        return """Work like a capable, curious teammate: understand the actual goal, inspect before assuming, use tools when useful, verify results, communicate directly, follow the newest topic, and move one meaningful step forward. Ryan Knight's doctrine remains the industry foundation."""
+
 def latest_bot_data():
     path=ROOT/'data'/'latest_bot.json'
     if not path.exists(): return {'stories':[],'clusters':[],'library':[],'generatedHuman':'No bot scan yet'}
@@ -544,6 +551,7 @@ def bot_overview():
         'ai':bool(ANTHROPIC_API_KEY),
         'voice':bool(ELEVENLABS_API_KEY),
         'doctrine':{'name':"Ryan Knight's Inspection Industry Playbook",'loaded':PLAYBOOK.exists(),'role':'foundation'},
+        'collaboration':{'name':'Chad Collaboration Playbook','loaded':COLLABORATION_PLAYBOOK.exists(),'role':'working style'},
     }
 def maybe_remember(user, message):
     lower=message.lower().strip()
@@ -640,7 +648,7 @@ Recent conversation:
 {conversation}
 Recent teammate conversations:
 {teammate_context}"""
-CHAD_PERSONA="""You are Chad, Hancock Claims Consultants' marketing AI teammate. You coordinate specialist bots, brief Ryan, Cassie, and Jennifer on shared work, and move one useful task forward at a time.
+CHAD_PERSONA="""You are Chad, Hancock Claims Consultants' marketing AI teammate. You coordinate specialist bots, brief Ryan, Cassie, and Jennifer on shared work, and move one useful task forward at a time. You are not Codex and must not claim to be Codex, but your collaboration habits are intentionally modeled on a strong pragmatic AI partner: curious before certain, decisive once grounded, proactive with tools, candid about uncertainty, and focused on completing useful work.
 
 Ryan Knight's Inspection Industry Playbook is your foundational operating model, not a ceiling on learning. Use it as the starting framework for judgment, terminology, and quality. You may extend, refine, or challenge a prior assumption when newer evidence is traceable, relevant, current, and preferably corroborated. Never silently overwrite the foundation: identify the evidence ID, explain the correlation, state confidence, and flag meaningful conflicts for Ryan or the team to review.
 
@@ -1210,7 +1218,11 @@ def chad_agent(user, message, request_id):
     system=[
         {
             'type':'text',
-            'text':CHAD_PERSONA+'\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook(),
+            'text':(
+                CHAD_PERSONA+
+                '\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n'+ryan_playbook()+
+                '\n\nCHAD COLLABORATION PLAYBOOK:\n'+collaboration_playbook()
+            ),
             'cache_control':{'type':'ephemeral'},
         },
         {
@@ -1327,6 +1339,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
                     'tools':['studio_navigation','workspace_management','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'mind':{
+                        'industry_foundation':PLAYBOOK.exists(),
+                        'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
+                        'learning':'traceable_evidence',
+                    },
                 },
                 'voice':VOICE_HEALTH,
                 'ai':AI_HEALTH,
