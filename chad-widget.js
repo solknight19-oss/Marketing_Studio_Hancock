@@ -43,6 +43,7 @@
     + '#chadw .cw-head{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(79,147,224,.25)}'
     + '#chadw .cw-head .t{font-size:13.5px;font-weight:800;color:#eaf2fb}#chadw .cw-head .t span{color:#4f93e0;font-size:10px;font-weight:700;letter-spacing:1px}'
     + '#chadw .cw-x{background:none;border:none;color:#9fb4c9;font-size:18px;cursor:pointer;line-height:1}'
+    + '#chadw .cw-x.ready{color:#55d6a5;text-shadow:0 0 10px rgba(85,214,165,.6)}'
     + '#chadw .cw-brief{font-size:12px;color:#bcd2ea;padding:10px 13px;border-bottom:1px solid rgba(79,147,224,.18);line-height:1.5;background:rgba(47,111,191,.08)}'
     + '#chadw .cw-msgs{flex:1;overflow-y:auto;padding:12px 12px 4px;display:flex;flex-direction:column;gap:8px}'
     + '#chadw .cw-m{max-width:85%;padding:9px 12px;border-radius:13px;font-size:13px;line-height:1.5;animation:cwrise .2s ease both}'
@@ -69,7 +70,8 @@
   root.innerHTML =
     '<div class="cw-panel">'
     + '<div class="cw-head"><div class="t">Chad <span id="cwState">ONLINE</span></div>'
-    + '<div><button class="cw-x" id="cwMute" title="Mute">' + (muted ? '&#128263;' : '&#128266;') + '</button> '
+    + '<div><button class="cw-x" id="cwHear" title="Play or replay Chad">&#9654;</button> '
+    + '<button class="cw-x" id="cwMute" title="Mute">' + (muted ? '&#128263;' : '&#128266;') + '</button> '
     + '<button class="cw-x" id="cwClose" title="Close">&#10005;</button></div></div>'
     + '<div class="cw-brief" id="cwBrief" style="display:none"></div>'
     + '<div class="cw-msgs" id="cwMsgs"></div>'
@@ -113,7 +115,7 @@
   /* ---------- refs + state ---------- */
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
-  var actx = null, analyser = null, freq = null, raf = null, curAudio = null;
+  var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null;
   var recognition = null, conversationMode = false, requestNumber = 0, activeRequest = null;
 
   function setState(s) { stateEl.textContent = s; }
@@ -121,37 +123,82 @@
   function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
   /* ---------- voice (audio-reactive orb) ---------- */
+  function ensureAudioContext() {
+    if (!actx) {
+      var AC=window.AudioContext || window.webkitAudioContext;
+      if (!AC) return Promise.reject(new Error("Web Audio unavailable"));
+      actx=new AC();
+      analyser=actx.createAnalyser(); analyser.fftSize=128;
+      freq=new Uint8Array(analyser.frequencyBinCount);
+      analyser.connect(actx.destination);
+    }
+    var ready=actx.state === "suspended" ? actx.resume() : Promise.resolve();
+    return ready.then(function () {
+      if (actx.state !== "running") throw new Error("Audio needs a user gesture");
+    });
+  }
+  function decodeAudio(bytes) {
+    return new Promise(function (resolve,reject) {
+      var copy=bytes.slice(0);
+      var result=actx.decodeAudioData(copy,resolve,reject);
+      if (result && typeof result.then === "function") result.then(resolve).catch(reject);
+    });
+  }
   function stopSpeech() {
-    if (curAudio) {
-      try { curAudio.pause(); curAudio.currentTime = 0; } catch (e) {}
-      curAudio = null;
+    if (curSource) {
+      try { curSource.onended=null; curSource.stop(0); } catch (e) {}
+      curSource = null;
     }
     vizStop();
+  }
+  function playBuffer(buffer) {
+    if (!buffer || muted) return;
+    ensureAudioContext().then(function () {
+      stopSpeech();
+      var source=actx.createBufferSource(); source.buffer=buffer; source.connect(analyser);
+      curSource=source; setState("SPEAKING"); root.querySelector("#cwHear").classList.remove("ready");
+      source.onended=function () {
+        if (curSource!==source) return;
+        curSource=null; vizStop();
+        if (conversationMode) setTimeout(startListening,350);
+      };
+      source.start(0); vizStart();
+    }).catch(function () {
+      setState("TAP PLAY");
+      root.querySelector("#cwHear").classList.add("ready");
+    });
   }
   function speak(text) {
     if (muted) return;
     fetch(API + "/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: text.replace(/<[^>]+>/g, "") }) })
-      .then(function (r) { if (!r.ok) throw new Error("ElevenLabs unavailable"); return r.blob(); })
-      .then(function (b) {
-        var url = URL.createObjectURL(b); if (curAudio) { try { curAudio.pause(); } catch (e) {} }
-        var au = new Audio(url); curAudio = au; setState("SPEAKING");
-        au.onended = function () {
-          vizStop(); URL.revokeObjectURL(url); curAudio = null;
-          if (conversationMode) setTimeout(startListening, 350);
-        };
-        au.play().then(function () { vizStart(au); }).catch(function () { setState("TAP TO HEAR"); });
-      }).catch(function () {
-        setState("VOICE UNAVAILABLE");
+      .then(function (r) {
+        if (r.ok) return r.arrayBuffer();
+        return r.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.error || "ElevenLabs unavailable"); });
+      })
+      .then(function (bytes) {
+        return ensureAudioContext().catch(function () {}).then(function () {
+          if (!actx) throw new Error("Web Audio unavailable");
+          return decodeAudio(bytes);
+        });
+      })
+      .then(function (buffer) {
+        lastAudioBuffer=buffer;
+        playBuffer(buffer);
+      }).catch(function (error) {
+        var quota=error && /quota|credit/i.test(error.message || "");
+        setState(quota ? "VOICE CREDITS NEEDED" : "VOICE UNAVAILABLE");
         if (conversationMode) setTimeout(startListening, 500);
       });
   }
-  function vizStart(au) {
-    try {
-      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume();
-      if (!analyser) { analyser = actx.createAnalyser(); analyser.fftSize = 128; freq = new Uint8Array(analyser.frequencyBinCount); }
-      actx.createMediaElementSource(au).connect(analyser); analyser.connect(actx.destination);
-      var loop = function () { analyser.getByteFrequencyData(freq); var s = 0; for (var i = 0; i < freq.length; i++) s += freq[i]; var lv = Math.min(1, (s / freq.length) / 95); coreEl.style.transform = "scale(" + (1 + lv * 0.5) + ")"; raf = requestAnimationFrame(loop); }; loop();
-    } catch (e) {}
+  function vizStart() {
+    var loop = function () {
+      if (!analyser || !freq) return;
+      analyser.getByteFrequencyData(freq); var s=0;
+      for (var i=0;i<freq.length;i++) s+=freq[i];
+      var lv=Math.min(1,(s/freq.length)/95);
+      coreEl.style.transform="scale("+(1+lv*0.5)+")";
+      raf=requestAnimationFrame(loop);
+    }; loop();
   }
   function vizStop() { if (raf) cancelAnimationFrame(raf); raf = null; coreEl.style.transform = ""; setState("ONLINE"); }
   function navigate(action) {
@@ -166,6 +213,7 @@
   /* ---------- talk to the brain ---------- */
   function send(text) {
     if (!text.trim()) return;
+    ensureAudioContext().catch(function () {});
     stopSpeech();
     if (recognition) { try { recognition.abort(); } catch (e) {} recognition = null; }
     if (activeRequest) { try { activeRequest.abort(); } catch (e) {} }
@@ -212,7 +260,7 @@
   }
 
   /* ---------- open / greet ---------- */
-  function open() { root.classList.add("cw-open"); if (!greeted) firstGreet(); }
+  function open() { ensureAudioContext().catch(function () {}); root.classList.add("cw-open"); if (!greeted) firstGreet(); }
   function close() { root.classList.remove("cw-open"); }
   function firstGreet() {
     if (!USER) { showPicker(); return; }
@@ -245,9 +293,14 @@
   /* ---------- wire events ---------- */
   root.querySelector("#cwOrbWrap").onclick = function () { root.classList.contains("cw-open") ? close() : open(); };
   root.querySelector("#cwClose").onclick = close;
+  root.querySelector("#cwHear").onclick = function () {
+    muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
+    localStorage.setItem("chad_widget_mute","0");
+    ensureAudioContext().then(function () { playBuffer(lastAudioBuffer); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
+  };
   root.querySelector("#cwMute").onclick = function () { muted = !muted; localStorage.setItem("chad_widget_mute", muted ? "1" : "0"); this.innerHTML = muted ? "&#128263;" : "&#128266;"; if (muted) stopSpeech(); };
-  root.querySelector("#cwSend").onclick = function () { send(input.value); input.value = ""; };
-  input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { send(input.value); input.value = ""; } });
+  root.querySelector("#cwSend").onclick = function () { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; };
+  input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ensureAudioContext().catch(function () {}); send(input.value); input.value = ""; } });
   root.querySelectorAll(".cw-chip[data-q]").forEach(function (c) { c.onclick = function () { send(c.getAttribute("data-q")); }; });
   function startListening() {
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) { bubble("Voice input needs Chrome or Safari — you can still type.", "chad"); return; }
@@ -266,6 +319,7 @@
     try { rec.start(); } catch (e) { recognition=null; setState("MIC UNAVAILABLE"); }
   }
   root.querySelector("#cwMic").onclick = function () {
+    ensureAudioContext().catch(function () {});
     startListening();
   };
   root.querySelector("#cwConversation").onclick = function () {
@@ -275,7 +329,7 @@
     if (conversationMode) {
       muted=false; root.querySelector("#cwMute").innerHTML="&#128266;";
       localStorage.setItem("chad_widget_mute","0");
-      startListening();
+      ensureAudioContext().then(startListening).catch(function () { setState("AUDIO UNAVAILABLE"); });
     } else {
       if (recognition) { try { recognition.abort(); } catch (e) {} recognition=null; }
       stopSpeech(); setState("ONLINE");

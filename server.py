@@ -43,7 +43,7 @@ VOICE_HEALTH = {
     'configured': bool(ELEVENLABS_API_KEY),
     'voice': 'Eric',
     'voice_id': ELEVENLABS_VOICE_ID,
-    'status': 'pending' if ELEVENLABS_API_KEY else 'not_configured',
+    'status': 'configured' if ELEVENLABS_API_KEY else 'not_configured',
 }
 AI_HEALTH = {
     'configured': bool(ANTHROPIC_API_KEY),
@@ -221,20 +221,15 @@ def elevenlabs_audio(text):
         headers={'xi-api-key':ELEVENLABS_API_KEY,'Accept':'audio/mpeg','Content-Type':'application/json'},
         method='POST',
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return response.read()
-def verify_voice_service():
-    if not ELEVENLABS_API_KEY:
-        return
     try:
-        audio=elevenlabs_audio('Chad online.')
-        if len(audio)<1000:
-            raise RuntimeError('ElevenLabs returned an incomplete audio response.')
-        VOICE_HEALTH.update({'status':'verified','verified_at':now(),'audio_bytes':len(audio)})
-        print(f"Chad voice verified: Eric ({ELEVENLABS_VOICE_ID})")
-    except Exception as exc:
-        VOICE_HEALTH.update({'status':'unavailable','checked_at':now(),'error':str(exc)[:180]})
-        print('Chad voice verification failed:',exc)
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.read()
+    except urllib.error.HTTPError as exc:
+        detail=exc.read().decode(errors='replace')[:500]
+        raise RuntimeError(f'ElevenLabs rejected the request: {detail}') from exc
+def verify_voice_service():
+    if ELEVENLABS_API_KEY:
+        print(f"Chad voice configured: Eric ({ELEVENLABS_VOICE_ID})")
 def db():
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
@@ -380,6 +375,17 @@ def conversation_history(user_id, limit=12):
     con.close()
     rows.reverse()
     return rows
+def teammate_conversation(user_id, limit=18):
+    con=db()
+    rows=[dict(r) for r in con.execute(
+        """select c.role,c.content,c.created_at,u.name
+           from chad_conversation c join users u on u.id=c.user_id
+           where c.user_id!=? order by c.id desc limit ?""",
+        (user_id,limit),
+    )]
+    con.close()
+    rows.reverse()
+    return rows
 def save_conversation_turn(user_id, role, content):
     if not content:
         return
@@ -415,9 +421,14 @@ def chad_context(user):
     signals='\n'.join(f"- {s.get('title')}: {s.get('angle')}" for s in top) or '- no scan yet'
     priority=(feed.get('mainSpeakingBot') or {}).get('priority','Run the bot council and pick one useful content opportunity.')
     recent_turns=conversation_history(user['id'])
+    teammate_turns=teammate_conversation(user['id'])
     conversation='\n'.join(
         f"- {turn['role'].upper()}: {turn['content']}" for turn in recent_turns
     ) or '- no earlier conversation'
+    teammate_context='\n'.join(
+        f"- {turn['name']} / {turn['role'].upper()}: {turn['content']}"
+        for turn in teammate_turns
+    ) or '- no recent teammate conversation'
     return f"""Current user: {user['name']} ({user['role']}).
 Current priority: {priority}
 Open work:
@@ -431,14 +442,18 @@ Durable memory:
 Traceable learned evidence:
 {evidence}
 Recent conversation:
-{conversation}"""
+{conversation}
+Recent teammate conversations:
+{teammate_context}"""
 CHAD_PERSONA="""You are Chad, Hancock Claims Consultants' marketing AI teammate. You coordinate specialist bots, brief Ryan, Cassie, and Jennifer on shared work, and move one useful task forward at a time.
 
 Ryan Knight's Inspection Industry Playbook is your foundational operating model, not a ceiling on learning. Use it as the starting framework for judgment, terminology, and quality. You may extend, refine, or challenge a prior assumption when newer evidence is traceable, relevant, current, and preferably corroborated. Never silently overwrite the foundation: identify the evidence ID, explain the correlation, state confidence, and flag meaningful conflicts for Ryan or the team to review.
 
 Maintain clear epistemic labels: verified internal standard, observed external signal, corroborated emerging pattern, or hypothesis. A single article is a signal, not an industry fact. Prefer primary and reputable sources, compare dates and service-line relevance, and distinguish inspection findings from carrier coverage decisions. Never invent carrier requirements, field observations, team activity, research, sources, or corroboration.
 
-Voice: calm, direct, encouraging, operationally credible, and concise. This is a voice-first conversation, so default to roughly 80-180 spoken words unless the user asks for depth. Answer first, then offer one useful next step or question. Prefer active voice and short, useful sentences. Tie recommendations to trust, communication, consistency, defensibility, scalability, reduced cycle time, and property lifecycle intelligence. Use signature phrases only where they add meaning, not mechanically.
+Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question may need one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 40-140 spoken words unless the user asks for depth. Prefer active voice and natural conversational bridges over report language.
+
+Use teammate context like a real colleague. When the current topic genuinely overlaps a recorded Cassie, Jennifer, or Ryan conversation, you may naturally say something like, "Ah, Jennifer was asking about this," then accurately summarize what was discussed and connect it to the current question. Never manufacture overlap, imply agreement that was not recorded, or mention unrelated teammate conversations just to sound social.
 
 The user's newest message is always the immediate focus. Answer it directly before referencing earlier work. If the user changes subjects, stop advancing the prior topic unless they explicitly return to it. Use recent conversation for continuity, not to override the newest request.
 
@@ -981,8 +996,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not text: self.send_json({'error':'text required'},400); return
         try:
             audio=elevenlabs_audio(text)
+            VOICE_HEALTH.update({'status':'working','last_success_at':now(),'error':''})
             self.send_bytes(audio,'audio/mpeg')
         except Exception as exc:
+            error=str(exc)
+            status='quota_exceeded' if 'quota_exceeded' in error or 'quota' in error.lower() else 'unavailable'
+            VOICE_HEALTH.update({'status':status,'checked_at':now(),'error':error[:180]})
             self.send_json({'error':str(exc)},503)
     def api_vision(self,user):
         if self.rate_limited('vision',10,30): self.send_json({'error':'Photo review limit reached. Try again later.'},429); return
