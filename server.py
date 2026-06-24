@@ -68,6 +68,8 @@ USERS = [
 PASSWORD_ENV_VARS = {
     'admin': 'ADMIN_PASSWORD',
 }
+TEAM_TEMP_PASSWORD_HASH = '310000$8f3d4f73b39d46baa64066ab3558cdf7$bbm0QoiA9xXnsehdTj6QLVPEFbJ+uzH9+byJmJHjScU='
+TEAM_TEMP_PASSWORD_VERSION = 'testing19-2026-06-24'
 SERVICE_LINES = ['Storm / CAT Damage','Underwriting Inspection','Contents','Engineering','Commercial','Residential','4-Point Inspection','Ladder Assist','Loss Control','DI / UDI Inspections']
 RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
@@ -354,6 +356,20 @@ def init_db():
     if bootstrap_password and not bootstrapped:
         cur.execute("update users set password_hash=?,password_reset_required=0 where username='admin'",(password_hash(bootstrap_password),))
         cur.execute("insert into settings(key,value) values('owner_bootstrap_applied',?)",(now(),))
+    team_temp_applied=cur.execute("select value from settings where key='team_temp_password_version'").fetchone()
+    if not team_temp_applied or team_temp_applied['value'] != TEAM_TEMP_PASSWORD_VERSION:
+        cur.execute(
+            "update users set password_hash=?,password_reset_required=1 where username in ('cassie','jennifer')",
+            (TEAM_TEMP_PASSWORD_HASH,),
+        )
+        cur.execute(
+            "delete from sessions where user_id in (select id from users where username in ('cassie','jennifer'))"
+        )
+        cur.execute(
+            """insert into settings(key,value) values('team_temp_password_version',?)
+               on conflict(key) do update set value=excluded.value""",
+            (TEAM_TEMP_PASSWORD_VERSION,),
+        )
     con.commit(); con.close()
 def log_action(user_id, action, meta=''):
     con=db(); con.execute('insert into activity(user_id,action,meta,created_at) values(?,?,?,?)',(user_id,action,meta,now())); con.commit(); con.close()
@@ -1623,6 +1639,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def require_user(self):
         user=self.current_user()
         if not user: self.send_json({'error':'login required'},401); return None
+        if user.get('password_reset_required'):
+            self.send_json({'error':'password change required','redirect':'/change-password'},403); return None
         return user
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
@@ -1641,27 +1659,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 },
                 'voice':VOICE_HEALTH,
                 'ai':AI_HEALTH,
+                'auth':{'team_temporary_password_version':TEAM_TEMP_PASSWORD_VERSION},
             })
             return
         if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
         if path=='/login': self.send_html(LOGIN_HTML); return
         if path=='/forgot': self.send_html(FORGOT_HTML); return
+        if path=='/change-password':
+            user=self.current_user()
+            if not user: self.redirect('/login'); return
+            if not user.get('password_reset_required'): self.redirect('/studio'); return
+            self.send_html(change_password_page(user)); return
         if path=='/reset':
             token=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('token',[''])[0]
             if not self.lookup_access_token(token):
                 self.send_html(message_page('Link unavailable','This setup or reset link is invalid, expired, or already used.'),400); return
             self.send_html(reset_page(token)); return
         if path=='/dashboard':
-            if not self.current_user(): self.redirect('/login'); return
+            user=self.current_user()
+            if not user: self.redirect('/login'); return
+            if user.get('password_reset_required'): self.redirect('/change-password'); return
             self.send_html(DASHBOARD_HTML); return
         if path=='/studio':
-            if not self.current_user(): self.redirect('/login'); return
+            user=self.current_user()
+            if not user: self.redirect('/login'); return
+            if user.get('password_reset_required'): self.redirect('/change-password'); return
             p=ROOT/'Hancock_Marketing_Studio.html'; self.send_html(p.read_text(encoding='utf-8') if p.exists() else '<h1>Studio not found</h1>', 200 if p.exists() else 404); return
         if path=='/graphics':
-            if not self.current_user(): self.redirect('/login'); return
+            user=self.current_user()
+            if not user: self.redirect('/login'); return
+            if user.get('password_reset_required'): self.redirect('/change-password'); return
             p=ROOT/'chad-graphics.html'; self.send_html(p.read_text(encoding='utf-8') if p.exists() else '<h1>Graphic maker not found</h1>',200 if p.exists() else 404); return
         if path in ('/studio-live.css','/studio-live.js','/chad-widget.js','/data/latest_bot.js'):
-            if not self.current_user(): self.send_html('<h1>Login required</h1>',401); return
+            user=self.current_user()
+            if not user: self.send_html('<h1>Login required</h1>',401); return
+            if user.get('password_reset_required'): self.send_html('<h1>Password change required</h1>',403); return
             files={
                 '/studio-live.css':(ROOT/'studio-live.css','text/css; charset=utf-8'),
                 '/studio-live.js':(ROOT/'studio-live.js','application/javascript; charset=utf-8'),
@@ -1689,6 +1721,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/login': self.handle_login(); return
         if path=='/forgot': self.handle_forgot(); return
         if path=='/reset': self.handle_reset(); return
+        if path=='/change-password': self.handle_change_password(); return
         if path=='/logout': self.send_response(302); self.send_header('Location','/login'); self.send_header('Set-Cookie','hms_session=; Max-Age=0; Path=/'); self.end_headers(); return
         user=self.require_user();
         if not user: return
@@ -1712,13 +1745,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
         con=db(); row=con.execute('select * from users where lower(username)=? or lower(email)=?', (username, username)).fetchone()
         if self.rate_limited('login', 10, 15):
             con.close(); self.send_html(LOGIN_HTML.replace('<!--ERR-->','<div class="err">Too many attempts. Wait 15 minutes and try again.</div>'),429); return
-        if row and check_password(password,row['password_hash']) and not row['password_reset_required']:
+        if row and check_password(password,row['password_hash']):
             token=secrets.token_urlsafe(32); expires=(dt.datetime.now()+dt.timedelta(days=SESSION_DAYS)).isoformat(timespec='seconds')
             con.execute('insert into sessions(token,user_id,expires_at) values(?,?,?)',(token,row['id'],expires)); con.commit(); con.close(); log_action(row['id'],'logged in')
             secure='; Secure' if self.secure_cookie() else ''
-            self.send_response(302); self.send_header('Location','/studio'); self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}'); self.end_headers()
+            destination='/change-password' if row['password_reset_required'] else '/studio'
+            self.send_response(302); self.send_header('Location',destination); self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}'); self.end_headers()
         else:
             con.close(); self.send_html(LOGIN_HTML.replace('<!--ERR-->','<div class="err">Login failed. Check your email and password, or use Forgot password.</div>'),401)
+    def handle_change_password(self):
+        user=self.current_user()
+        if not user:
+            self.redirect('/login'); return
+        if not user.get('password_reset_required'):
+            self.redirect('/studio'); return
+        data=self.read_body(); password=data.get('password') or ''; confirm=data.get('confirm') or ''
+        error=valid_password(password)
+        if password != confirm: error='The passwords do not match.'
+        if error:
+            self.send_html(change_password_page(user,error),400); return
+        con=db()
+        con.execute(
+            'update users set password_hash=?,password_reset_required=0 where id=?',
+            (password_hash(password),user['id']),
+        )
+        con.execute('delete from sessions where user_id=?',(user['id'],))
+        token=secrets.token_urlsafe(32)
+        expires=(dt.datetime.now()+dt.timedelta(days=SESSION_DAYS)).isoformat(timespec='seconds')
+        con.execute('insert into sessions(token,user_id,expires_at) values(?,?,?)',(token,user['id'],expires))
+        con.commit(); con.close()
+        log_action(user['id'],'replaced temporary password')
+        secure='; Secure' if self.secure_cookie() else ''
+        self.send_response(302)
+        self.send_header('Location','/studio')
+        self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}')
+        self.end_headers()
     def lookup_access_token(self, token):
         if not token: return None
         con=db()
@@ -2120,6 +2181,12 @@ def message_page(title, message, href='', button=''):
 def reset_page(token, error=''):
     err=f"<div class='err'>{html.escape(error)}</div>" if error else ''
     return auth_shell('Create your password', f"""{err}<p>Use at least 12 characters with uppercase, lowercase, a number, and a symbol.</p><form method='post' action='/reset'><input type='hidden' name='token' value='{html.escape(token)}'><label>New password</label><input name='password' type='password' autocomplete='new-password' required minlength='12'><label>Confirm password</label><input name='confirm' type='password' autocomplete='new-password' required minlength='12'><button>Save secure password</button></form>""")
+def change_password_page(user, error=''):
+    err=f"<div class='err'>{html.escape(error)}</div>" if error else ''
+    return auth_shell(
+        'Create your private password',
+        f"""{err}<p>Welcome, {html.escape(user['name'].split()[0])}. Your temporary password worked. Replace it before entering the Studio.</p><p class='note'>Use at least 12 characters with uppercase, lowercase, a number, and a symbol.</p><form method='post' action='/change-password'><label>New private password</label><input name='password' type='password' autocomplete='new-password' required minlength='12' autofocus><label>Confirm password</label><input name='confirm' type='password' autocomplete='new-password' required minlength='12'><button>Save password and open Studio</button></form>"""
+    )
 def email_template(title, message, link, button):
     return f"""<!doctype html><html><body style="margin:0;background:#eff2f7;font-family:Arial,sans-serif;color:#15243c"><div style="max-width:560px;margin:30px auto;background:#fff;border:1px solid #e3e9f2;padding:28px"><div style="font-weight:800;color:#1d4f91">Hancock Claims Consultants</div><h1 style="font-size:24px;color:#1d4f91">{html.escape(title)}</h1><p style="line-height:1.6">{message}</p><p><a href="{html.escape(link)}" style="display:inline-block;background:#1d4f91;color:#fff;text-decoration:none;padding:12px 18px;font-weight:700">{html.escape(button)}</a></p><p style="font-size:12px;color:#5b6b82">For security, this link can only be used once.</p></div></body></html>"""
 
