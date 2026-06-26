@@ -19,9 +19,9 @@
   var CFG = window.CHAD_CONFIG || {};
   var API = (CFG.apiBase || "").replace(/\/$/, "");
   var USER = CFG.user || localStorage.getItem("chad_widget_user") || null;
-  var muted = localStorage.getItem("chad_widget_mute") === "1";
-  var conversationMode = localStorage.getItem("chad_widget_conversation") !== "0";
-  var standby = false;
+  var standby = localStorage.getItem("chad_widget_standby") === "1";
+  var muted = standby || localStorage.getItem("chad_widget_mute") === "1";
+  var conversationMode = !standby && localStorage.getItem("chad_widget_conversation") !== "0";
   var minimized = localStorage.getItem("chad_widget_minimized") === "1";
   var greeted = false;
   function stateUrl() {
@@ -94,7 +94,7 @@
     + '<div class="cw-chips"><button class="cw-chip" data-q="catch me up">Catch me up</button>'
     + '<button class="cw-chip" data-q="prepare the suggested post">Prepare suggested post</button>'
     + '<button class="cw-chip" data-q="run the studio">Run the studio</button>'
-    + '<button class="cw-chip" id="cwStandby" title="Pause Chad voice and microphone">Standby</button>'
+    + '<button class="cw-chip' + (standby ? ' standby' : '') + '" id="cwStandby" title="' + (standby ? 'Resume Chad voice and microphone' : 'Switch Chad to text only') + '">' + (standby ? 'Resume voice' : 'Text only') + '</button>'
     + '<button class="cw-chip' + (conversationMode ? ' on' : '') + '" id="cwConversation" title="Keep the microphone listening until you turn voice off">' + (conversationMode ? 'Always listening' : 'Voice off') + '</button></div>'
     + '<div class="cw-comp"><input id="cwInput" placeholder="Talk to Chad…"><button class="cw-mic" id="cwMic" title="Speak">&#127908;</button><button class="cw-send" id="cwSend">&#10148;</button></div>'
     + '</div>'
@@ -437,12 +437,23 @@
   }
   function updateStandbyControl() {
     var control=root.querySelector("#cwStandby");
-    control.textContent=standby ? "Resume voice" : "Standby";
-    control.title=standby ? "Resume Chad voice and microphone" : "Pause Chad voice and microphone";
+    control.textContent=standby ? "Resume voice" : "Text only";
+    control.title=standby ? "Resume Chad voice and microphone" : "Switch Chad to text only";
     control.classList.toggle("standby",standby);
+  }
+  function persistVoiceState() {
+    localStorage.setItem("chad_widget_standby",standby ? "1" : "0");
+    localStorage.setItem("chad_widget_mute",muted ? "1" : "0");
+    localStorage.setItem("chad_widget_conversation",conversationMode ? "1" : "0");
+    var muteButton=root.querySelector("#cwMute");
+    if (muteButton) muteButton.innerHTML = muted ? "&#128263;" : "&#128266;";
+    updateConversationControl();
+    updateStandbyControl();
   }
   function enterStandby(showMessage) {
     standby=true;
+    muted=true;
+    conversationMode=false;
     clearListenTimer();
     setTranscript("");
     stopSpeech();
@@ -453,14 +464,16 @@
       activeRequest=null;
       requestNumber++;
     }
-    setState("STANDBY");
-    updateStandbyControl();
-    if (showMessage) bubble("Standing by. Voice and microphone are paused. Press Resume voice when you are ready.", "chad");
+    setState("TEXT ONLY");
+    persistVoiceState();
+    if (showMessage) bubble("Text-only mode is on. I will stop listening and stop speaking, but you can still type to me. Press Resume voice when you are ready.", "chad");
   }
   function leaveStandby(showMessage) {
     standby=false;
+    muted=false;
+    conversationMode=true;
     setState("ONLINE");
-    updateStandbyControl();
+    persistVoiceState();
     if (showMessage) bubble("I am back. Voice conversation is ready.", "chad");
     if (conversationMode) {
       ensureAudioContext().then(function () { startListening(false); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
@@ -468,11 +481,11 @@
   }
   function isStandbyCommand(text) {
     var value=String(text || "").toLowerCase().replace(/[,.!?]/g," ").replace(/\s+/g," ").trim();
-    return /^(hey |hi )?(chad )?(can you |will you )?(stand ?by|go on standby|pause( your| the)? voice|pause talking|pause for (a |one )?minute|stop talking|be quiet|hold on|give me (a |one )?minute)( please)?( chad)?$/.test(value);
+    return /^(hey |hi )?(chad )?(can you |will you |please )?(stand ?by|go on standby|voice off|turn voice off|audio off|sound off|speaker off|mute voice|mute yourself|silence|silent mode|go silent|text only|text mode|switch to text|stop listening|stop the mic|mic off|microphone off|pause( your| the)? voice|pause talking|pause for (a |one )?minute|stop talking|be quiet|hold on|give me (a |one )?minute|i'?m done talking|i am done talking|done talking|that'?s all|that is all)( please)?( chad)?$/.test(value);
   }
   function isResumeCommand(text) {
     var value=String(text || "").toLowerCase().replace(/[,.!?]/g," ").replace(/\s+/g," ").trim();
-    return /^(hey |hi )?(chad )?(you can |can you |will you )?(resume( voice| talking)?|come back|wake up|start talking|i am back|i'm back)( please)?( chad)?$/.test(value);
+    return /^(hey |hi )?(chad )?(you can |can you |will you |please )?(resume( voice| talking)?|voice on|turn voice on|audio on|sound on|speak again|listen again|mic on|microphone on|come back|wake up|start talking|i am back|i'm back)( please)?( chad)?$/.test(value);
   }
 
   /* ---------- talk to the brain ---------- */
@@ -726,6 +739,9 @@
     control.classList.toggle("on",conversationMode);
     localStorage.setItem("chad_widget_conversation",conversationMode ? "1" : "0");
   }
+  updateConversationControl();
+  updateStandbyControl();
+  if (standby) setState("TEXT ONLY");
   root.querySelector("#cwConversation").onclick = function () {
     conversationMode=!conversationMode; updateConversationControl();
     if (conversationMode) {

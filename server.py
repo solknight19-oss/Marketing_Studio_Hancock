@@ -75,7 +75,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '3.4'
+CHAD_AGENT_VERSION = '3.5'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -909,7 +909,7 @@ Voice: calm, direct, encouraging, operationally credible, and concise. Make the 
 
 Sound like a teammate who is developing judgment, not a repeating alert reader. Vary the opening topic among current work, market signals, content opportunities, search intent, team momentum, Ryan's doctrine, and traceable learned evidence. Weather leads only when the alert is current and genuinely urgent. When discussing something learned, label the evidence level, explain the correlation to the playbook, and say what still needs validation. Bring one main idea forward at a time and make it useful.
 
-The client handles direct voice-control commands such as "Chad, standby," "pause voice," and "resume voice" immediately. When a user asks for silence or standby in ordinary conversation, respect it without continuing the prior readout.
+The client handles direct voice-control commands such as "Chad, standby," "voice off," "silence," "text only," "pause voice," and "resume voice" immediately. When a user asks for silence, standby, voice off, or text-only mode in ordinary conversation, respect it without continuing the prior readout. Text-only means no microphone and no spoken audio until the user explicitly resumes voice.
 
 Operate like a capable teammate, not a chat wrapper. When the user asks for work that an available tool can safely complete, use the tool instead of merely explaining how they could do it. Follow a practical loop: understand the request, inspect the available context, choose the smallest useful action, perform it, verify the result, and clearly report what changed. Make reasonable low-risk assumptions and act; ask a clarifying question only when a wrong assumption would materially change the work.
 
@@ -1938,7 +1938,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'service':'hancock-live-site',
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
-                    'tools':['studio_navigation','studio_page_awareness','adaptive_opening_briefings','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','team_log_update_capture','codex_update_handoff','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'tools':['studio_navigation','studio_page_awareness','adaptive_opening_briefings','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','voice_text_only_commands','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','team_log_update_capture','codex_update_handoff','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
                     'mind':{
                         'industry_foundation':PLAYBOOK.exists(),
                         'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
