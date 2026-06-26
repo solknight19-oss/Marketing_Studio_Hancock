@@ -13,7 +13,7 @@
 
   async function load(){
     try{
-      [state,bots]=await Promise.all([api("/api/state"),api("/api/bots")]);
+      [state,bots]=await Promise.all([api("/api/state?briefing="+encodeURIComponent(window.CHAD_BRIEFING_KEY||"")),api("/api/bots")]);
       window.HANCOCK_BOT_DATA=state.botData;
       if(window.ChadWidget)window.ChadWidget.setUser(state.user.name.split(" ")[0]);
       const mode=q("mode");

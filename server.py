@@ -75,7 +75,7 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '3.1'
+CHAD_AGENT_VERSION = '3.2'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
@@ -571,6 +571,32 @@ def latest_bot_data():
     except Exception: return {'stories':[],'clusters':[],'library':[],'generatedHuman':'Bot data could not be read'}
 def chad_feed():
     return load_json(ROOT/'data'/'main_speaking_bot_feed.json', {'mainSpeakingBot': {'priority': 'Run Chad council first.', 'next_steps': []}, 'bots': []})
+def parsed_datetime(value):
+    try:
+        return dt.datetime.fromisoformat(str(value or '').replace('Z','+00:00'))
+    except (TypeError,ValueError):
+        return None
+def fresh_timestamp(value, hours):
+    stamp=parsed_datetime(value)
+    if not stamp:
+        return False
+    current=dt.datetime.now(stamp.tzinfo) if stamp.tzinfo else dt.datetime.now()
+    return dt.timedelta(0) <= current-stamp <= dt.timedelta(hours=hours)
+def future_timestamp(value):
+    stamp=parsed_datetime(value)
+    if not stamp:
+        return False
+    current=dt.datetime.now(stamp.tzinfo) if stamp.tzinfo else dt.datetime.now()
+    return stamp > current
+def active_storm_alerts(feed=None):
+    feed=feed or chad_feed()
+    if not fresh_timestamp(feed.get('generatedAt'),6):
+        return []
+    storm=next((item for item in feed.get('bots') or [] if item.get('bot')=='Storm Watch Bot'),{})
+    return [
+        alert for alert in (storm.get('recommendations') or [])
+        if future_timestamp(alert.get('expires'))
+    ]
 def collect_state():
     con=db()
     tasks=[dict(r) for r in con.execute('select * from tasks order by updated_at desc limit 30')]
@@ -746,6 +772,8 @@ Maintain clear epistemic labels: verified internal standard, observed external s
 
 Voice: calm, direct, encouraging, operationally credible, and concise. Make the exchange feel like a dance: listen for the user's pace, respond to what they actually said, leave room for them to steer, and vary your shape. A simple question should usually take one or two sentences. A decision may need options. A work request may need concrete next steps. Do not end every reply with a question or force a next step. This is voice-first, so default to roughly 25-90 spoken words unless the user asks for depth. After a successful tool action, confirm what changed in one or two sentences. Prefer active voice and natural conversational bridges over report language.
 
+Sound like a teammate who is developing judgment, not a repeating alert reader. Vary the opening topic among current work, market signals, content opportunities, search intent, team momentum, Ryan's doctrine, and traceable learned evidence. Weather leads only when the alert is current and genuinely urgent. When discussing something learned, label the evidence level, explain the correlation to the playbook, and say what still needs validation. Bring one main idea forward at a time and make it useful.
+
 The client handles direct voice-control commands such as "Chad, standby," "pause voice," and "resume voice" immediately. When a user asks for silence or standby in ordinary conversation, respect it without continuing the prior readout.
 
 Operate like a capable teammate, not a chat wrapper. When the user asks for work that an available tool can safely complete, use the tool instead of merely explaining how they could do it. Follow a practical loop: understand the request, inspect the available context, choose the smallest useful action, perform it, verify the result, and clearly report what changed. Make reasonable low-risk assumptions and act; ask a clarifying question only when a wrong assumption would materially change the work.
@@ -842,8 +870,7 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
     calendar=calendar or []
     feed=chad_feed()
     specialists={item.get('bot'):item for item in feed.get('bots') or []}
-    storm=specialists.get('Storm Watch Bot') or {}
-    alerts=storm.get('recommendations') or []
+    alerts=active_storm_alerts(feed)
     states=[]
     events=[]
     for alert in alerts:
@@ -852,7 +879,8 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
         if state and state not in states: states.append(state)
         if event and event not in events: events.append(event)
     radar=specialists.get('Industry Radar Bot') or {}
-    signal=(radar.get('recommendations') or [{}])[0]
+    content_bot=specialists.get('Content Opportunity Bot') or {}
+    seo_bot=specialists.get('SEO/AEO Bot') or {}
     assigned_tasks=[t for t in tasks if t.get('assigned_to')==user['id']]
     task_scope=assigned_tasks if assigned_tasks else ([t for t in tasks if not t.get('assigned_to')] if user['role']!='owner' else tasks)
     doing=[t for t in task_scope if t.get('status')=='doing']
@@ -870,29 +898,152 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
         a for a in activity
         if a.get('user_id')!=user['id'] and a.get('action') not in quiet_actions
     ][:1]
+    con=db()
+    learned=[dict(row) for row in con.execute(
+        """select evidence_id,kind,topic,claim,source_name,source_date,confidence,corroboration_count
+           from chad_knowledge order by observed_at desc,id desc limit 12"""
+    )]
+    con.close()
+    seed_text='|'.join((today,str(user['id']),str(user.get('briefing_key') or user.get('session_token') or user['name'])))
+    seed=int(hashlib.sha256(seed_text.encode('utf-8')).hexdigest()[:12],16)
+    def pick(items,salt=0):
+        return items[(seed+salt)%len(items)] if items else None
+    candidates=[]
+    signals=radar.get('recommendations') or []
+    signal=pick(signals,11)
+    if signal:
+        candidates.append({
+            'theme':'market',
+            'opening':'I connected a market signal to Hancock’s operating model.',
+            'headline':'A market shift worth discussing',
+            'situation':f"I am watching: {signal.get('title')}. This is an observed market signal, not yet an industry rule.",
+            'proposal':f"The useful Hancock angle is {signal.get('hancock_angle') or 'trust, communication, consistency, and defensible documentation'}. I can turn that into a practical article.",
+            'action_label':'Explore market angle',
+            'action_prompt':'show me the market signal and help me shape the Hancock angle',
+            'ui_action':{'type':'tab','target':'radar'},
+        })
+    opportunity=pick(content_bot.get('recommendations') or [],23)
+    if opportunity:
+        candidates.append({
+            'theme':'content',
+            'opening':'I found a content opportunity we can actually put to work.',
+            'headline':'A publishable angle is ready',
+            'situation':f"The current opportunity is {opportunity.get('working_title')}.",
+            'proposal':f"I can build the {opportunity.get('content_type') or 'core article'} around {opportunity.get('angle') or 'a clear Hancock takeaway'}, then prepare the repurposed versions.",
+            'action_label':'Build this content',
+            'action_prompt':'prepare the strongest current content opportunity',
+            'ui_action':{'type':'tab','target':'content'},
+        })
+    seo_signal=pick(seo_bot.get('recommendations') or [],37)
+    if seo_signal:
+        candidates.append({
+            'theme':'search',
+            'opening':'I found a search question Hancock can answer more clearly.',
+            'headline':'A search-intent opening is available',
+            'situation':f"People are signaling interest around “{seo_signal.get('keyword')}.”",
+            'proposal':f"I can create a direct answer for “{seo_signal.get('faq')}” and connect it to communication, documentation, and file defensibility.",
+            'action_label':'Shape the answer',
+            'action_prompt':'turn the current search question into a Hancock answer',
+            'ui_action':{'type':'tab','target':'seo'},
+        })
+    lesson=pick(learned,53)
+    if lesson:
+        evidence_name=lesson.get('evidence_id') or 'retained evidence'
+        candidates.append({
+            'theme':'learning',
+            'opening':'I have a pattern from the research worth pressure-testing with you.',
+            'headline':'What Chad is learning',
+            'situation':f"{lesson.get('claim')} This is labeled {lesson.get('kind') or 'observed evidence'} with {lesson.get('confidence') or 'developing'} confidence.",
+            'proposal':f"I can show how {evidence_name} correlates with Ryan’s playbook, where it agrees, and where we still need proof.",
+            'action_label':'Review the learning',
+            'action_prompt':f'explain what you learned from {evidence_name} and how it relates to our industry',
+            'ui_action':{'type':'tab','target':'chad'},
+        })
+    doctrine_topics=[
+        ('Property lifecycle management','The industry opportunity is larger than claim inspections. Pre-loss underwriting, during-loss inspection and estimating, and post-loss verification create a full property lifecycle relationship.','Turn this into a thought-leadership post that shows Hancock as a property-intelligence partner.'),
+        ('Original photo files','Compressed portal images weaken detail when adjusters zoom. Original image delivery directly supports file defensibility and reduces avoidable handling time.','Build a practical article around why photo quality is an operational issue, not a cosmetic one.'),
+        ('Repairability must be tested','Repairability is strongest when the file documents an actual repair attempt and the resulting creasing, tearing, delamination, mat transfer, or appearance impact.','Prepare a field-education post that separates tested facts from assumptions.'),
+        ('The communication standard','Nobody should ever wonder where the technician is. Proactive calls, texts, updates, and documented attempts prevent many service complaints before they start.','Create a leadership post connecting communication discipline to carrier trust.'),
+        ('Underwriting and prevention','The cheapest claim is the one that never happens. Underwriting inspections can identify condition, hazard, and system risks before loss severity grows.','Develop an educational series around prevention and property lifecycle intelligence.'),
+    ]
+    doctrine=pick(doctrine_topics,71)
+    candidates.append({
+        'theme':'doctrine',
+        'opening':'I pulled a different lesson from Ryan’s playbook for today.',
+        'headline':doctrine[0],
+        'situation':doctrine[1],
+        'proposal':doctrine[2],
+        'action_label':'Develop the idea',
+        'action_prompt':f'help me turn {doctrine[0]} into timely Hancock content',
+        'ui_action':{'type':'tab','target':'content'},
+    })
+    if recent:
+        teammate=recent[0].get('user_name') or 'A teammate'
+        candidates.append({
+            'theme':'team',
+            'opening':'I noticed a team handoff we can keep moving.',
+            'headline':'Team momentum is available',
+            'situation':f"{teammate} {recent[0].get('action')} {recent[0].get('meta') or ''}.".replace('..','.'),
+            'proposal':'I can connect that activity to the next owner, draft, task, or calendar step so it does not stall.',
+            'action_label':'Continue the handoff',
+            'action_prompt':'show me the most useful team handoff and help me continue it',
+            'ui_action':{'type':'url','target':'/dashboard'},
+        })
+    urgent_alerts=[
+        alert for alert in alerts
+        if re.search(r'tornado warning|hurricane warning|severe thunderstorm warning|flash flood warning',alert.get('event') or '',re.I)
+    ]
     if alerts:
         event_text=', '.join(events[:2]).lower() or 'severe weather'
         state_text=', '.join(states[:6])
-        headline=f"{len(alerts)} active weather alerts across {state_text}"
-        situation=f"I am tracking {event_text} affecting {state_text}. While threats are active, our message should lead with preparation and safety, not selling."
-        proposal="I can prepare a safety-first storm-readiness post now, then hold the post-event inspection guidance for review."
-        action_label='Prepare storm post'
-        action_prompt='prepare the suggested post'
-        target_tab='storm'
-    elif signal.get('title'):
-        headline='A market signal is ready for action'
-        situation=f"The strongest current signal is: {signal['title']}."
-        proposal=f"I can prepare a Hancock article using this angle: {signal.get('hancock_angle') or 'clear communication, defensible documentation, and property intelligence'}"
-        action_label='Prepare article'
-        action_prompt='prepare the suggested post'
-        target_tab='content'
+        weather_candidate={
+            'theme':'weather',
+            'opening':'There is a genuinely current weather signal we should handle carefully.',
+            'headline':f"{len(alerts)} current weather alerts across {state_text}",
+            'situation':f"I am tracking {event_text} affecting {state_text}. While threats are active, our message should lead with preparation and safety, not selling.",
+            'proposal':'I can prepare a safety-first readiness post now, then hold post-event inspection guidance until conditions have passed.',
+            'action_label':'Review current weather',
+            'action_prompt':'review the current weather signal and prepare the appropriate safety-first content',
+            'ui_action':{'type':'tab','target':'storm'},
+        }
+        candidates.append(weather_candidate)
+    briefing_key=str(user.get('briefing_key') or '').strip()
+    cache_key=''
+    cached_theme=''
+    last_theme_key=f"last_briefing_theme_{user['id']}"
+    if briefing_key:
+        key_hash=hashlib.sha256(briefing_key.encode('utf-8')).hexdigest()[:16]
+        cache_key=f"briefing_theme_{user['id']}_{key_hash}"
+        cached_theme=setting_get(cache_key,'')
+    if urgent_alerts:
+        chosen=next((candidate for candidate in candidates if candidate['theme']=='weather'),None)
+    elif cached_theme:
+        chosen=next((candidate for candidate in candidates if candidate['theme']==cached_theme),None)
     else:
-        headline='Your daily briefing is ready'
-        situation='No urgent weather or market signal is blocking the team.'
-        proposal='I can prepare a useful evergreen property-inspection post from the current keyword clusters.'
-        action_label='Prepare a post'
-        action_prompt='prepare the suggested post'
-        target_tab='content'
+        last_theme=setting_get(last_theme_key,'') if briefing_key else ''
+        eligible=[candidate for candidate in candidates if candidate['theme']!=last_theme]
+        chosen=pick(eligible or candidates,89)
+        if chosen and cache_key:
+            setting_set(cache_key,chosen['theme'])
+            setting_set(last_theme_key,chosen['theme'])
+    if not chosen:
+        chosen={
+            'theme':'evergreen',
+            'opening':'I have a useful industry idea ready to shape with you.',
+            'headline':'A practical Hancock idea is ready',
+            'situation':'No urgent signal is crowding the board, which gives us room to create durable educational content.',
+            'proposal':'I can prepare an evergreen property-inspection post grounded in communication, documentation, consistency, and defensibility.',
+            'action_label':'Prepare the idea',
+            'action_prompt':'prepare a useful evergreen Hancock post',
+            'ui_action':{'type':'tab','target':'content'},
+        }
+    opening=chosen['opening']
+    headline=chosen['headline']
+    situation=chosen['situation']
+    proposal=chosen['proposal']
+    action_label=chosen['action_label']
+    action_prompt=chosen['action_prompt']
+    ui_action=chosen['ui_action']
     work=''
     if overdue:
         item=overdue[0]
@@ -900,36 +1051,32 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
         proposal="Open the production brief, clear the blocker, and move it to the next status."
         action_label='Open overdue work'
         action_prompt='show me what is overdue and help me finish it'
-        target_tab='calendar'
+        ui_action={'type':'tab','target':'calendar'}
     elif due_today:
         item=due_today[0]
         work=f" Today's production priority: {item['title']} is due today."
         proposal="Open the brief and let us complete the next missing production step."
         action_label='Open today’s work'
         action_prompt='show me what I need to produce today'
-        target_tab='calendar'
+        ui_action={'type':'tab','target':'calendar'}
     elif mine:
         item=mine[0]
         work=f" Next forecasted production item: {item['title']} is assigned to you and due {item.get('due_date') or 'soon'}."
-        proposal="Open Our Marketing Calendar, review the prepared brief, and move the first production step forward."
-        action_label='Open next assignment'
-        action_prompt='take me to Our Marketing Calendar and help me start my next assignment'
-        target_tab='calendar'
     elif doing:
         work=f" Open work: {doing[0]['title']} is currently in progress."
     elif open_tasks:
         label='Your next task' if open_tasks[0].get('assigned_to')==user['id'] else 'Next team task'
         work=f" {label}: {open_tasks[0]['title']}."
-    if recent:
-        work+=f" Team update: {recent[0].get('user_name') or 'A teammate'} {recent[0].get('action')} {recent[0].get('meta') or ''}."
     return {
+        'theme':chosen['theme'],
+        'opening':opening,
         'headline':headline,
         'situation':situation,
         'work':work.strip(),
         'proposal':proposal,
         'action_label':action_label,
         'action_prompt':action_prompt,
-        'ui_action':{'type':'tab','target':target_tab},
+        'ui_action':ui_action,
         'alert_count':len(alerts),
         'states':states,
         'generated_at':feed.get('generatedAt') or '',
@@ -960,14 +1107,12 @@ def chad_ui_action(message):
         if any(term in lower for term in terms):
             return {'type':'tab','target':tab}
     if any(term in lower for term in ('catch me up','next step','what next','what should i focus')):
-        feed=chad_feed()
-        storm=next((item for item in feed.get('bots') or [] if item.get('bot')=='Storm Watch Bot'),{})
-        return {'type':'tab','target':'storm' if storm.get('status')=='active_alerts' else 'radar'}
+        return {'type':'tab','target':'storm' if active_storm_alerts() else 'radar'}
     return None
 def bot_welcome(user, tasks, drafts, activity, calendar=None):
     briefing=proactive_briefing(user,tasks,drafts,activity,calendar)
     parts=[
-        f"Good to see you, {user['name'].split()[0]}. Here is what you need to know.",
+        f"{user['name'].split()[0]}, {briefing['opening']}",
         briefing['situation'],
     ]
     if briefing['work']: parts.append(briefing['work'])
@@ -977,8 +1122,7 @@ def prepare_recommended_draft(user):
     state=collect_state()
     feed=chad_feed()
     specialists={item.get('bot'):item for item in feed.get('bots') or []}
-    storm=specialists.get('Storm Watch Bot') or {}
-    alerts=storm.get('recommendations') or []
+    alerts=active_storm_alerts(feed)
     if alerts:
         states=[]
         events=[]
@@ -1642,7 +1786,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not morsel: return None
         token=unsign(morsel.value)
         if not token: return None
-        con=db(); row=con.execute('select u.* from sessions s join users u on u.id=s.user_id where s.token=? and s.expires_at>?',(token,now())).fetchone(); con.close(); return rowdict(row)
+        con=db(); row=con.execute('select u.*,s.token session_token from sessions s join users u on u.id=s.user_id where s.token=? and s.expires_at>?',(token,now())).fetchone(); con.close(); return rowdict(row)
     def require_user(self):
         user=self.current_user()
         if not user: self.send_json({'error':'login required'},401); return None
@@ -1657,7 +1801,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'service':'hancock-live-site',
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
-                    'tools':['studio_navigation','studio_page_awareness','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'tools':['studio_navigation','studio_page_awareness','adaptive_opening_briefings','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
                     'mind':{
                         'industry_foundation':PLAYBOOK.exists(),
                         'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
@@ -1712,7 +1856,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_bytes(p.read_bytes(),kind); return
         if path=='/api/state':
             user=self.require_user();
-            if user: self.api_state(user)
+            if user:
+                briefing_key=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('briefing',[''])[0][:120]
+                self.api_state(user,briefing_key)
             return
         if path=='/api/chad-feed':
             user=self.require_user();
@@ -1862,7 +2008,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'error':str(exc)},502); return
         log_action(user['id'],'invited user',f'{target["name"]} ({email})')
         self.send_json({'ok':True,'message':f'Invitation sent to {email}.'})
-    def api_state(self,user):
+    def api_state(self,user,briefing_key=''):
         con=db()
         users=[dict(r) for r in con.execute('select id,username,email,name,role,password_reset_required from users order by name')]
         drafts=[dict(r) for r in con.execute('select d.*, u.name owner_name, uu.name updated_by_name from drafts d left join users u on u.id=d.owner_id left join users uu on uu.id=d.updated_by order by d.updated_at desc limit 50')]
@@ -1892,7 +2038,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             for item in collection:
                 for key in ('created_at','updated_at'):
                     if key in item: item[key+'_human']=human_time(item.get(key))
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(user,tasks,drafts,activity,calendar),'chadBriefing':proactive_briefing(user,tasks,drafts,activity,calendar)})
+        briefing_user=dict(user)
+        if briefing_key:
+            briefing_user['briefing_key']=briefing_key
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar)})
     def api_save_draft(self,user):
         data=self.read_body(); title=(data.get('title') or 'Untitled draft').strip()[:160]; body=data.get('body') or ''; ctype=(data.get('content_type') or 'Blog Post')[:60]; line=(data.get('service_line') or '')[:80]; status=(data.get('status') or 'draft')[:40]; draft_id=data.get('id')
         con=db()
@@ -2211,10 +2360,10 @@ DASHBOARD_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name
 <section id="tasks" class="view"><div class="layout"><div class="card"><h3>Create / Edit Task</h3><input type="hidden" id="taskId"><label>Task</label><input id="taskTitle"><label>Details</label><textarea id="taskDetails"></textarea><label>Assign To</label><select id="taskAssigned"></select><label>Status</label><select id="taskStatus"><option>todo</option><option>doing</option><option>review</option><option>done</option></select><button class="btn" onclick="saveTask()">Save Task</button><button class="btn secondary" onclick="clearTaskForm()">New Task</button><div class="status" id="taskSaveStatus"></div></div><div class="panel"><h3>Team Tasks</h3><div id="taskList"></div></div></div></section>
 <section id="updates" class="view"><div class="hero"><div><div class="eyebrow">Chad Updates</div><h2>Team requests, reviewed and moved forward.</h2><p>Jennifer and Cassie can ask for changes that improve their day-to-day work. Chad keeps the context together; Ryan reviews each request and moves approved work into implementation.</p></div><button class="btn gold" onclick="clearUpdateForm()">New Request</button></div><div class="layout"><div class="card"><h3>Submit a Team Request</h3><input type="hidden" id="updateId"><label>Request title</label><input id="updateTitle" placeholder="What should work better?"><label>Category</label><select id="updateCategory"><option>Chad</option><option>Studio</option><option>Bots</option><option>Content Workflow</option><option>Reporting</option><option>Other</option></select><label>What needs to change?</label><textarea id="updateDetails" placeholder="Describe the day-to-day problem, who it affects, and the result you would like."></textarea><div id="updateOwnerStatus"><label>Ryan's Status</label><select id="updateStatus"><option value="new">New</option><option value="considering">Considering</option><option value="planned">Planned</option><option value="completed">Completed</option></select></div><button class="btn" onclick="saveUpdate()">Submit Request</button><button class="btn secondary" onclick="clearUpdateForm()">Clear</button><div class="status" id="updateSaveStatus"></div></div><div class="panel"><h3 id="updateQueueTitle">Team Requests</h3><p class="muted" id="updateQueueSummary"></p><div id="updateList" class="updateList"></div></div></div></section>
 <section id="admin" class="view"><div class="grid"><div class="card"><h3>Invite Team Member</h3><p class="muted">Send a secure, one-time setup link to an authorized Hancock email. The link expires after 24 hours.</p><label>Team member</label><select id="inviteUser"></select><label>Hancock email</label><input id="inviteEmail" type="email" placeholder="name@hancockclaims.com"><button class="btn" onclick="sendInvite()">Send Secure Invitation</button><div class="status" id="inviteStatus"></div></div><div class="card"><h3>Studio Administration</h3><p class="muted">Ryan is the owner. Cassie and Jennifer have administrator access after accepting their invitations.</p><div class="adminbar"><button class="btn" onclick="location.href='/studio'">Open Approved Studio</button><button class="btn secondary" onclick="runScan()">Run Bot Scan</button></div><pre class="out" id="adminOut"></pre></div></div></section>
-</main><script>
-let STATE={}; const TABLIST=[['dash','Dashboard'],['radar','Industry Radar'],['drafts','Drafts'],['tasks','Tasks'],['updates','Chad Updates'],['admin','Admin']]; function $(id){return document.getElementById(id)} function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))} function openTab(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));} function renderTabs(){ $('tabs').innerHTML=TABLIST.map((t,i)=>`<button class="tab ${i?'':'active'}" data-tab="${t[0]}" onclick="openTab('${t[0]}')">${t[1]}</button>`).join('') } async function api(path, body){let opt=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};let r=await fetch(path,opt);let data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data} async function load(){STATE=await api('/api/state');render()} function render(){ $('who').textContent=STATE.user.name+' · '+STATE.user.role; $('welcomeTitle').textContent='Hi, '+STATE.user.name.split(' ')[0]+'.'; $('welcomeText').textContent=STATE.welcome; $('botReply').textContent=STATE.welcome; renderUsers();renderActivity();renderTasks();renderDrafts();renderRadar();renderUpdates()} function renderUsers(){let opts='<option value="">Unassigned</option>'+STATE.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');$('taskAssigned').innerHTML=opts;$('draftLine').innerHTML=STATE.serviceLines.map(x=>`<option>${esc(x)}</option>`).join('');$('inviteUser').innerHTML=STATE.users.map(u=>`<option value="${u.id}" data-email="${esc(u.email||'')}">${esc(u.name)} · ${esc(u.role)}</option>`).join('');$('inviteUser').onchange=()=>{let o=$('inviteUser').selectedOptions[0];$('inviteEmail').value=o?o.dataset.email:''};$('inviteUser').onchange()} function renderActivity(){ $('activity').innerHTML=(STATE.activity||[]).slice(0,8).map(a=>`<div><b>${esc(a.user_name||'System')}</b> ${esc(a.action)} ${esc(a.meta||'')}<br><span class="muted">${esc(a.created_at_human||'')}</span></div>`).join('')||'<p class="muted">No activity yet.</p>'} function taskHtml(t){return `<div class="task"><div><span class="badge">${esc(t.status)}</span><h4>${esc(t.title)}</h4><p class="muted">${esc(t.details||'')}<br>Assigned: ${esc(t.assigned_name||'Unassigned')} · Updated ${esc(t.updated_at_human||'')}</p></div><div><button class="mini" onclick="editTask(${t.id})">Edit</button><button class="mini" onclick="quickTask(${t.id},'doing')">Doing</button><button class="mini" onclick="quickTask(${t.id},'done')">Done</button></div></div>`} function renderTasks(){let open=(STATE.tasks||[]).filter(t=>t.status!=='done');$('taskPreview').innerHTML=open.slice(0,4).map(taskHtml).join('')||'<p class="muted">No open tasks.</p>';$('taskList').innerHTML=(STATE.tasks||[]).map(taskHtml).join('')} function renderDrafts(){ $('draftList').innerHTML=(STATE.drafts||[]).map(d=>`<div class="draftItem"><span class="badge">${esc(d.status)}</span><h3>${esc(d.title)}</h3><p class="muted">${esc(d.content_type)} · ${esc(d.service_line||'')} · owner ${esc(d.owner_name||'')} · updated ${esc(d.updated_at_human||'')}</p><p>${esc((d.body||'').slice(0,260))}...</p><button class="mini" onclick="editDraft(${d.id})">Edit</button><button class="mini" onclick="copyDraft(${d.id})">Copy</button></div>`).join('')||'<p class="muted">No shared drafts yet.</p>'} function renderRadar(){let b=STATE.botData||{};$('scanStamp').textContent=(b.generatedHuman||'No scan yet')+' · '+(b.source||'');$('radarGrid').innerHTML=(b.stories||[]).slice(0,12).map((s,i)=>`<div class="card"><span class="badge ${s.tag==='Hot'?'hot':'live'}">${esc(s.tag||'Trend')}</span><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><p><b>Hancock angle:</b> ${esc(s.angle)}</p><p class="muted">${esc(s.source||'')} ${s.date?'· '+esc(s.date):''}</p><button class="mini" onclick="draftFromRadar(${i})">Draft from this</button></div>`).join('')||'<div class="card"><p>No scan data yet. Run Live Scan.</p></div>'} function editDraft(id){let d=STATE.drafts.find(x=>x.id===id);if(!d)return;$('draftId').value=d.id;$('draftTitle').value=d.title;$('draftType').value=d.content_type;$('draftLine').value=d.service_line||STATE.serviceLines[0];$('draftStatus').value=d.status;$('draftBody').value=d.body;openTab('drafts')} function copyDraft(id){let d=STATE.drafts.find(x=>x.id===id); if(d)navigator.clipboard.writeText(d.body||'')} function clearDraftForm(){['draftId','draftTitle','draftBody'].forEach(id=>$(id).value='');$('draftStatus').value='draft'} async function saveDraft(){await api('/api/draft',{id:$('draftId').value,title:$('draftTitle').value,content_type:$('draftType').value,service_line:$('draftLine').value,status:$('draftStatus').value,body:$('draftBody').value});$('draftSaveStatus').textContent='Saved.';await load()} function draftFromRadar(i){let s=STATE.botData.stories[i];clearDraftForm();$('draftTitle').value=s.title;$('draftLine').value=s.line||STATE.serviceLines[0];$('draftBody').value='# '+s.title+'\n\n'+s.summary+'\n\n## Hancock angle\n'+s.angle+'\n\n## Next step\nTurn this into a useful post with a clear carrier-facing takeaway.';openTab('drafts')} function editTask(id){let t=STATE.tasks.find(x=>x.id===id);if(!t)return;$('taskId').value=t.id;$('taskTitle').value=t.title;$('taskDetails').value=t.details||'';$('taskAssigned').value=t.assigned_to||'';$('taskStatus').value=t.status;openTab('tasks')} function clearTaskForm(){['taskId','taskTitle','taskDetails'].forEach(id=>$(id).value='');$('taskStatus').value='todo';$('taskAssigned').value=''} async function saveTask(){await api('/api/task',{id:$('taskId').value,title:$('taskTitle').value,details:$('taskDetails').value,assigned_to:$('taskAssigned').value,status:$('taskStatus').value});$('taskSaveStatus').textContent='Saved.';await load()} async function quickTask(id,status){let t=STATE.tasks.find(x=>x.id===id);await api('/api/task',{id:id,title:t.title,details:t.details,assigned_to:t.assigned_to,status:status});await load()} function renderUpdates(){let owner=STATE.user&&STATE.user.role==='owner',all=STATE.chadUpdates||[],open=all.filter(u=>u.status!=='completed').length;$('updateOwnerStatus').style.display=owner?'block':'none';$('updateQueueTitle').textContent=owner?'Requests from Jennifer & Cassie':'Team Requests & Discussion';$('updateQueueSummary').textContent=owner?`${open} open request${open===1?'':'s'} awaiting review or completion.`:'Ryan can review these requests, move approved work into implementation, and keep you updated here.';$('updateList').innerHTML=all.map(u=>{let comments=(u.comments||[]).map(c=>`<div class="comment"><b>${esc(c.user_name||'Team')}</b> · ${esc(c.created_at_human||'')}<br>${esc(c.body)}</div>`).join('');let canEdit=owner||u.created_by===STATE.user.id;let controls=(canEdit?`<button class="mini" onclick="editUpdate(${u.id})">Edit</button>`:'')+(owner?`<button class="mini" onclick="quickUpdate(${u.id},'considering')">Considering</button><button class="mini" onclick="createUpdateTask(${u.id})">Create Implementation Task</button><button class="mini" onclick="quickUpdate(${u.id},'completed')">Completed</button>`:'');return `<div class="updateItem"><span class="badge">${esc(u.status)}</span> <span class="badge">${esc(u.category)}</span><h3>${esc(u.title)}</h3><p>${esc(u.details)}</p><p class="muted">Requested by ${esc(u.created_by_name||'Team')} · Updated ${esc(u.updated_at_human||'')}</p>${controls}<div class="updateComments"><b>Discussion</b>${comments||'<p class="muted">No comments yet.</p>'}<div class="commentRow"><input id="comment-${u.id}" placeholder="Add context or build on this request"><button class="mini" onclick="addUpdateComment(${u.id})">Comment</button></div></div></div>`}).join('')||'<p class="muted">No team requests yet. Jennifer and Cassie can submit the first day-to-day improvement they need.</p>'} function clearUpdateForm(){['updateId','updateTitle','updateDetails'].forEach(id=>$(id).value='');$('updateCategory').value='Chad';$('updateStatus').value='new';$('updateSaveStatus').textContent=''} function editUpdate(id){let u=(STATE.chadUpdates||[]).find(x=>x.id===id);if(!u)return;$('updateId').value=u.id;$('updateTitle').value=u.title;$('updateDetails').value=u.details;$('updateCategory').value=u.category;$('updateStatus').value=u.status;openTab('updates')} async function saveUpdate(){try{await api('/api/chad-update',{id:$('updateId').value,title:$('updateTitle').value,details:$('updateDetails').value,category:$('updateCategory').value,status:$('updateStatus').value});clearUpdateForm();$('updateSaveStatus').textContent='Request saved for Ryan, the team, and Chad.';await load();openTab('updates')}catch(e){$('updateSaveStatus').textContent=e.message}} async function quickUpdate(id,status){let u=STATE.chadUpdates.find(x=>x.id===id);await api('/api/chad-update',{id:id,title:u.title,details:u.details,category:u.category,status:status});await load();openTab('updates')} async function createUpdateTask(id){try{await api('/api/chad-update-task',{update_id:id});await load();openTab('updates');$('updateSaveStatus').textContent='Implementation task created and assigned to Ryan.'}catch(e){$('updateSaveStatus').textContent=e.message}} async function addUpdateComment(id){let input=$('comment-'+id),body=input.value.trim();if(!body)return;await api('/api/chad-update-comment',{update_id:id,body:body});input.value='';await load();openTab('updates')} async function askBot(msg){$('botReply').textContent='Thinking...';let r=await api('/api/bot',{message:msg});$('botReply').textContent=r.reply;speak(r.reply)} function sendBot(){let m=$('botInput').value.trim();if(!m)return;askBot(m);$('botInput').value=''} function speak(text){if(!('speechSynthesis' in window))return;let u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(u)} function voiceAsk(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceStatus').textContent='Voice input is not available in this browser. Use the text box.';return}let rec=new SR();rec.lang='en-US';rec.onstart=()=>$('voiceStatus').textContent='Listening...';rec.onerror=()=>$('voiceStatus').textContent='Voice input stopped.';rec.onresult=e=>{let text=e.results[0][0].transcript;$('botInput').value=text;askBot(text)};rec.start()} async function runScan(){let out=$('adminOut');if(out)out.textContent='Running live scan...';let r=await api('/api/run-scan',{});if(out)out.textContent=r.output;await load();openTab('radar')} async function sendInvite(){let status=$('inviteStatus');status.textContent='Sending secure invitation...';try{let r=await api('/api/invite',{user_id:$('inviteUser').value,email:$('inviteEmail').value});status.textContent=r.message;await load()}catch(e){status.textContent=e.message}} renderTabs();load();let initial=location.hash.slice(1);if(TABLIST.some(t=>t[0]===initial))openTab(initial);setInterval(load,6000);
+</main><script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);</script><script>
+let STATE={}; const TABLIST=[['dash','Dashboard'],['radar','Industry Radar'],['drafts','Drafts'],['tasks','Tasks'],['updates','Chad Updates'],['admin','Admin']]; function $(id){return document.getElementById(id)} function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))} function openTab(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));} function renderTabs(){ $('tabs').innerHTML=TABLIST.map((t,i)=>`<button class="tab ${i?'':'active'}" data-tab="${t[0]}" onclick="openTab('${t[0]}')">${t[1]}</button>`).join('') } async function api(path, body){if(path==='/api/state')path+='?briefing='+encodeURIComponent(window.CHAD_BRIEFING_KEY||'');let opt=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};let r=await fetch(path,opt);let data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data} async function load(){STATE=await api('/api/state');render()} function render(){ $('who').textContent=STATE.user.name+' · '+STATE.user.role; $('welcomeTitle').textContent='Hi, '+STATE.user.name.split(' ')[0]+'.'; $('welcomeText').textContent=STATE.welcome; $('botReply').textContent=STATE.welcome; renderUsers();renderActivity();renderTasks();renderDrafts();renderRadar();renderUpdates()} function renderUsers(){let opts='<option value="">Unassigned</option>'+STATE.users.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');$('taskAssigned').innerHTML=opts;$('draftLine').innerHTML=STATE.serviceLines.map(x=>`<option>${esc(x)}</option>`).join('');$('inviteUser').innerHTML=STATE.users.map(u=>`<option value="${u.id}" data-email="${esc(u.email||'')}">${esc(u.name)} · ${esc(u.role)}</option>`).join('');$('inviteUser').onchange=()=>{let o=$('inviteUser').selectedOptions[0];$('inviteEmail').value=o?o.dataset.email:''};$('inviteUser').onchange()} function renderActivity(){ $('activity').innerHTML=(STATE.activity||[]).slice(0,8).map(a=>`<div><b>${esc(a.user_name||'System')}</b> ${esc(a.action)} ${esc(a.meta||'')}<br><span class="muted">${esc(a.created_at_human||'')}</span></div>`).join('')||'<p class="muted">No activity yet.</p>'} function taskHtml(t){return `<div class="task"><div><span class="badge">${esc(t.status)}</span><h4>${esc(t.title)}</h4><p class="muted">${esc(t.details||'')}<br>Assigned: ${esc(t.assigned_name||'Unassigned')} · Updated ${esc(t.updated_at_human||'')}</p></div><div><button class="mini" onclick="editTask(${t.id})">Edit</button><button class="mini" onclick="quickTask(${t.id},'doing')">Doing</button><button class="mini" onclick="quickTask(${t.id},'done')">Done</button></div></div>`} function renderTasks(){let open=(STATE.tasks||[]).filter(t=>t.status!=='done');$('taskPreview').innerHTML=open.slice(0,4).map(taskHtml).join('')||'<p class="muted">No open tasks.</p>';$('taskList').innerHTML=(STATE.tasks||[]).map(taskHtml).join('')} function renderDrafts(){ $('draftList').innerHTML=(STATE.drafts||[]).map(d=>`<div class="draftItem"><span class="badge">${esc(d.status)}</span><h3>${esc(d.title)}</h3><p class="muted">${esc(d.content_type)} · ${esc(d.service_line||'')} · owner ${esc(d.owner_name||'')} · updated ${esc(d.updated_at_human||'')}</p><p>${esc((d.body||'').slice(0,260))}...</p><button class="mini" onclick="editDraft(${d.id})">Edit</button><button class="mini" onclick="copyDraft(${d.id})">Copy</button></div>`).join('')||'<p class="muted">No shared drafts yet.</p>'} function renderRadar(){let b=STATE.botData||{};$('scanStamp').textContent=(b.generatedHuman||'No scan yet')+' · '+(b.source||'');$('radarGrid').innerHTML=(b.stories||[]).slice(0,12).map((s,i)=>`<div class="card"><span class="badge ${s.tag==='Hot'?'hot':'live'}">${esc(s.tag||'Trend')}</span><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><p><b>Hancock angle:</b> ${esc(s.angle)}</p><p class="muted">${esc(s.source||'')} ${s.date?'· '+esc(s.date):''}</p><button class="mini" onclick="draftFromRadar(${i})">Draft from this</button></div>`).join('')||'<div class="card"><p>No scan data yet. Run Live Scan.</p></div>'} function editDraft(id){let d=STATE.drafts.find(x=>x.id===id);if(!d)return;$('draftId').value=d.id;$('draftTitle').value=d.title;$('draftType').value=d.content_type;$('draftLine').value=d.service_line||STATE.serviceLines[0];$('draftStatus').value=d.status;$('draftBody').value=d.body;openTab('drafts')} function copyDraft(id){let d=STATE.drafts.find(x=>x.id===id); if(d)navigator.clipboard.writeText(d.body||'')} function clearDraftForm(){['draftId','draftTitle','draftBody'].forEach(id=>$(id).value='');$('draftStatus').value='draft'} async function saveDraft(){await api('/api/draft',{id:$('draftId').value,title:$('draftTitle').value,content_type:$('draftType').value,service_line:$('draftLine').value,status:$('draftStatus').value,body:$('draftBody').value});$('draftSaveStatus').textContent='Saved.';await load()} function draftFromRadar(i){let s=STATE.botData.stories[i];clearDraftForm();$('draftTitle').value=s.title;$('draftLine').value=s.line||STATE.serviceLines[0];$('draftBody').value='# '+s.title+'\n\n'+s.summary+'\n\n## Hancock angle\n'+s.angle+'\n\n## Next step\nTurn this into a useful post with a clear carrier-facing takeaway.';openTab('drafts')} function editTask(id){let t=STATE.tasks.find(x=>x.id===id);if(!t)return;$('taskId').value=t.id;$('taskTitle').value=t.title;$('taskDetails').value=t.details||'';$('taskAssigned').value=t.assigned_to||'';$('taskStatus').value=t.status;openTab('tasks')} function clearTaskForm(){['taskId','taskTitle','taskDetails'].forEach(id=>$(id).value='');$('taskStatus').value='todo';$('taskAssigned').value=''} async function saveTask(){await api('/api/task',{id:$('taskId').value,title:$('taskTitle').value,details:$('taskDetails').value,assigned_to:$('taskAssigned').value,status:$('taskStatus').value});$('taskSaveStatus').textContent='Saved.';await load()} async function quickTask(id,status){let t=STATE.tasks.find(x=>x.id===id);await api('/api/task',{id:id,title:t.title,details:t.details,assigned_to:t.assigned_to,status:status});await load()} function renderUpdates(){let owner=STATE.user&&STATE.user.role==='owner',all=STATE.chadUpdates||[],open=all.filter(u=>u.status!=='completed').length;$('updateOwnerStatus').style.display=owner?'block':'none';$('updateQueueTitle').textContent=owner?'Requests from Jennifer & Cassie':'Team Requests & Discussion';$('updateQueueSummary').textContent=owner?`${open} open request${open===1?'':'s'} awaiting review or completion.`:'Ryan can review these requests, move approved work into implementation, and keep you updated here.';$('updateList').innerHTML=all.map(u=>{let comments=(u.comments||[]).map(c=>`<div class="comment"><b>${esc(c.user_name||'Team')}</b> · ${esc(c.created_at_human||'')}<br>${esc(c.body)}</div>`).join('');let canEdit=owner||u.created_by===STATE.user.id;let controls=(canEdit?`<button class="mini" onclick="editUpdate(${u.id})">Edit</button>`:'')+(owner?`<button class="mini" onclick="quickUpdate(${u.id},'considering')">Considering</button><button class="mini" onclick="createUpdateTask(${u.id})">Create Implementation Task</button><button class="mini" onclick="quickUpdate(${u.id},'completed')">Completed</button>`:'');return `<div class="updateItem"><span class="badge">${esc(u.status)}</span> <span class="badge">${esc(u.category)}</span><h3>${esc(u.title)}</h3><p>${esc(u.details)}</p><p class="muted">Requested by ${esc(u.created_by_name||'Team')} · Updated ${esc(u.updated_at_human||'')}</p>${controls}<div class="updateComments"><b>Discussion</b>${comments||'<p class="muted">No comments yet.</p>'}<div class="commentRow"><input id="comment-${u.id}" placeholder="Add context or build on this request"><button class="mini" onclick="addUpdateComment(${u.id})">Comment</button></div></div></div>`}).join('')||'<p class="muted">No team requests yet. Jennifer and Cassie can submit the first day-to-day improvement they need.</p>'} function clearUpdateForm(){['updateId','updateTitle','updateDetails'].forEach(id=>$(id).value='');$('updateCategory').value='Chad';$('updateStatus').value='new';$('updateSaveStatus').textContent=''} function editUpdate(id){let u=(STATE.chadUpdates||[]).find(x=>x.id===id);if(!u)return;$('updateId').value=u.id;$('updateTitle').value=u.title;$('updateDetails').value=u.details;$('updateCategory').value=u.category;$('updateStatus').value=u.status;openTab('updates')} async function saveUpdate(){try{await api('/api/chad-update',{id:$('updateId').value,title:$('updateTitle').value,details:$('updateDetails').value,category:$('updateCategory').value,status:$('updateStatus').value});clearUpdateForm();$('updateSaveStatus').textContent='Request saved for Ryan, the team, and Chad.';await load();openTab('updates')}catch(e){$('updateSaveStatus').textContent=e.message}} async function quickUpdate(id,status){let u=STATE.chadUpdates.find(x=>x.id===id);await api('/api/chad-update',{id:id,title:u.title,details:u.details,category:u.category,status:status});await load();openTab('updates')} async function createUpdateTask(id){try{await api('/api/chad-update-task',{update_id:id});await load();openTab('updates');$('updateSaveStatus').textContent='Implementation task created and assigned to Ryan.'}catch(e){$('updateSaveStatus').textContent=e.message}} async function addUpdateComment(id){let input=$('comment-'+id),body=input.value.trim();if(!body)return;await api('/api/chad-update-comment',{update_id:id,body:body});input.value='';await load();openTab('updates')} async function askBot(msg){$('botReply').textContent='Thinking...';let r=await api('/api/bot',{message:msg});$('botReply').textContent=r.reply;speak(r.reply)} function sendBot(){let m=$('botInput').value.trim();if(!m)return;askBot(m);$('botInput').value=''} function speak(text){if(!('speechSynthesis' in window))return;let u=new SpeechSynthesisUtterance(text);u.rate=.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(u)} function voiceAsk(){let SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$('voiceStatus').textContent='Voice input is not available in this browser. Use the text box.';return}let rec=new SR();rec.lang='en-US';rec.onstart=()=>$('voiceStatus').textContent='Listening...';rec.onerror=()=>$('voiceStatus').textContent='Voice input stopped.';rec.onresult=e=>{let text=e.results[0][0].transcript;$('botInput').value=text;askBot(text)};rec.start()} async function runScan(){let out=$('adminOut');if(out)out.textContent='Running live scan...';let r=await api('/api/run-scan',{});if(out)out.textContent=r.output;await load();openTab('radar')} async function sendInvite(){let status=$('inviteStatus');status.textContent='Sending secure invitation...';try{let r=await api('/api/invite',{user_id:$('inviteUser').value,email:$('inviteEmail').value});status.textContent=r.message;await load()}catch(e){status.textContent=e.message}} renderTabs();load();let initial=location.hash.slice(1);if(TABLIST.some(t=>t[0]===initial))openTab(initial);setInterval(load,6000);
 </script>
-<script>window.CHAD_CONFIG={apiBase:"",holdBriefingNavigation:true};</script>
+<script>window.CHAD_CONFIG={apiBase:"",holdBriefingNavigation:true,briefingKey:window.CHAD_BRIEFING_KEY};</script>
 <script src="/chad-widget.js"></script>
 <script>
 (function(){

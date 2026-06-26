@@ -153,7 +153,7 @@ init();
 const initialStudioTab=location.hash.slice(1);
 if(TABS.some(function(tab){return tab[0]===initialStudioTab}))showTab(initialStudioTab);
 </script>
-<script>window.CHAD_CONFIG={apiBase:""};</script>
+<script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);window.CHAD_CONFIG={apiBase:"",briefingKey:window.CHAD_BRIEFING_KEY};</script>
 <script src="/chad-widget.js"></script>
 <script src="/studio-live.js"></script>
 </body>

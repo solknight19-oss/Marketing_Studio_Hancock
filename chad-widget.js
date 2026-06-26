@@ -24,6 +24,9 @@
   var standby = false;
   var minimized = localStorage.getItem("chad_widget_minimized") === "1";
   var greeted = false;
+  function stateUrl() {
+    return API+"/api/state"+(CFG.briefingKey ? "?briefing="+encodeURIComponent(CFG.briefingKey) : "");
+  }
 
   /* ---------- styles ---------- */
   var css = ''
@@ -526,7 +529,7 @@
   }
   function loadBrief() {
     if (!USER) return;
-    fetch(API + "/api/state").then(function (r) { return r.json(); })
+    fetch(stateUrl()).then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.chadBriefing) {
           brief.style.display = "block";
@@ -594,7 +597,7 @@
     if (!USER) { showPicker(); return; }
     greeted = true; loadBrief();
     var hi = "Good to see you, " + USER + ". I am pulling your briefing.";
-    fetch(API + "/api/state").then(function (r) { return r.json(); })
+    fetch(stateUrl()).then(function (r) { return r.json(); })
       .then(function (d) {
         var message=d.welcome || hi;
         bubble(esc(message), "chad");
