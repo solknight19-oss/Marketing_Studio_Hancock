@@ -32,30 +32,53 @@ def human_rows(rows):
             f"- Requested by: {row.get('created_by_name') or 'Team'}",
             f"- Updated: {row.get('updated_at') or ''}",
             f"- Details: {row['details']}",
-            "",
         ])
+        comments = row.get("comments") or []
+        if comments:
+            lines.append("- Discussion:")
+            for comment in comments[-8:]:
+                lines.append(f"  - {comment.get('user_name') or 'Team'} ({comment.get('created_at') or ''}): {comment.get('body') or ''}")
+        lines.append("")
     return "\n".join(lines).strip() + "\n"
 
 
-def scan_local(limit):
+def scan_local(limit, db_override=""):
     data_dir = Path(os.environ.get("APP_DATA_DIR", str(ROOT / "app_data")))
-    db_path = Path(os.environ.get("STUDIO_DB", str(data_dir / "studio.db")))
+    db_path = Path(db_override or os.environ.get("STUDIO_DB", str(data_dir / "studio.db")))
     if not db_path.exists():
         return None
     con = sqlite3.connect(str(db_path))
     con.row_factory = sqlite3.Row
-    rows = [
-        dict(row)
-        for row in con.execute(
-            """select cu.*,u.name created_by_name
-               from chad_updates cu left join users u on u.id=cu.created_by
-               where cu.status!='completed'
-               order by case cu.status when 'new' then 0 when 'considering' then 1 when 'planned' then 2 else 3 end,
-               cu.updated_at desc limit ?""",
-            (limit,),
-        )
-    ]
+    try:
+        rows = [
+            dict(row)
+            for row in con.execute(
+                """select cu.*,u.name created_by_name
+                   from chad_updates cu left join users u on u.id=cu.created_by
+                   where cu.status!='completed'
+                   order by case cu.status when 'new' then 0 when 'considering' then 1 when 'planned' then 2 else 3 end,
+                   cu.updated_at desc limit ?""",
+                (limit,),
+            )
+        ]
+        comments = [
+            dict(row)
+            for row in con.execute(
+                """select cc.*,u.name user_name
+                   from chad_update_comments cc left join users u on u.id=cc.user_id
+                   where cc.update_id in (select id from chad_updates where status!='completed')
+                   order by cc.created_at asc,cc.id asc"""
+            )
+        ]
+    except sqlite3.OperationalError as exc:
+        con.close()
+        raise RuntimeError(f"{db_path} is not a Hancock Studio database: {exc}") from exc
     con.close()
+    comment_map = {}
+    for comment in comments:
+        comment_map.setdefault(comment["update_id"], []).append(comment)
+    for row in rows:
+        row["comments"] = comment_map.get(row["id"], [])
     return human_rows(rows)
 
 
@@ -86,6 +109,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pull open Chad Updates into a Codex-ready brief.")
     parser.add_argument("--live", action="store_true", help="Read from the live Render site instead of the local database.")
     parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--db", default="", help="Path to a local studio.db file.")
     parser.add_argument("--base-url", default=os.environ.get("STUDIO_BASE_URL", "https://hancock-live-marketing-studio.onrender.com"))
     parser.add_argument("--email", default=os.environ.get("STUDIO_EMAIL", "rknight@hancockclaims.com"))
     parser.add_argument("--password", default=os.environ.get("STUDIO_PASSWORD", ""))
@@ -94,7 +118,7 @@ def main():
         if args.live:
             text = scan_live(args.base_url, args.email, args.password, args.limit)
         else:
-            text = scan_local(args.limit)
+            text = scan_local(args.limit, args.db)
             if text is None:
                 text = scan_live(args.base_url, args.email, args.password, args.limit)
         sys.stdout.write(text)
