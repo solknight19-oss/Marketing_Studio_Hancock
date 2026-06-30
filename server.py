@@ -75,8 +75,108 @@ RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}
 CHAT_REQUEST_LOCK = threading.Lock()
-CHAD_AGENT_VERSION = '3.5'
+CHAD_AGENT_VERSION = '3.6'
 WEB_USER_AGENT = 'HancockChadResearch/1.0 (+https://hancockclaims.com/)'
+
+SEASONAL_TRIGGER_DEFINITIONS = [
+    {
+        'key':'atlantic_hurricane',
+        'name':'Atlantic Hurricane Season',
+        'start':'06-01',
+        'end':'11-30',
+        'prep_days':45,
+        'peak_start':'08-15',
+        'peak_end':'10-15',
+        'service_line':'Storm / CAT Damage',
+        'regions':'Gulf Coast, Atlantic Coast, Caribbean exposure, inland flood paths',
+        'source':'NOAA/NHC climatology and NOAA 2026 Atlantic Hurricane Season Outlook',
+        'source_url':'https://www.nhc.noaa.gov/climo/',
+        'outlook':'NOAA’s 2026 outlook favors a below-normal Atlantic season, but still forecasts 8-14 named storms, 3-6 hurricanes, and 1-3 major hurricanes. NOAA stresses that one landfalling storm can make a season severe for affected communities.',
+        'concepts':[
+            'Hurricane readiness: what property teams should document before a storm is named',
+            'Original photos before and after hurricane impact: why file defensibility starts pre-loss',
+            'Wind, water, and surge documentation: what not to assume after a storm',
+            'Carrier-ready communication during CAT response: nobody should wonder where the technician is',
+            'Things to Know before peak hurricane season: roof, exterior, interior, and contents documentation',
+        ],
+    },
+    {
+        'key':'spring_hail_wind',
+        'name':'Spring Hail and Wind Season',
+        'start':'03-01',
+        'end':'06-30',
+        'prep_days':30,
+        'peak_start':'04-01',
+        'peak_end':'06-15',
+        'service_line':'Storm / CAT Damage',
+        'regions':'Plains, Midwest, South, Ohio Valley',
+        'source':'Seasonal severe-convective-weather operating trigger',
+        'source_url':'',
+        'outlook':'Spring and early summer are recurring hail and wind claim periods. Treat signals as preparedness prompts until local alerts or verified storm reports support a specific market message.',
+        'concepts':[
+            'Hail documentation standards: test squares, soft metals, elevations, and slope-by-slope consistency',
+            'Why repairability must be tested, not assumed, after hail and wind events',
+            'How original image files reduce disputes when adjusters zoom into storm damage photos',
+        ],
+    },
+    {
+        'key':'wildfire_smoke',
+        'name':'Wildfire and Smoke Risk Season',
+        'start':'05-01',
+        'end':'09-30',
+        'prep_days':30,
+        'peak_start':'07-01',
+        'peak_end':'09-15',
+        'service_line':'Underwriting Inspection',
+        'regions':'West, Mountain states, drought-exposed regions, smoke-affected metros',
+        'source':'Seasonal underwriting and property-risk operating trigger',
+        'source_url':'',
+        'outlook':'Wildfire and smoke seasons create underwriting, pre-loss documentation, exterior condition, defensible-space, and post-event condition questions.',
+        'concepts':[
+            'Pre-loss exterior documentation before wildfire season: defensible space, roof condition, and hazards',
+            'Smoke and ash documentation: what inspection files should and should not conclude',
+            'Underwriting inspections as risk prevention: the cheapest claim is the one that never happens',
+        ],
+    },
+    {
+        'key':'winter_freeze',
+        'name':'Winter Freeze and Ice Season',
+        'start':'12-01',
+        'end':'03-15',
+        'prep_days':45,
+        'peak_start':'01-01',
+        'peak_end':'02-15',
+        'service_line':'Residential',
+        'regions':'Midwest, Northeast, Plains, elevated freeze-exposure markets',
+        'source':'Seasonal freeze, ice, and property-condition operating trigger',
+        'source_url':'',
+        'outlook':'Freeze and ice cycles create recurring interior water, roof, gutter, ice dam, and system-condition documentation needs.',
+        'concepts':[
+            'Freeze-season property documentation: interiors, moisture, systems, and room dimensions',
+            'Ice dam and roof-edge documentation: why narrative flow matters',
+            'What carriers need when winter losses involve interior water and exterior conditions',
+        ],
+    },
+    {
+        'key':'underwriting_planning',
+        'name':'Underwriting and Pre-Loss Planning Window',
+        'start':'01-01',
+        'end':'03-31',
+        'prep_days':30,
+        'peak_start':'01-15',
+        'peak_end':'03-15',
+        'service_line':'Underwriting Inspection',
+        'regions':'National',
+        'source':'Annual risk-prevention and renewal-planning operating trigger',
+        'source_url':'',
+        'outlook':'Early-year planning is a useful window to connect underwriting inspections, loss control, risk prevention, and property lifecycle management.',
+        'concepts':[
+            'Property lifecycle management: why inspections should begin before a loss',
+            'ION-style underwriting tiers: walkaround, roof and elevations, comprehensive inspection',
+            'Risk prevention content for carriers: predict losses, prevent losses, reduce severity',
+        ],
+    },
+]
 
 def now(): return dt.datetime.now().isoformat(timespec='seconds')
 def human_time(value):
@@ -597,6 +697,82 @@ def active_storm_alerts(feed=None):
         alert for alert in (storm.get('recommendations') or [])
         if future_timestamp(alert.get('expires'))
     ]
+
+def month_day_date(year, value):
+    month, day = [int(part) for part in value.split('-',1)]
+    return dt.date(year, month, day)
+
+def trigger_window_for_year(trigger, today):
+    start=month_day_date(today.year,trigger['start'])
+    end=month_day_date(today.year,trigger['end'])
+    if end < start:
+        if today <= end:
+            start=month_day_date(today.year-1,trigger['start'])
+        else:
+            end=month_day_date(today.year+1,trigger['end'])
+    peak_start=month_day_date(start.year if trigger.get('peak_start','12-31') >= trigger['start'] else end.year,trigger.get('peak_start',trigger['start']))
+    peak_end=month_day_date(peak_start.year,trigger.get('peak_end',trigger.get('peak_start',trigger['start'])))
+    if peak_end < peak_start:
+        peak_end=month_day_date(peak_start.year+1,trigger.get('peak_end',trigger.get('peak_start',trigger['start'])))
+    if today > end:
+        start=month_day_date(today.year+1,trigger['start'])
+        end=month_day_date(today.year+1,trigger['end'])
+        if end < start:
+            end=month_day_date(today.year+2,trigger['end'])
+        peak_start=month_day_date(start.year if trigger.get('peak_start','12-31') >= trigger['start'] else end.year,trigger.get('peak_start',trigger['start']))
+        peak_end=month_day_date(peak_start.year,trigger.get('peak_end',trigger.get('peak_start',trigger['start'])))
+    prep_start=start-dt.timedelta(days=int(trigger.get('prep_days') or 30))
+    return start,end,peak_start,peak_end,prep_start
+
+def seasonal_triggers(today=None):
+    today=today or dt.date.today()
+    items=[]
+    for trigger in SEASONAL_TRIGGER_DEFINITIONS:
+        start,end,peak_start,peak_end,prep_start=trigger_window_for_year(trigger,today)
+        if prep_start <= today < start:
+            phase='prep'
+            days_until=(start-today).days
+            urgency=80-min(days_until,45)
+            action=f"Start the prep content now. {trigger['name']} begins in {days_until} day{'s' if days_until != 1 else ''}."
+        elif start <= today <= end:
+            if peak_start <= today <= peak_end:
+                phase='peak'
+                days_until=0
+                urgency=95
+                action=f"This is the peak window for {trigger['name']}. Keep safety-first and documentation-first content moving."
+            elif today < peak_start:
+                phase='active'
+                days_until=(peak_start-today).days
+                urgency=88 if trigger.get('key')=='atlantic_hurricane' else 75
+                action=f"{trigger['name']} is active. Build education now before the peak window arrives in {days_until} day{'s' if days_until != 1 else ''}."
+            else:
+                phase='late'
+                days_until=(end-today).days
+                urgency=55
+                action=f"{trigger['name']} is in its late-season window. Focus on post-event documentation and lessons learned."
+        else:
+            phase='upcoming'
+            days_until=(prep_start-today).days
+            urgency=45 if days_until <= 45 else 25
+            action=f"Prep window opens in {max(days_until,0)} day{'s' if days_until != 1 else ''}."
+        lead_concept=trigger['concepts'][0] if trigger.get('concepts') else f"{trigger['name']} readiness"
+        items.append({
+            **trigger,
+            'phase':phase,
+            'start_date':start.isoformat(),
+            'end_date':end.isoformat(),
+            'peak_start':peak_start.isoformat(),
+            'peak_end':peak_end.isoformat(),
+            'prep_start':prep_start.isoformat(),
+            'days_until':days_until,
+            'urgency':urgency,
+            'recommendation':action,
+            'lead_concept':lead_concept,
+        })
+    phase_rank={'peak':0,'prep':1,'active':2,'late':3,'upcoming':4}
+    items.sort(key=lambda item:(phase_rank.get(item['phase'],9),-item['urgency'],abs(item.get('days_until') or 0)))
+    return items
+
 def collect_state():
     con=db()
     tasks=[dict(r) for r in con.execute('select * from tasks order by updated_at desc limit 30')]
@@ -607,7 +783,7 @@ def collect_state():
            left join users c on c.id=cc.created_by
            order by coalesce(cc.publish_at,cc.due_date,'9999-12-31'),cc.priority desc limit 200""")]
     activity=[dict(r) for r in con.execute('select a.*, u.name as user_name from activity a left join users u on u.id=a.user_id order by a.id desc limit 30')]
-    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'activity':activity,'botData':latest_bot_data()}
+    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'activity':activity,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers()}
 def bot_overview():
     feed=chad_feed()
     generated=feed.get('generatedAt') or ''
@@ -812,6 +988,11 @@ def chad_context(user):
         f"platforms {item.get('platforms') or 'not set'}"
         for item in state.get('calendar',[])[:16]
     ) or '- no forecasted content yet'
+    trigger_lines='\n'.join(
+        f"- {item['name']} [{item['phase']}] {item['recommendation']} Lead concept: {item['lead_concept']}. "
+        f"Source: {item.get('source') or 'internal seasonal trigger'}"
+        for item in state.get('seasonalTriggers',[])[:6]
+    ) or '- no seasonal triggers loaded'
     top=(state['botData'].get('stories') or [])[:4]
     signals='\n'.join(f"- {s.get('title')}: {s.get('angle')}" for s in top) or '- no scan yet'
     priority=(feed.get('mainSpeakingBot') or {}).get('priority','Run the bot council and pick one useful content opportunity.')
@@ -843,7 +1024,9 @@ Recent teammate conversations:
 Chad Updates requested by the team:
 {team_updates}
 Our Marketing Calendar:
-{calendar_lines}"""
+{calendar_lines}
+Seasonal Triggers:
+{trigger_lines}"""
 
 def codex_updates_payload(limit=50):
     con=db()
@@ -918,6 +1101,8 @@ You may receive a structured LIVE STUDIO PAGE CONTEXT captured from the user's c
 Our Marketing Calendar is the team's production operating system. Refer to it by that exact name. Your research and specialist bots are useful only when they help the team produce consistent, relevant content. Convert strong, timely signals into clear forecasted briefs with an owner, asset due date, publish date, platform plan, talking points, and CTA. Guide Jennifer and Cassie through what is due today, tomorrow, this week, and this month. Notice overdue or blocked work, recommend the next concrete action, and acknowledge completed production. Keep monthly themes focused across service lines and audiences. Never claim an item was produced or posted unless its calendar status proves it.
 
 Lead users to Our Marketing Calendar at purposeful handoff points: during the daily briefing when assigned work is overdue, due today, or coming next; after a strong research or storm signal has been turned into a production brief; when a user asks what to produce, what is due, what is ready, or what the monthly theme is; and after preparing content that now needs an owner or publish date. Explain why you are taking them there and identify the single item or decision that needs attention. Do not navigate there merely because the word "calendar" appears, and do not repeatedly interrupt an unrelated conversation. Research first when evidence is needed, prepare the work, then use the calendar to create accountability.
+
+Seasonal Triggers help the team think ahead. Use time-of-year windows such as hurricane season, spring hail and wind, wildfire/smoke risk, winter freeze, and underwriting planning to forecast content before the market is already reacting. Treat a trigger as a planning signal, not a claim that a storm will hit. Pair seasonal timing with current official sources, live radar, and Ryan's playbook. When a trigger is in prep, active, or peak phase, suggest "Things to Know" content, calendar briefs, customer education, carrier-facing explainers, and safety-first posts. If current weather or official outlook data is needed, research or scan before making specific claims.
 
 Your tools are intentionally bounded. You may inspect workspace status, navigate the Studio, create reviewable drafts and tasks, prepare a recommended draft, check specialist-bot status, and run a fresh bot scan when the user explicitly requests current scanning. You may not publish, send, delete, alter accounts, change permissions, or claim approval. Never pretend a tool ran. Use the returned result as the source of truth and tell the user when something failed.
 
@@ -1083,6 +1268,19 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
             'action_prompt':'turn the current search question into a Hancock answer',
             'ui_action':{'type':'tab','target':'seo'},
         })
+    trigger=next((item for item in seasonal_triggers() if item['phase'] in ('prep','active','peak','late')),None)
+    if trigger:
+        phase_word={'prep':'prep window','active':'active season','peak':'peak window','late':'late-season window'}.get(trigger['phase'],trigger['phase'])
+        candidates.append({
+            'theme':'seasonal',
+            'opening':'I am looking ahead at the calendar, not just today’s feed.',
+            'headline':f"{trigger['name']} is in its {phase_word}",
+            'situation':f"{trigger['recommendation']} The strongest seasonal angle is “{trigger['lead_concept']}.”",
+            'proposal':f"I can turn this into a “Things to Know” content brief for {trigger['service_line']}, tied to {trigger['regions']} and grounded in documentation, communication, and file defensibility.",
+            'action_label':'Build seasonal trigger',
+            'action_prompt':f"build a seasonal trigger content brief for {trigger['name']}",
+            'ui_action':{'type':'tab','target':'calendar'},
+        })
     lesson=pick(learned,53)
     if lesson:
         evidence_name=lesson.get('evidence_id') or 'retained evidence'
@@ -1144,6 +1342,8 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
             'ui_action':{'type':'tab','target':'storm'},
         }
         candidates.append(weather_candidate)
+    seasonal_candidate=next((candidate for candidate in candidates if candidate['theme']=='seasonal'),None)
+    seasonal_trigger=trigger if trigger and trigger.get('urgency',0) >= 85 else None
     briefing_key=str(user.get('briefing_key') or '').strip()
     cache_key=''
     cached_theme=''
@@ -1154,6 +1354,11 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
         cached_theme=setting_get(cache_key,'')
     if urgent_alerts:
         chosen=next((candidate for candidate in candidates if candidate['theme']=='weather'),None)
+    elif seasonal_trigger and seasonal_candidate and setting_get(last_theme_key,'')!='seasonal':
+        chosen=seasonal_candidate
+        if cache_key:
+            setting_set(cache_key,chosen['theme'])
+            setting_set(last_theme_key,chosen['theme'])
     elif cached_theme:
         chosen=next((candidate for candidate in candidates if candidate['theme']==cached_theme),None)
     else:
@@ -1220,6 +1425,8 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
     }
 def chad_ui_action(message):
     lower=message.lower()
+    if any(term in lower for term in ('seasonal trigger','content trigger','upcoming month','future content','time of year','things to know','hurricane season','peak season')):
+        return {'type':'tab','target':'calendar'}
     if any(term in lower for term in ('our marketing calendar','marketing calendar','content calendar','production calendar','posting schedule','what is due','due today','due this week','monthly theme','ready to post')):
         return {'type':'tab','target':'calendar'}
     if any(term in lower for term in ('chad update','feature request','studio suggestion','workflow improvement')):
@@ -1291,15 +1498,53 @@ Severe weather is affecting {state_text}. Safety comes first. When conditions al
 
 *Prepared by Chad for team review. Verify alert timing and affected areas before publishing.*"""
     else:
-        stories=state['botData'].get('stories') or []
-        story=stories[0] if stories else {}
-        title=f"What {story.get('title') or 'Today’s Property Trends'} Means for Property Inspection Teams"
-        line=story.get('line') or 'Property Inspection'
-        prompt=f"""Prepare a review-ready Hancock Claims Consultants article from this current signal: {story.get('title') or 'current property inspection trends'}.
+        trigger=next((item for item in seasonal_triggers() if item['phase'] in ('prep','active','peak','late')),None)
+        if trigger:
+            title=f"Things to Know: {trigger['name']} Property Readiness"
+            line=trigger.get('service_line') or 'Property Inspection'
+            concepts='\n'.join(f"- {concept}" for concept in trigger.get('concepts',[])[:5])
+            prompt=f"""Prepare a review-ready Hancock Claims Consultants seasonal trigger content package.
+Trigger: {trigger['name']}
+Phase: {trigger['phase']}
+Timing: starts {trigger['start_date']}, ends {trigger['end_date']}, peak window {trigger['peak_start']} to {trigger['peak_end']}
+Regions: {trigger['regions']}
+Official/source context: {trigger.get('outlook') or trigger.get('source')}
+Concept options:
+{concepts}
+
+Create a "Things to Know" blog post plus LinkedIn copy, a short website update, and three content calendar follow-up ideas. Keep it educational and safety-first. Tie it to Ryan Knight's playbook: communication, original photos, consistent documentation, file defensibility, and property lifecycle management. Do not claim a storm will hit or that Hancock has inspected any affected property."""
+            fallback=f"""# {title}
+
+## Why This Trigger Matters
+{trigger['recommendation']}
+
+{trigger.get('outlook') or 'This is a seasonal planning signal, not a prediction of a specific loss event.'}
+
+## Things to Know
+{concepts}
+
+## Hancock Perspective
+Seasonal readiness is really a documentation and communication issue. Clear pre-loss information, original photos, consistent reporting, and defensible files help carriers and property owners move faster when conditions change.
+
+## Suggested LinkedIn Copy
+{trigger['name']} is a good reminder to get ahead of property documentation. Safety comes first, but preparation also means knowing what to document, preserving original photos, and communicating clearly before the pressure of a claim.
+
+## Follow-Up Calendar Ideas
+- Pre-loss documentation checklist for {trigger['regions']}
+- What original photo files preserve that compressed images can lose
+- How property lifecycle management helps before, during, and after a loss
+
+*Prepared by Chad for team review. Verify current official weather and outlook data before publishing.*"""
+        else:
+            stories=state['botData'].get('stories') or []
+            story=stories[0] if stories else {}
+            title=f"What {story.get('title') or 'Today’s Property Trends'} Means for Property Inspection Teams"
+            line=story.get('line') or 'Property Inspection'
+            prompt=f"""Prepare a review-ready Hancock Claims Consultants article from this current signal: {story.get('title') or 'current property inspection trends'}.
 Source summary: {story.get('summary') or 'No source summary available.'}
 Hancock angle: {story.get('angle') or 'trust, communication, consistency, and defensible documentation'}.
 Include SEO title, meta description, direct answer, headings, FAQs, LinkedIn copy, and a review note. Label the source as an observed signal, not an established industry fact."""
-        fallback=f"""# {title}
+            fallback=f"""# {title}
 
 ## What We Are Watching
 {story.get('summary') or 'Property inspection teams continue to balance speed, communication, and documentation quality.'}
@@ -1336,6 +1581,9 @@ Treat this as an observed market signal. Verify the source, compare it with oper
     return {'id':draft_id,'title':title,'created':True}
 def bot_reply(user, message, state):
     lower=message.lower(); tasks=state['tasks']; bot_data=state['botData']; activity=state['activity']
+    if any(w in lower for w in ['seasonal','trigger','hurricane season','upcoming month','things to know','future content']):
+        trigger=seasonal_triggers()[0]
+        return f"{trigger['name']} is currently in {trigger['phase']} phase. {trigger['recommendation']} Start with: {trigger['lead_concept']}."
     if any(w in lower for w in ['cassie','jennifer','other','working']):
         recent=[a for a in activity if a.get('user_name') and a.get('user_name')!=user['name']]
         return 'Recent workspace activity: '+('; '.join(f"{a['user_name']} {a['action']} {a.get('meta') or ''}" for a in recent[:3]) if recent else 'No recent activity from the other user yet. Assign a task so the handoff is clear.')
@@ -1938,7 +2186,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 'service':'hancock-live-site',
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
-                    'tools':['studio_navigation','studio_page_awareness','adaptive_opening_briefings','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','voice_text_only_commands','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','team_log_update_capture','codex_update_handoff','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
+                    'tools':['studio_navigation','studio_page_awareness','adaptive_opening_briefings','seasonal_content_triggers','future_month_content_planning','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','voice_text_only_commands','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','team_log_update_capture','codex_update_handoff','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
                     'mind':{
                         'industry_foundation':PLAYBOOK.exists(),
                         'collaboration_playbook':COLLABORATION_PLAYBOOK.exists(),
@@ -2182,7 +2430,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         briefing_user=dict(user)
         if briefing_key:
             briefing_user['briefing_key']=briefing_key
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar)})
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar)})
     def api_codex_updates(self,user):
         if user['role']!='owner':
             self.send_json({'error':'Only Ryan can export the Codex update brief.'},403); return
