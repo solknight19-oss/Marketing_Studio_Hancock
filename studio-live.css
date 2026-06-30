@@ -1,6 +1,26 @@
 .serverTool{border:1px solid rgba(255,255,255,.24);background:rgba(4,23,46,.38);color:#fff;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:800;text-decoration:none;margin:0}
 .serverTool:hover{background:rgba(255,255,255,.14)}
 .rightTools form{margin:0}
+.studioBackdrop{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(520px 220px at 9% 18%,rgba(47,111,191,.13),transparent 66%),radial-gradient(520px 260px at 88% 8%,rgba(79,147,224,.12),transparent 68%)}
+.studioBackdrop:before{content:"";position:absolute;inset:-80px;background-image:linear-gradient(rgba(29,79,145,.055) 1px,transparent 1px),linear-gradient(90deg,rgba(29,79,145,.055) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(to bottom,black,transparent 82%);animation:gridDrift 26s linear infinite}
+.studioBackdrop:after{content:"";position:absolute;width:54vmin;height:54vmin;right:-20vmin;top:72px;border:1px solid rgba(47,111,191,.14);border-radius:999px;box-shadow:0 0 0 42px rgba(47,111,191,.045),0 0 0 86px rgba(47,111,191,.03);animation:radarPulse 5.5s ease-in-out infinite}
+.header{isolation:isolate}
+.header .top:after{content:"";position:absolute;right:7%;top:-70px;width:210px;height:210px;border-radius:999px;border:1px solid rgba(255,255,255,.13);box-shadow:0 0 0 30px rgba(255,255,255,.035),0 0 0 62px rgba(255,255,255,.022);animation:radarPulse 5s ease-in-out infinite;pointer-events:none}
+.liveTicker{position:relative;margin:14px 24px 0;border:1px solid rgba(255,255,255,.16);background:rgba(4,23,46,.42);border-radius:12px;color:#dbeafe;overflow:hidden}
+.liveTicker:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);transform:translateX(-100%);animation:sheen 7s linear infinite}
+.tickerTrack{display:flex;gap:10px;align-items:center;white-space:nowrap;overflow:hidden;padding:9px 12px;font-size:12px;font-weight:800}
+.tickerLabel{color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:4px 8px;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+.tickerItem{display:inline-flex;align-items:center;gap:7px;color:#dbeafe}
+.tickerItem:before{content:"";width:7px;height:7px;border-radius:999px;background:#69d391;box-shadow:0 0 0 4px rgba(105,211,145,.12)}
+.hero{position:relative;isolation:isolate}
+.hero>*{position:relative;z-index:1}
+.hero:after{content:"";position:absolute;right:-64px;bottom:-96px;width:240px;height:240px;border-radius:999px;background:conic-gradient(from 140deg,rgba(79,147,224,.38),rgba(255,255,255,.06),rgba(79,147,224,.22));opacity:.72;filter:blur(.2px);z-index:0;pointer-events:none;animation:slowSpin 18s linear infinite}
+.card,.panel,.calendarKpi,.libItem{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.card:hover,.panel:hover,.calendarKpi:hover,.libItem:hover{transform:translateY(-2px);border-color:#c9d9ec;box-shadow:0 14px 34px rgba(21,36,60,.09)}
+.chadPulseBar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 0}
+.chadPulsePill{display:inline-flex;align-items:center;gap:7px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.09);color:#eaf3ff;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:800}
+.chadPulsePill:before{content:"";width:8px;height:8px;border-radius:999px;background:#69d391;box-shadow:0 0 0 4px rgba(105,211,145,.16);animation:statusPulse 2s ease-in-out infinite}
+@keyframes gridDrift{from{transform:translate3d(0,0,0)}to{transform:translate3d(54px,54px,0)}}@keyframes radarPulse{0%,100%{transform:scale(.98);opacity:.72}50%{transform:scale(1.03);opacity:1}}@keyframes sheen{to{transform:translateX(100%)}}@keyframes slowSpin{to{transform:rotate(360deg)}}@keyframes statusPulse{0%,100%{opacity:.65;transform:scale(.92)}50%{opacity:1;transform:scale(1.08)}}
 #botCrew .card{min-height:150px}
 #chadStatus{max-width:760px}
 .calendarKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
@@ -28,3 +48,5 @@
 @media print{.header,.footer,#chadw,.calendarToolbar,.calendarEditor,.calendarActions{display:none!important}main{max-width:none;padding:0}.view{display:none!important}#calendar.view{display:block!important}.calendarMonth{break-inside:avoid}}
 @media(max-width:900px){.serverTool{flex:1;text-align:center}.rightTools form{display:flex;flex:1}.rightTools form .serverTool{width:100%}}
 @media(max-width:760px){.calendarKpis,.leadershipGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.calendarMonth{display:block}.calendarDow{display:none}.calendarDay{min-height:0;border-right:0}.calendarDay:empty{display:none}.calendarRow{grid-template-columns:1fr}.calendarActions{justify-content:flex-start}.calendarFormGrid{grid-template-columns:1fr}.calendarFormGrid .wide{grid-column:auto}#calendar .layout>div:last-child{order:1}.calendarEditor{order:2}}
+@media(max-width:760px){.liveTicker{margin:12px}.tickerTrack{overflow:auto}.header .top:after{display:none}.studioBackdrop:after{opacity:.35}.card:hover,.panel:hover,.calendarKpi:hover,.libItem:hover{transform:none}}
+@media(prefers-reduced-motion:reduce){.studioBackdrop:before,.studioBackdrop:after,.header .top:after,.liveTicker:before,.hero:after,.chadPulsePill:before{animation:none!important}.card,.panel,.calendarKpi,.libItem{transition:none}}

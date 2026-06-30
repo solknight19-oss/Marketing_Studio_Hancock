@@ -21,6 +21,7 @@
         mode.textContent=bots.ai?"Chad AI + bots live":"Bots online · AI unavailable";
         mode.className="mode"+(bots.ai?" live":"");
       }
+      renderAtmosphere();
       renderCrew();
       if(window.HancockCalendar)window.HancockCalendar.update(state);
     }catch(error){
@@ -42,6 +43,60 @@
     if(status){
       const doctrine=bots.doctrine&&bots.doctrine.loaded?"Ryan's Playbook foundation loaded":"Playbook unavailable";
       status.textContent=`${doctrine}. Chad retains traceable signals and emerging patterns. Last run: ${bots.last_run||"not run yet"}. Next scheduled run: ${bots.next_run||"pending"}.`;
+    }
+  }
+
+  function ensureAtmosphere(){
+    if(!document.querySelector(".studioBackdrop")){
+      const backdrop=document.createElement("div");
+      backdrop.className="studioBackdrop";
+      backdrop.setAttribute("aria-hidden","true");
+      document.body.prepend(backdrop);
+    }
+    const header=document.querySelector(".header");
+    if(header&&!document.getElementById("liveTicker")){
+      const ticker=document.createElement("div");
+      ticker.id="liveTicker";
+      ticker.className="liveTicker";
+      ticker.innerHTML='<div class="tickerTrack"><span class="tickerLabel">Live Intelligence</span><span class="tickerItem">Chad is syncing the workspace</span></div>';
+      const tabs=document.getElementById("tabs");
+      header.insertBefore(ticker,tabs||null);
+    }
+    const hero=document.querySelector("#radar .hero");
+    if(hero&&!document.getElementById("chadPulseBar")){
+      const pulse=document.createElement("div");
+      pulse.id="chadPulseBar";
+      pulse.className="chadPulseBar";
+      hero.querySelector("p")?.insertAdjacentElement("afterend",pulse);
+    }
+  }
+
+  function renderAtmosphere(){
+    ensureAtmosphere();
+    const trigger=(state.seasonalTriggers||[])[0];
+    const calendar=state.calendar||[];
+    const today=new Date().toISOString().slice(0,10);
+    const openCalendar=calendar.filter(item=>!["posted","archived"].includes(item.status)).length;
+    const dueToday=calendar.filter(item=>String(item.due_date||"").slice(0,10)===today&&!["posted","archived"].includes(item.status)).length;
+    const botStamp=state.botData&&state.botData.generatedHuman?state.botData.generatedHuman:"scan pending";
+    const ticker=q("liveTicker");
+    if(ticker){
+      const pieces=[
+        bots&&bots.ai?"Chad AI online":"Bots online",
+        trigger?`${trigger.name}: ${trigger.phase}`:"Seasonal triggers ready",
+        dueToday?`${dueToday} production item${dueToday===1?"":"s"} due today`:`${openCalendar} forecasted calendar item${openCalendar===1?"":"s"}`,
+        `Latest scan: ${botStamp}`
+      ];
+      ticker.innerHTML='<div class="tickerTrack"><span class="tickerLabel">Live Intelligence</span>'+pieces.map(piece=>`<span class="tickerItem">${escapeHtml(piece)}</span>`).join("")+'</div>';
+    }
+    const pulse=q("chadPulseBar");
+    if(pulse){
+      const items=[
+        "Scanning industry signals",
+        trigger?`Watching ${trigger.name}`:"Watching seasonal windows",
+        "Preparing content angles"
+      ];
+      pulse.innerHTML=items.map(item=>`<span class="chadPulsePill">${escapeHtml(item)}</span>`).join("");
     }
   }
 
