@@ -445,6 +445,9 @@ def fal_visual_prompt(target_keyword='', audience='', workflow_focus='', extra='
     prompt += '\n\nNegative prompt:\n' + FAL_NEGATIVE_PROMPT
     return prompt
 
+def fal_key_value():
+    return (FAL_KEY or setting_get('fal_key','')).strip()
+
 def extract_fal_image_urls(value):
     urls=[]
     def walk(node):
@@ -479,7 +482,8 @@ def fal_generate_visual(data):
         (data.get('workflow_focus') or '').strip()[:180],
         (data.get('extra') or '').strip()[:1200],
     )
-    if not FAL_KEY:
+    fal_key=fal_key_value()
+    if not fal_key:
         return {
             'ok':False,
             'configured':False,
@@ -505,7 +509,7 @@ def fal_generate_visual(data):
         FAL_RUN_BASE+'/'+FAL_IMAGE_MODEL.strip('/'),
         data=json.dumps(payload).encode('utf-8'),
         headers={
-            'Authorization':'Key '+FAL_KEY,
+            'Authorization':'Key '+fal_key,
             'Content-Type':'application/json',
             'Accept':'application/json',
         },
@@ -3072,6 +3076,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/dave-core-run': self.api_dave_core_run(user); return
         if path=='/api/vision': self.api_vision(user); return
         if path=='/api/fal-generate': self.api_fal_generate(user); return
+        if path=='/api/fal-key': self.api_fal_key(user); return
         if path=='/api/run-scan': self.api_run_scan(user); return
         if path=='/api/run-council': self.api_run_council(user); return
         if path=='/api/invite': self.api_invite(user); return
@@ -3656,13 +3661,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as exc:
             self.send_json({'error':str(exc)},502)
     def api_fal_status(self,user):
+        configured=bool(fal_key_value())
         self.send_json({
-            'configured':bool(FAL_KEY),
+            'configured':configured,
             'provider':'fal',
             'model':FAL_IMAGE_MODEL,
-            'status':'configured' if FAL_KEY else 'not_configured',
-            'message':'FAL is ready.' if FAL_KEY else 'Add FAL_KEY or FAL_API_KEY on the server to enable visual generation.',
+            'status':'configured' if configured else 'not_configured',
+            'message':'FAL is ready.' if configured else 'Add a FAL key to enable visual generation.',
         })
+    def api_fal_key(self,user):
+        if user['role']!='owner':
+            self.send_json({'error':'Only the Studio owner can update the FAL key.'},403); return
+        data=self.read_body(); key=(data.get('key') or '').strip()
+        if not re.match(r'^[A-Za-z0-9_-]{20,}:[A-Za-z0-9_-]{20,}$', key):
+            self.send_json({'error':'That does not look like a valid FAL key.'},400); return
+        setting_set('fal_key',key)
+        log_action(user['id'],'updated FAL key','FAL Visual Lab')
+        self.send_json({'ok':True,'configured':True,'message':'FAL key saved for the live Studio server.'})
     def api_fal_generate(self,user):
         if self.rate_limited('fal-generate',8,30):
             self.send_json({'error':'FAL generation limit reached. Try again later.'},429); return
