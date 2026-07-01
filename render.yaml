@@ -23,6 +23,16 @@ services:
         sync: false
       - key: ELEVENLABS_VOICE_ID
         value: cjVigY5qzO86Huf0OWal
+      - key: DAVE_ELEVENLABS_VOICE_ID
+        value: ""
+      - key: DAVE_ELEVENLABS_VOICE_NAME
+        value: Jarvis 1.1 Voice
+      - key: DAVE_ELEVENLABS_FALLBACK_VOICE_ID
+        value: 6Lopt6P83rUsEz3TeM5C
+      - key: DAVE_ELEVENLABS_FALLBACK_VOICE_NAME
+        value: Jarvis
+      - key: DAVE_ELEVENLABS_TTS_MODEL
+        value: eleven_multilingual_v2
       - key: BOT_SCAN_INTERVAL_HOURS
         value: 24
       - key: BASE_URL

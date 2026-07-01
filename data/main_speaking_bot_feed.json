@@ -1,23 +1,13 @@
 {
-  "generatedAt": "2026-06-23T20:49:56",
-  "generatedHuman": "Tuesday, June 23, 2026 at 08:49 PM",
+  "generatedAt": "2026-06-30T17:58:03",
+  "generatedHuman": "Tuesday, June 30, 2026 at 05:58 PM",
   "purpose": "Feedback feed for the Main Speaking Bot",
   "bots": [
     {
       "bot": "Industry Radar Bot",
       "status": "ready",
-      "summary": "4 live industry stories and 4 keyword clusters available.",
+      "summary": "2 live industry stories and 2 keyword clusters available.",
       "recommendations": [
-        {
-          "title": "The insurer that never sends an inspector",
-          "why_it_matters": "The insurer that never sends an inspector  Insurance Business",
-          "hancock_angle": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
-          "suggested_action": "Turn this into one practical Hancock post, then repurpose it into LinkedIn copy.",
-          "source": "Insurance Business",
-          "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQLVdlUU1LX1hQWkk3RkR3QzNJNVZYT3Nzb3I3ZmU2NkJ5ZUxSSWFwcDBWVURxdi1MZXdjLW5yeEYzY0ROTEdiQk9WSEgtRWNpOW5FTWoyX0t6NEpvdFR3ZmFGQ3ZVeVRIMjk3RVR4d3FHMDlIcy0tZnpaTmJDbHh2LTJZMkRhX3ZHbU0xY1JGeTBvUE5oTmFTVmFnRFVCVU8wQXpsZEY4NzQ5SEU?oc=5",
-          "service_line": "Carrier / Market",
-          "heat": "Trending"
-        },
         {
           "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
           "why_it_matters": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News",
@@ -26,27 +16,17 @@
           "source": "CBS News",
           "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5",
           "service_line": "Storm / CAT Damage",
-          "heat": "Hot"
+          "heat": "Rising"
         },
         {
-          "title": "Storm Damage Insurance: What qualifies for a claim",
-          "why_it_matters": "Storm Damage Insurance: What qualifies for a claim  Valley News Live",
+          "title": "What to do if You Got Hail Damage: Tips from Marshfield Insurance",
+          "why_it_matters": "What to do if You Got Hail Damage: Tips from Marshfield Insurance  onfocus.news",
           "hancock_angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
           "suggested_action": "Turn this into one practical Hancock post, then repurpose it into LinkedIn copy.",
-          "source": "Valley News Live",
-          "url": "https://news.google.com/rss/articles/CBMijwFBVV95cUxQeXBtU3lTSXo3eUwxTldyMnpnY0k3bE4tcjdNb2IyekVvdHRJRmNScTVtd1hBZ0RhS183bFl0eXVZQXRsaG5aWFZiOGFManRfV0cyeDJhcnZvUDkxTlNFODhLNUkxbl9zSi1lWE4zVXlIenZSTG9kVkN3b1IydGhUOTg3YXZSSlFWX2pfZ2NuUdIBowFBVV95cUxQd243WWdxQUtVWndpdlhTdDlWbFhULWNBWGpkakpsRHBlUDkyY1V3NWREMVpiaW5jVE9mZmxRQ28zSGpqb2VFNkYtcXBuYm95MVF0b2REczBXcXViYVFZVFl2N2wzS2RJRzNrQURNbWFUTF9mSzI5WHZJbkNHS2hPMTIxWDlSeENELTBpQWRMUmlhR1ZqZkpsc184LWRCWVUwUHgw?oc=5",
+          "source": "onfocus.news",
+          "url": "https://news.google.com/rss/articles/CBMilAFBVV95cUxQajU5dlQtUTFOcUFIRjlYZFdPZnJGbm4xbVRuakNIcnpaS1Awckxic2g4Xzk1RjRWU3gybHI0VUFyODRER2puU21SZlhrcjJabjQ1RUZCY3BGUWJIbldtV0FTbklYUzhhVXJpc3ctRDJscmlvdjR6VmdBcF92YlhCSTNOZWhISG5zaHJmNjJfZHJvOW56?oc=5",
           "service_line": "Storm / CAT Damage",
-          "heat": "Trending"
-        },
-        {
-          "title": "Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI",
-          "why_it_matters": "Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI  Fortune",
-          "hancock_angle": "Technology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.",
-          "suggested_action": "Turn this into one practical Hancock post, then repurpose it into LinkedIn copy.",
-          "source": "Fortune",
-          "url": "https://news.google.com/rss/articles/CBMiggFBVV95cUxQNHhiWFZIb3dSTWpMZ2RydU1RZTU2OWdoejZPWnc4Nm11SGRyTnNDX2ZySnZsVWc0ZThQNS00djlmYmJjOHotRl9XWDV2dGIwMktXSDBsX19tOEVING1wMTVidnNPX0RvNFl5NFhMRXpMUmpXeXpXdzBHUGFUa2NoQ2xB?oc=5",
-          "service_line": "Technology & Imagery",
-          "heat": "Trending"
+          "heat": "Rising"
         }
       ],
       "next_prompt_for_main_bot": "Lead with the strongest industry signal, ask the user to approve a content angle, then draft the post."
@@ -57,68 +37,68 @@
       "summary": "8 relevant active weather alerts found across watched states.",
       "recommendations": [
         {
-          "state": "IN",
+          "state": "KY",
           "event": "Flood Warning",
           "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:06PM EDT until June 24 at 2:00PM EDT by NWS Indianapolis IN",
-          "areas": "Daviess, IN; Greene, IN; Knox, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
+          "headline": "Flood Warning issued June 30 at 10:04AM CDT until July 1 at 6:15AM CDT by NWS Louisville KY",
+          "areas": "Ohio, KY",
+          "expires": "2026-07-01T06:15:00-05:00"
+        },
+        {
+          "state": "KY",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning issued June 30 at 10:04AM CDT until July 1 at 7:00AM CDT by NWS Louisville KY",
+          "areas": "Edmonson, KY",
+          "expires": "2026-07-01T07:00:00-05:00"
+        },
+        {
+          "state": "KY",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning issued June 30 at 10:04AM CDT until July 2 at 1:00PM CDT by NWS Louisville KY",
+          "areas": "Butler, KY; Warren, KY",
+          "expires": "2026-07-01T14:30:00-05:00"
+        },
+        {
+          "state": "KY",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning issued June 30 at 10:04AM CDT until July 3 at 1:00PM CDT by NWS Louisville KY",
+          "areas": "Butler, KY; Muhlenberg, KY; Ohio, KY",
+          "expires": "2026-07-01T14:30:00-05:00"
+        },
+        {
+          "state": "KY",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning issued June 30 at 8:47AM EDT until July 1 at 2:49PM EDT by NWS Louisville KY",
+          "areas": "Hardin, KY; Nelson, KY",
+          "expires": "2026-07-01T14:00:00-04:00"
         },
         {
           "state": "IN",
           "event": "Flood Warning",
           "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:06PM EDT until June 25 at 8:00PM EDT by NWS Indianapolis IN",
-          "areas": "Gibson, IN; Knox, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
-        },
-        {
-          "state": "IN",
-          "event": "Flood Warning",
-          "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:06PM EDT until June 26 at 6:00AM EDT by NWS Indianapolis IN",
+          "headline": "Flood Warning issued June 30 at 11:55AM EDT until July 1 at 5:45AM EDT by NWS Indianapolis IN",
           "areas": "Daviess, IN; Gibson, IN; Knox, IN; Pike, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
+          "expires": "2026-07-01T04:00:00-04:00"
         },
         {
           "state": "IN",
           "event": "Flood Warning",
           "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:02PM EDT until June 25 at 5:00AM EDT by NWS Indianapolis IN",
-          "areas": "Lawrence, IL; Wabash, IL; Knox, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
-        },
-        {
-          "state": "IN",
-          "event": "Flood Warning",
-          "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:02PM EDT until June 26 at 3:30AM EDT by NWS Indianapolis IN",
-          "areas": "Crawford, IL; Lawrence, IL; Knox, IN; Sullivan, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
-        },
-        {
-          "state": "IN",
-          "event": "Flood Warning",
-          "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:02PM EDT until June 26 at 7:00AM EDT by NWS Indianapolis IN",
-          "areas": "Crawford, IL; Lawrence, IL; Knox, IN; Sullivan, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
-        },
-        {
-          "state": "IN",
-          "event": "Flood Warning",
-          "severity": "Severe",
-          "headline": "Flood Warning issued June 23 at 12:02PM EDT until June 26 at 10:24PM EDT by NWS Indianapolis IN",
+          "headline": "Flood Warning issued June 30 at 11:55AM EDT until July 2 at 5:00AM EDT by NWS Indianapolis IN",
           "areas": "Edwards, IL; Gallatin, IL; Wabash, IL; White, IL; Gibson, IN; Knox, IN; Posey, IN",
-          "expires": "2026-06-24T03:15:00-04:00"
+          "expires": "2026-07-01T04:00:00-04:00"
         },
         {
-          "state": "MO",
-          "event": "Flash Flood Warning",
+          "state": "IN",
+          "event": "Flood Warning",
           "severity": "Severe",
-          "headline": "Flash Flood Warning issued June 23 at 5:25PM CDT until June 23 at 11:00PM CDT by NWS Springfield MO",
-          "areas": "Jasper, MO; Newton, MO",
-          "expires": "2026-06-23T23:00:00-05:00"
+          "headline": "Flood Warning issued June 30 at 11:55AM EDT until July 2 at 10:24PM EDT by NWS Indianapolis IN",
+          "areas": "Gibson, IN; Knox, IN",
+          "expires": "2026-07-01T04:00:00-04:00"
         }
       ],
       "next_prompt_for_main_bot": "If threat is active, recommend safety-first messaging only. After expiration, suggest post-storm documentation guidance.",
@@ -127,39 +107,23 @@
     {
       "bot": "Content Opportunity Bot",
       "status": "ready",
-      "summary": "4 content opportunities ready for drafting.",
+      "summary": "2 content opportunities ready for drafting.",
       "recommendations": [
-        {
-          "content_type": "Blog Post + LinkedIn Repurpose",
-          "working_title": "What The insurer that never sends an inspector Means for Property Inspection Teams",
-          "service_line": "Carrier / Market",
-          "angle": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
-          "cta": "Talk with Hancock about consistent, defensible property inspection support.",
-          "priority": "Trending"
-        },
         {
           "content_type": "Blog Post + LinkedIn Repurpose",
           "working_title": "What Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks Means for Property Inspection Teams",
           "service_line": "Storm / CAT Damage",
           "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
           "cta": "Talk with Hancock about consistent, defensible property inspection support.",
-          "priority": "Hot"
+          "priority": "Rising"
         },
         {
           "content_type": "Blog Post + LinkedIn Repurpose",
-          "working_title": "What Storm Damage Insurance: What qualifies for a claim Means for Property Inspection Teams",
+          "working_title": "What What to do if You Got Hail Damage: Tips from Marshfield Insurance Means for Property Inspection Teams",
           "service_line": "Storm / CAT Damage",
           "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
           "cta": "Talk with Hancock about consistent, defensible property inspection support.",
-          "priority": "Trending"
-        },
-        {
-          "content_type": "Blog Post + LinkedIn Repurpose",
-          "working_title": "What Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI Means for Property Inspection Teams",
-          "service_line": "Technology & Imagery",
-          "angle": "Technology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.",
-          "cta": "Talk with Hancock about consistent, defensible property inspection support.",
-          "priority": "Trending"
+          "priority": "Rising"
         }
       ],
       "next_prompt_for_main_bot": "Ask which opportunity to draft, then collect or infer the Hancock angle and create the first draft."
@@ -167,23 +131,8 @@
     {
       "bot": "SEO/AEO Bot",
       "status": "ready",
-      "summary": "25 keyword signals prepared for answer-engine content.",
+      "summary": "14 keyword signals prepared for answer-engine content.",
       "recommendations": [
-        {
-          "keyword": "insurer never",
-          "faq": "What should carriers know about insurer never?",
-          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
-        },
-        {
-          "keyword": "never sends",
-          "faq": "What should carriers know about never sends?",
-          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
-        },
-        {
-          "keyword": "sends inspector",
-          "faq": "What should carriers know about sends inspector?",
-          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
-        },
         {
           "keyword": "hail regularly",
           "faq": "What should carriers know about hail regularly?",
@@ -208,6 +157,21 @@
           "keyword": "coverage quietly",
           "faq": "What should carriers know about coverage quietly?",
           "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
+        },
+        {
+          "keyword": "quietly shrinks",
+          "faq": "What should carriers know about quietly shrinks?",
+          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
+        },
+        {
+          "keyword": "got hail",
+          "faq": "What should carriers know about got hail?",
+          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
+        },
+        {
+          "keyword": "hail damage",
+          "faq": "What should carriers know about hail damage?",
+          "answer_direction": "Answer directly in 2-3 sentences, then tie back to communication, documentation, and file defensibility."
         }
       ],
       "next_prompt_for_main_bot": "When drafting, include a short answer block, FAQ, meta title, meta description, and a Hancock CTA."
@@ -230,11 +194,12 @@
     "source": "Ryan_Knight_Inspection_Industry_Playbook.md",
     "loaded": true,
     "authority": "Ryan Knight's Inspection Industry Playbook",
-    "rule": "When public trends conflict with the Playbook, the Playbook wins."
+    "role": "Foundational operating model",
+    "rule": "New learning must be traceable, current, relevant, and clearly labeled by confidence."
   },
   "rawLatestScan": {
-    "generatedHuman": "Tuesday, June 23, 2026 at 08:49 PM",
-    "storyCount": 4,
-    "clusterCount": 4
+    "generatedHuman": "Tuesday, June 30, 2026 at 05:57 PM",
+    "storyCount": 2,
+    "clusterCount": 2
   }
 }

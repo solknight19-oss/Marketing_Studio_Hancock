@@ -1,0 +1,156 @@
+{
+  "generatedAt": "2026-06-23T20:49:50",
+  "generatedHuman": "Tuesday, June 23, 2026 at 08:49 PM",
+  "source": "Google News RSS + Hancock Marketing Bot",
+  "stories": [
+    {
+      "title": "The insurer that never sends an inspector",
+      "tag": "Trending",
+      "summary": "The insurer that never sends an inspector  Insurance Business",
+      "angle": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
+      "keywords": [
+        "insurer",
+        "never",
+        "sends",
+        "inspector",
+        "insurer"
+      ],
+      "source": "Insurance Business",
+      "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQLVdlUU1LX1hQWkk3RkR3QzNJNVZYT3Nzb3I3ZmU2NkJ5ZUxSSWFwcDBWVURxdi1MZXdjLW5yeEYzY0ROTEdiQk9WSEgtRWNpOW5FTWoyX0t6NEpvdFR3ZmFGQ3ZVeVRIMjk3RVR4d3FHMDlIcy0tZnpaTmJDbHh2LTJZMkRhX3ZHbU0xY1JGeTBvUE5oTmFTVmFnRFVCVU8wQXpsZEY4NzQ5SEU?oc=5",
+      "date": "Jun 08, 2026",
+      "line": "Carrier / Market"
+    },
+    {
+      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
+      "tag": "Hot",
+      "summary": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News",
+      "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
+      "keywords": [
+        "hail",
+        "regularly",
+        "hitting",
+        "roof",
+        "coverage"
+      ],
+      "source": "CBS News",
+      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5",
+      "date": "Jun 22, 2026",
+      "line": "Storm / CAT Damage"
+    },
+    {
+      "title": "Storm Damage Insurance: What qualifies for a claim",
+      "tag": "Trending",
+      "summary": "Storm Damage Insurance: What qualifies for a claim  Valley News Live",
+      "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
+      "keywords": [
+        "storm",
+        "damage",
+        "qualifies",
+        "storm",
+        "damage"
+      ],
+      "source": "Valley News Live",
+      "url": "https://news.google.com/rss/articles/CBMijwFBVV95cUxQeXBtU3lTSXo3eUwxTldyMnpnY0k3bE4tcjdNb2IyekVvdHRJRmNScTVtd1hBZ0RhS183bFl0eXVZQXRsaG5aWFZiOGFManRfV0cyeDJhcnZvUDkxTlNFODhLNUkxbl9zSi1lWE4zVXlIenZSTG9kVkN3b1IydGhUOTg3YXZSSlFWX2pfZ2NuUdIBowFBVV95cUxQd243WWdxQUtVWndpdlhTdDlWbFhULWNBWGpkakpsRHBlUDkyY1V3NWREMVpiaW5jVE9mZmxRQ28zSGpqb2VFNkYtcXBuYm95MVF0b2REczBXcXViYVFZVFl2N2wzS2RJRzNrQURNbWFUTF9mSzI5WHZJbkNHS2hPMTIxWDlSeENELTBpQWRMUmlhR1ZqZkpsc184LWRCWVUwUHgw?oc=5",
+      "date": "Jun 03, 2026",
+      "line": "Storm / CAT Damage"
+    },
+    {
+      "title": "Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI",
+      "tag": "Trending",
+      "summary": "Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI  Fortune",
+      "angle": "Technology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.",
+      "keywords": [
+        "exclusive",
+        "investors",
+        "bet",
+        "million",
+        "honeycomb"
+      ],
+      "source": "Fortune",
+      "url": "https://news.google.com/rss/articles/CBMiggFBVV95cUxQNHhiWFZIb3dSTWpMZ2RydU1RZTU2OWdoejZPWnc4Nm11SGRyTnNDX2ZySnZsVWc0ZThQNS00djlmYmJjOHotRl9XWDV2dGIwMktXSDBsX19tOEVING1wMTVidnNPX0RvNFl5NFhMRXpMUmpXeXpXdzBHUGFUa2NoQ2xB?oc=5",
+      "date": "Jun 04, 2026",
+      "line": "Technology & Imagery"
+    }
+  ],
+  "clusters": [
+    {
+      "category": "Trending Keywords",
+      "keywords": [
+        "insurer never",
+        "never sends",
+        "sends inspector",
+        "hail regularly",
+        "regularly hitting",
+        "hitting roof",
+        "roof coverage",
+        "coverage quietly"
+      ]
+    },
+    {
+      "category": "Carrier / Market",
+      "keywords": [
+        "insurer",
+        "never",
+        "sends",
+        "inspector",
+        "business"
+      ]
+    },
+    {
+      "category": "Storm / CAT Damage",
+      "keywords": [
+        "hail",
+        "regularly",
+        "hitting",
+        "roof",
+        "coverage",
+        "quietly"
+      ]
+    },
+    {
+      "category": "Technology & Imagery",
+      "keywords": [
+        "exclusive",
+        "investors",
+        "bet",
+        "million",
+        "honeycomb",
+        "no-inspection"
+      ]
+    }
+  ],
+  "library": [
+    {
+      "title": "The insurer that never sends an inspector",
+      "type": "Bot Stub",
+      "body": "# The insurer that never sends an inspector\n\nThe insurer that never sends an inspector  Insurance Business\n\n## Hancock angle\nRelate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
+      "date": "Jun 23, 2026 08:49 PM",
+      "source": "Insurance Business",
+      "url": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxQLVdlUU1LX1hQWkk3RkR3QzNJNVZYT3Nzb3I3ZmU2NkJ5ZUxSSWFwcDBWVURxdi1MZXdjLW5yeEYzY0ROTEdiQk9WSEgtRWNpOW5FTWoyX0t6NEpvdFR3ZmFGQ3ZVeVRIMjk3RVR4d3FHMDlIcy0tZnpaTmJDbHh2LTJZMkRhX3ZHbU0xY1JGeTBvUE5oTmFTVmFnRFVCVU8wQXpsZEY4NzQ5SEU?oc=5"
+    },
+    {
+      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
+      "type": "Bot Stub",
+      "body": "# Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks\n\nHail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News\n\n## Hancock angle\nConnect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
+      "date": "Jun 23, 2026 08:49 PM",
+      "source": "CBS News",
+      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5"
+    },
+    {
+      "title": "Storm Damage Insurance: What qualifies for a claim",
+      "type": "Bot Stub",
+      "body": "# Storm Damage Insurance: What qualifies for a claim\n\nStorm Damage Insurance: What qualifies for a claim  Valley News Live\n\n## Hancock angle\nConnect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
+      "date": "Jun 23, 2026 08:49 PM",
+      "source": "Valley News Live",
+      "url": "https://news.google.com/rss/articles/CBMijwFBVV95cUxQeXBtU3lTSXo3eUwxTldyMnpnY0k3bE4tcjdNb2IyekVvdHRJRmNScTVtd1hBZ0RhS183bFl0eXVZQXRsaG5aWFZiOGFManRfV0cyeDJhcnZvUDkxTlNFODhLNUkxbl9zSi1lWE4zVXlIenZSTG9kVkN3b1IydGhUOTg3YXZSSlFWX2pfZ2NuUdIBowFBVV95cUxQd243WWdxQUtVWndpdlhTdDlWbFhULWNBWGpkakpsRHBlUDkyY1V3NWREMVpiaW5jVE9mZmxRQ28zSGpqb2VFNkYtcXBuYm95MVF0b2REczBXcXViYVFZVFl2N2wzS2RJRzNrQURNbWFUTF9mSzI5WHZJbkNHS2hPMTIxWDlSeENELTBpQWRMUmlhR1ZqZkpsc184LWRCWVUwUHgw?oc=5"
+    },
+    {
+      "title": "Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI",
+      "type": "Bot Stub",
+      "body": "# Exclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI\n\nExclusive: Investors bet $40 million on Honeycomb’s no-inspection landlord insurance AI  Fortune\n\n## Hancock angle\nTechnology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
+      "date": "Jun 23, 2026 08:49 PM",
+      "source": "Fortune",
+      "url": "https://news.google.com/rss/articles/CBMiggFBVV95cUxQNHhiWFZIb3dSTWpMZ2RydU1RZTU2OWdoejZPWnc4Nm11SGRyTnNDX2ZySnZsVWc0ZThQNS00djlmYmJjOHotRl9XWDV2dGIwMktXSDBsX19tOEVING1wMTVidnNPX0RvNFl5NFhMRXpMUmpXeXpXdzBHUGFUa2NoQ2xB?oc=5"
+    }
+  ]
+}

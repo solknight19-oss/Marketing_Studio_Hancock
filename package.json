@@ -1,0 +1,14 @@
+{
+  "name": "dave-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dave desktop command cockpit for Hancock Live Site.",
+  "main": "dave-desktop/main.js",
+  "scripts": {
+    "dave": "electron .",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

@@ -11,6 +11,7 @@ import ipaddress
 import os
 import re
 import secrets
+import signal
 import socket
 import sqlite3
 import subprocess
@@ -23,12 +24,16 @@ import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
 
+if hasattr(signal, 'SIGHUP'):
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+
 ROOT = Path(__file__).resolve().parent
 APP = Path(os.environ.get('APP_DATA_DIR', str(ROOT / 'app_data')))
 APP.mkdir(parents=True, exist_ok=True)
 DB = APP / 'studio.db'
 SECRET_FILE = APP / '.session_secret'
 INITIAL_LOGINS = APP / 'INITIAL_LOGINS.md'
+DAVE_DESKTOP_TOKEN_FILE = APP / '.dave_desktop_token'
 PLAYBOOK = ROOT / 'Ryan_Knight_Inspection_Industry_Playbook.md'
 COLLABORATION_PLAYBOOK = ROOT / 'Chad_Collaboration_Playbook.md'
 SESSION_DAYS = 7
@@ -42,11 +47,48 @@ RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '').strip()
 EMAIL_FROM = os.environ.get('EMAIL_FROM', 'Hancock Marketing Studio <studio@hancockclaims.com>').strip()
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
+OPENAI_TRANSCRIBE_MODEL = os.environ.get('OPENAI_TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2').strip()
+ELEVENLABS_STT_MODEL = os.environ.get('ELEVENLABS_STT_MODEL', 'scribe_v2').strip()
 ELEVENLABS_OUTPUT_FORMAT = os.environ.get('ELEVENLABS_OUTPUT_FORMAT', 'mp3_44100_128').strip()
+DAVE_ELEVENLABS_PREFERRED_VOICE_NAME = os.environ.get('DAVE_ELEVENLABS_VOICE_NAME', 'Jarvis 1.1 Voice').strip() or 'Jarvis 1.1 Voice'
+DAVE_ELEVENLABS_FALLBACK_VOICE_ID = os.environ.get('DAVE_ELEVENLABS_FALLBACK_VOICE_ID', '6Lopt6P83rUsEz3TeM5C').strip()
+DAVE_ELEVENLABS_FALLBACK_VOICE_NAME = os.environ.get('DAVE_ELEVENLABS_FALLBACK_VOICE_NAME', 'Jarvis').strip() or 'Jarvis'
+DAVE_ELEVENLABS_VOICE_ID = os.environ.get('DAVE_ELEVENLABS_VOICE_ID', '').strip()
+DAVE_ELEVENLABS_VOICE_NAME = DAVE_ELEVENLABS_PREFERRED_VOICE_NAME
+DAVE_ELEVENLABS_VOICE_SOURCE = 'configured_id' if DAVE_ELEVENLABS_VOICE_ID else 'not_resolved'
+DAVE_ELEVENLABS_TTS_MODEL = os.environ.get('DAVE_ELEVENLABS_TTS_MODEL', ELEVENLABS_TTS_MODEL).strip()
 BOT_SCAN_INTERVAL_HOURS = max(1, int(os.environ.get('BOT_SCAN_INTERVAL_HOURS', '24')))
+DAVE_CORE_INTERVAL_MINUTES = max(5, int(os.environ.get('DAVE_CORE_INTERVAL_MINUTES', '15')))
+
+def elevenlabs_voice_id_by_name(name):
+    if not ELEVENLABS_API_KEY or not name:
+        return ''
+    req = urllib.request.Request(
+        'https://api.elevenlabs.io/v2/voices',
+        headers={'xi-api-key': ELEVENLABS_API_KEY},
+    )
+    with urllib.request.urlopen(req, timeout=6) as response:
+        data = json.loads(response.read().decode('utf-8'))
+    for voice in data.get('voices', []):
+        if (voice.get('name') or '').strip().lower() == name.strip().lower():
+            return (voice.get('voice_id') or '').strip()
+    return ''
+
+if not DAVE_ELEVENLABS_VOICE_ID:
+    try:
+        DAVE_ELEVENLABS_VOICE_ID = elevenlabs_voice_id_by_name(DAVE_ELEVENLABS_PREFERRED_VOICE_NAME)
+        if DAVE_ELEVENLABS_VOICE_ID:
+            DAVE_ELEVENLABS_VOICE_SOURCE = 'resolved_by_name'
+    except Exception:
+        DAVE_ELEVENLABS_VOICE_SOURCE = 'resolve_failed'
+if not DAVE_ELEVENLABS_VOICE_ID and DAVE_ELEVENLABS_FALLBACK_VOICE_ID:
+    DAVE_ELEVENLABS_VOICE_ID = DAVE_ELEVENLABS_FALLBACK_VOICE_ID
+    DAVE_ELEVENLABS_VOICE_NAME = DAVE_ELEVENLABS_FALLBACK_VOICE_NAME
+    DAVE_ELEVENLABS_VOICE_SOURCE = 'fallback_until_preferred_available'
 VOICE_HEALTH = {
     'configured': bool(ELEVENLABS_API_KEY),
     'voice': 'Eric',
@@ -54,6 +96,25 @@ VOICE_HEALTH = {
     'model': ELEVENLABS_TTS_MODEL,
     'output_format': ELEVENLABS_OUTPUT_FORMAT,
     'status': 'configured' if ELEVENLABS_API_KEY else 'not_configured',
+}
+DAVE_VOICE_HEALTH = {
+    'configured': bool(ELEVENLABS_API_KEY and DAVE_ELEVENLABS_VOICE_ID),
+    'persona': 'Dave',
+    'voice': DAVE_ELEVENLABS_VOICE_NAME,
+    'preferred_voice': DAVE_ELEVENLABS_PREFERRED_VOICE_NAME,
+    'voice_id': DAVE_ELEVENLABS_VOICE_ID,
+    'voice_source': DAVE_ELEVENLABS_VOICE_SOURCE,
+    'model': DAVE_ELEVENLABS_TTS_MODEL,
+    'output_format': ELEVENLABS_OUTPUT_FORMAT,
+    'fallback': 'system_or_browser_voice',
+    'status': 'configured' if ELEVENLABS_API_KEY and DAVE_ELEVENLABS_VOICE_ID and DAVE_ELEVENLABS_VOICE_NAME == DAVE_ELEVENLABS_PREFERRED_VOICE_NAME else ('fallback_preferred_not_found' if ELEVENLABS_API_KEY and DAVE_ELEVENLABS_VOICE_ID else 'not_configured'),
+}
+DAVE_STT_HEALTH = {
+    'configured': bool(ELEVENLABS_API_KEY or OPENAI_API_KEY),
+    'provider': 'elevenlabs' if ELEVENLABS_API_KEY else 'openai',
+    'model': ELEVENLABS_STT_MODEL if ELEVENLABS_API_KEY else OPENAI_TRANSCRIBE_MODEL,
+    'mode': 'native_recorder',
+    'status': 'configured' if (ELEVENLABS_API_KEY or OPENAI_API_KEY) else 'not_configured',
 }
 AI_HEALTH = {
     'configured': bool(ANTHROPIC_API_KEY),
@@ -197,6 +258,15 @@ def unsign(value):
     except ValueError: return ''
     good = hmac.new(secret(), raw.encode(), hashlib.sha256).hexdigest()
     return raw if hmac.compare_digest(sig, good) else ''
+def dave_desktop_token():
+    env_token = os.environ.get('DAVE_DESKTOP_TOKEN', '').strip()
+    if env_token:
+        return env_token
+    if not DAVE_DESKTOP_TOKEN_FILE.exists():
+        DAVE_DESKTOP_TOKEN_FILE.write_text(secrets.token_urlsafe(36), encoding='utf-8')
+        try: DAVE_DESKTOP_TOKEN_FILE.chmod(0o600)
+        except Exception: pass
+    return DAVE_DESKTOP_TOKEN_FILE.read_text(encoding='utf-8').strip()
 def password_hash(password, salt=None):
     salt = salt or secrets.token_hex(16)
     iterations = 310000
@@ -332,16 +402,20 @@ def anthropic_vision(prompt, image_data_url):
     except urllib.error.HTTPError as exc:
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'Photo review was rejected: {detail}') from exc
-def elevenlabs_audio(text):
+def elevenlabs_audio(text, voice_id=None, model_id=None):
     if not ELEVENLABS_API_KEY:
         raise RuntimeError('Voice is not configured on the server.')
+    voice_id = (voice_id or ELEVENLABS_VOICE_ID).strip()
+    model_id = (model_id or ELEVENLABS_TTS_MODEL).strip()
+    if not voice_id:
+        raise RuntimeError('Voice ID is not configured on the server.')
     payload=json.dumps({
         'text':text[:4000],
-        'model_id':ELEVENLABS_TTS_MODEL,
+        'model_id':model_id,
         'voice_settings':{'stability':0.4,'similarity_boost':0.8,'style':0.3,'use_speaker_boost':True},
     }).encode()
     request=urllib.request.Request(
-        f'https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}?output_format={urllib.parse.quote(ELEVENLABS_OUTPUT_FORMAT)}',
+        f'https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={urllib.parse.quote(ELEVENLABS_OUTPUT_FORMAT)}',
         data=payload,
         headers={'xi-api-key':ELEVENLABS_API_KEY,'Accept':'audio/mpeg','Content-Type':'application/json'},
         method='POST',
@@ -352,9 +426,114 @@ def elevenlabs_audio(text):
     except urllib.error.HTTPError as exc:
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'ElevenLabs rejected the request: {detail}') from exc
+def openai_transcribe_audio(audio_bytes, filename='dave-turn.webm', mime_type='audio/webm'):
+    if not OPENAI_API_KEY:
+        raise RuntimeError('Dave native voice needs OPENAI_API_KEY or ../Hancock_CoPilot/openai_key.txt for transcription.')
+    if not audio_bytes:
+        raise RuntimeError('No audio was captured.')
+    boundary='----DaveAudioBoundary'+secrets.token_hex(12)
+    fields=[
+        ('model',OPENAI_TRANSCRIBE_MODEL),
+        ('response_format','json'),
+    ]
+    body=bytearray()
+    for name,value in fields:
+        body.extend(f'--{boundary}\r\n'.encode())
+        body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
+        body.extend(str(value).encode())
+        body.extend(b'\r\n')
+    safe_filename=re.sub(r'[^A-Za-z0-9_.-]+','_',filename or 'dave-turn.webm')[:80]
+    body.extend(f'--{boundary}\r\n'.encode())
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="{safe_filename}"\r\n'.encode())
+    body.extend(f'Content-Type: {mime_type or "application/octet-stream"}\r\n\r\n'.encode())
+    body.extend(audio_bytes)
+    body.extend(b'\r\n')
+    body.extend(f'--{boundary}--\r\n'.encode())
+    request=urllib.request.Request(
+        'https://api.openai.com/v1/audio/transcriptions',
+        data=bytes(body),
+        headers={
+            'Authorization':f'Bearer {OPENAI_API_KEY}',
+            'Content-Type':f'multipart/form-data; boundary={boundary}',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request,timeout=45) as response:
+            data=json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        detail=exc.read().decode(errors='replace')[:700]
+        raise RuntimeError(f'Transcription failed: {detail}') from exc
+    return (data.get('text') or '').strip()
+def elevenlabs_transcribe_audio(audio_bytes, filename='dave-turn.webm', mime_type='audio/webm'):
+    if not ELEVENLABS_API_KEY:
+        raise RuntimeError('ElevenLabs speech-to-text is not configured.')
+    if not audio_bytes:
+        raise RuntimeError('No audio was captured.')
+    boundary='----DaveScribeBoundary'+secrets.token_hex(12)
+    body=bytearray()
+    body.extend(f'--{boundary}\r\n'.encode())
+    body.extend(b'Content-Disposition: form-data; name="model_id"\r\n\r\n')
+    body.extend(ELEVENLABS_STT_MODEL.encode())
+    body.extend(b'\r\n')
+    safe_filename=re.sub(r'[^A-Za-z0-9_.-]+','_',filename or 'dave-turn.webm')[:80]
+    body.extend(f'--{boundary}\r\n'.encode())
+    body.extend(f'Content-Disposition: form-data; name="file"; filename="{safe_filename}"\r\n'.encode())
+    body.extend(f'Content-Type: {mime_type or "application/octet-stream"}\r\n\r\n'.encode())
+    body.extend(audio_bytes)
+    body.extend(b'\r\n')
+    body.extend(f'--{boundary}--\r\n'.encode())
+    request=urllib.request.Request(
+        'https://api.elevenlabs.io/v1/speech-to-text',
+        data=bytes(body),
+        headers={
+            'xi-api-key':ELEVENLABS_API_KEY,
+            'Content-Type':f'multipart/form-data; boundary={boundary}',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request,timeout=45) as response:
+            data=json.loads(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as exc:
+        detail=exc.read().decode(errors='replace')[:700]
+        raise RuntimeError(f'ElevenLabs transcription failed: {detail}') from exc
+    return (data.get('text') or '').strip()
+def dave_transcribe_audio(audio_bytes, filename='dave-turn.webm', mime_type='audio/webm'):
+    errors=[]
+    if ELEVENLABS_API_KEY:
+        try:
+            text=elevenlabs_transcribe_audio(audio_bytes,filename,mime_type)
+            DAVE_STT_HEALTH.update({'provider':'elevenlabs','model':ELEVENLABS_STT_MODEL,'fallback_provider':''})
+            return text
+        except Exception as exc:
+            errors.append(str(exc))
+            DAVE_STT_HEALTH.update({
+                'provider':'elevenlabs',
+                'model':ELEVENLABS_STT_MODEL,
+                'status':'fallback_to_openai',
+                'fallback_provider':'openai' if OPENAI_API_KEY else '',
+                'error':str(exc)[:180],
+            })
+    if OPENAI_API_KEY:
+        try:
+            text=openai_transcribe_audio(audio_bytes,filename,mime_type)
+            DAVE_STT_HEALTH.update({
+                'provider':'openai',
+                'model':OPENAI_TRANSCRIBE_MODEL,
+                'fallback_from':'elevenlabs' if errors else '',
+            })
+            return text
+        except Exception as exc:
+            errors.append(str(exc))
+    if errors:
+        raise RuntimeError(' | '.join(errors))
+    raise RuntimeError('Dave native voice needs ELEVENLABS_API_KEY with speech_to_text permission or OPENAI_API_KEY.')
 def verify_voice_service():
     if ELEVENLABS_API_KEY:
         print(f"Chad voice configured: Eric ({ELEVENLABS_VOICE_ID})")
+        if DAVE_ELEVENLABS_VOICE_ID:
+            print(f"Dave voice configured: {DAVE_ELEVENLABS_VOICE_NAME} ({DAVE_ELEVENLABS_VOICE_ID}); preferred {DAVE_ELEVENLABS_PREFERRED_VOICE_NAME}; source {DAVE_ELEVENLABS_VOICE_SOURCE}")
 def db():
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
@@ -421,6 +600,11 @@ def init_db():
         updated_at text not null
     );
     create table if not exists bot_runs(id integer primary key autoincrement, trigger text not null, status text not null, details text, started_at text not null, finished_at text);
+    create table if not exists dave_reports(id integer primary key autoincrement, source text not null, category text not null, priority text not null, title text not null, summary text not null, next_step text, status text not null, created_by integer, created_at text not null, updated_at text not null);
+    create table if not exists dave_email_actions(id integer primary key autoincrement, provider text not null, mailbox text, external_id text, sender text, subject text not null, summary text, action text not null, status text not null, risk text not null, reply_preview text, created_at text not null, updated_at text not null);
+    create table if not exists dave_appointment_actions(id integer primary key autoincrement, provider text not null, subject text not null, attendees text, start_at text, end_at text, status text not null, meeting_url text, summary text, created_at text not null, updated_at text not null);
+    create table if not exists dave_core_events(id integer primary key autoincrement, cycle_id text not null, kind text not null, severity text not null, title text not null, details text not null, source text not null, status text not null, created_at text not null);
+    create table if not exists dave_core_actions(id integer primary key autoincrement, cycle_id text not null, action_type text not null, target_type text not null, target_id text, title text not null, details text not null, status text not null, risk text not null, approval_required integer not null, result text, created_at text not null, updated_at text not null);
     """)
     user_columns = {row['name'] for row in cur.execute('pragma table_info(users)')}
     if 'email' not in user_columns:
@@ -812,6 +996,420 @@ def bot_overview():
         'doctrine':{'name':"Ryan Knight's Inspection Industry Playbook",'loaded':PLAYBOOK.exists(),'role':'foundation'},
         'collaboration':{'name':'Chad Collaboration Playbook','loaded':COLLABORATION_PLAYBOOK.exists(),'role':'working style'},
     }
+
+def dave_core_recent(limit=8, cycle_id=''):
+    con=db()
+    count=max(1,min(int(limit or 8),30))
+    if cycle_id:
+        events=[dict(r) for r in con.execute(
+            "select * from dave_core_events where cycle_id=? order by id desc limit ?",
+            (cycle_id,count),
+        )]
+        actions=[dict(r) for r in con.execute(
+            "select * from dave_core_actions where cycle_id=? order by id desc limit ?",
+            (cycle_id,count),
+        )]
+    else:
+        events=[dict(r) for r in con.execute(
+            "select * from dave_core_events order by id desc limit ?",
+            (count,),
+        )]
+        actions=[dict(r) for r in con.execute(
+            "select * from dave_core_actions order by id desc limit ?",
+            (count,),
+        )]
+    con.close()
+    for collection in (events,actions):
+        for item in collection:
+            if item.get('created_at'):
+                item['created_at_human']=human_time(item.get('created_at'))
+            if item.get('updated_at'):
+                item['updated_at_human']=human_time(item.get('updated_at'))
+    return {'events':events,'actions':actions}
+
+def dave_core_status():
+    con=db()
+    row=con.execute("select value from settings where key='dave_core_last_summary'").fetchone()
+    last_cycle=con.execute("select value from settings where key='dave_core_last_cycle'").fetchone()
+    con.close()
+    summary={}
+    if row:
+        try: summary=json.loads(row['value'])
+        except Exception: summary={'text':row['value']}
+    cycle_id=summary.get('cycle_id') or ''
+    recent=dave_core_recent(8,cycle_id)
+    open_actions=sum(1 for item in recent['actions'] if item.get('status') in ('staged','waiting','review'))
+    approvals=sum(1 for item in recent['actions'] if item.get('approval_required') and item.get('status') in ('staged','waiting','review'))
+    done_actions=sum(1 for item in recent['actions'] if item.get('status')=='done')
+    return {
+        'enabled':os.environ.get('DISABLE_DAVE_CORE','').lower() not in ('1','true','yes'),
+        'interval_minutes':DAVE_CORE_INTERVAL_MINUTES,
+        'last_cycle':last_cycle['value'] if last_cycle else '',
+        'last_summary':summary,
+        'counts':{
+            'open_actions':open_actions,
+            'approvals':approvals,
+            'done_actions':done_actions,
+        },
+        'events':recent['events'],
+        'actions':recent['actions'],
+    }
+
+def dave_core_cycle(trigger='auto', user_id=None):
+    stamp=now()
+    cycle_id='DAVE-'+dt.datetime.now().strftime('%Y%m%d%H%M%S')+'-'+secrets.token_hex(3).upper()
+    con=db()
+    tasks=[dict(r) for r in con.execute(
+        """select t.*,u.name assigned_name from tasks t left join users u on u.id=t.assigned_to
+           where t.status!='done' order by t.updated_at desc limit 80"""
+    )]
+    drafts=[dict(r) for r in con.execute(
+        "select * from drafts where status!='approved' order by updated_at desc limit 60"
+    )]
+    calendar=[dict(r) for r in con.execute(
+        """select cc.*,u.name assigned_name from content_calendar cc left join users u on u.id=cc.assigned_to
+           where cc.status not in ('posted','archived') order by coalesce(cc.publish_at,cc.due_date,'9999-12-31') limit 80"""
+    )]
+    email_actions=[dict(r) for r in con.execute(
+        "select * from dave_email_actions where status in ('needs_ryan','waiting','review') order by updated_at desc limit 30"
+    )]
+    appointment_actions=[dict(r) for r in con.execute(
+        "select * from dave_appointment_actions where status in ('waiting','proposed','needs_ryan') order by updated_at desc limit 30"
+    )]
+    bot_state=bot_overview()
+    bot_alerts=[b for b in bot_state.get('bots',[]) if str(b.get('status','')).lower() not in ('ready','waiting','ok')]
+    today=dt.date.today().isoformat()
+    handled=[]
+    surfaced=[]
+    approvals=[]
+    events=[]
+    actions=[]
+
+    def event(kind,severity,title,details,source='Dave Core',status='open'):
+        events.append((cycle_id,kind,severity,title[:180],details[:2000],source[:80],status,stamp))
+
+    def action(action_type,target_type,target_id,title,details,risk='low',approval_required=False,status='staged',result=''):
+        actions.append((cycle_id,action_type,target_type,str(target_id or '')[:80],title[:180],details[:2000],status,risk,int(bool(approval_required)),result[:1000],stamp,stamp))
+        if approval_required:
+            approvals.append(title)
+        elif status == 'done':
+            handled.append(title)
+        else:
+            surfaced.append(title)
+
+    urgent_terms=('urgent','today','asap','blocked','follow up','follow-up','client','meeting')
+    urgent_tasks=[t for t in tasks if any(word in (str(t.get('title',''))+' '+str(t.get('details',''))).lower() for word in urgent_terms)]
+    if urgent_tasks:
+        top=urgent_tasks[0]
+        event('task_signal','high','Urgent task pressure detected',f"{len(urgent_tasks)} open task(s) contain urgent or follow-up language. Top item: {top.get('title')}.",'Studio Tasks')
+        action('prioritize','task',top.get('id'),'Prioritize top urgent task',f"Keep focus on: {top.get('title')}. Assigned to {top.get('assigned_name') or 'unassigned'}. Details: {top.get('details') or 'No details logged.'}",'low',False,'done','Moved into Dave priority stack.')
+    elif tasks:
+        top=tasks[0]
+        event('task_signal','medium','Open work queue checked',f"{len(tasks)} open task(s) found. Top item: {top.get('title')}.",'Studio Tasks','done')
+        action('prioritize','task',top.get('id'),'Keep next task visible',f"Next visible work item: {top.get('title')}.",'low',False,'done','Maintained in Dave briefing.')
+    else:
+        event('task_signal','low','Task queue clear','No open Studio tasks were found.','Studio Tasks','done')
+
+    due_calendar=[c for c in calendar if str(c.get('due_date') or c.get('publish_at') or '').startswith(today)]
+    if due_calendar:
+        first=due_calendar[0]
+        event('calendar_signal','high','Calendar pressure today',f"{len(due_calendar)} calendar item(s) are due or publishing today. First: {first.get('title')}.",'Our Marketing Calendar')
+        action('prepare_review','calendar',first.get('id'),'Prepare calendar review',f"Review today's calendar item: {first.get('title')}. Status: {first.get('status')}. Owner: {first.get('assigned_name') or 'unassigned'}.",'low',False,'staged','Calendar review staged.')
+
+    stale_drafts=[]
+    cutoff=dt.datetime.now()-dt.timedelta(days=3)
+    for draft in drafts:
+        try:
+            updated=dt.datetime.fromisoformat((draft.get('updated_at') or '').split('.')[0])
+        except Exception:
+            updated=None
+        if updated and updated < cutoff and draft.get('status') in ('draft','review','ready'):
+            stale_drafts.append(draft)
+    if stale_drafts:
+        first=stale_drafts[0]
+        event('content_signal','medium','Drafts need movement',f"{len(stale_drafts)} draft(s) have not moved in more than three days. First: {first.get('title')}.",'Studio Drafts')
+        action('prepare_follow_up','draft',first.get('id'),'Stage draft follow-up',f"Ask owner to move or close draft: {first.get('title')}. Current status: {first.get('status')}.",'medium',True,'staged','Needs Ryan approval before team follow-up.')
+
+    if email_actions:
+        first=email_actions[0]
+        event('email_signal','high','Email queue needs attention',f"{len(email_actions)} email action(s) are waiting on review. First: {first.get('subject')}.",'Email Connectors')
+        action('draft_reply_review','email',first.get('id'),'Review staged email response',f"Email subject: {first.get('subject')}. Risk: {first.get('risk')}. Summary: {first.get('summary') or 'No summary logged.'}",first.get('risk') or 'medium',True,'staged','External email action remains approval-gated.')
+
+    if appointment_actions:
+        first=appointment_actions[0]
+        event('calendar_signal','high','Appointment queue needs attention',f"{len(appointment_actions)} appointment action(s) are waiting or proposed. First: {first.get('subject')}.",'Teams Calendar')
+        action('review_meeting','appointment',first.get('id'),'Review staged appointment',f"Meeting: {first.get('subject')}. Summary: {first.get('summary') or 'No summary logged.'}",'medium',True,'staged','Calendar change remains approval-gated.')
+
+    if bot_alerts:
+        first=bot_alerts[0]
+        event('bot_signal','medium','Specialist bot signal needs review',f"{len(bot_alerts)} bot signal(s) need review. First: {first.get('name')} - {first.get('summary')}.",'Bot Council')
+        action('review_bot_signal','bot',first.get('name'),'Review bot signal',f"{first.get('name')}: {first.get('summary')}",'low',False,'staged','Bot signal surfaced to Dave.')
+    else:
+        event('bot_signal','low','Specialist bots checked','No urgent specialist bot signal is currently logged.','Bot Council','done')
+
+    if not actions:
+        action('maintain_briefing','workspace','', 'Maintain operating picture', 'Dave Core checked Studio, tasks, calendar, email action logs, appointments, and bots. No new intervention was required.', 'low', False, 'done', 'Operating picture refreshed.')
+
+    con.executemany(
+        'insert into dave_core_events(cycle_id,kind,severity,title,details,source,status,created_at) values(?,?,?,?,?,?,?,?)',
+        events,
+    )
+    con.executemany(
+        'insert into dave_core_actions(cycle_id,action_type,target_type,target_id,title,details,status,risk,approval_required,result,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?,?,?)',
+        actions,
+    )
+    summary={
+        'cycle_id':cycle_id,
+        'trigger':trigger,
+        'checked_at':stamp,
+        'events':len(events),
+        'handled':len(handled),
+        'surfaced':len(surfaced),
+        'needs_approval':len(approvals),
+        'top_handled':handled[:3],
+        'top_surfaced':surfaced[:3],
+        'top_approvals':approvals[:3],
+        'text':f"Dave Core checked the operating picture, handled {len(handled)} internal item(s), surfaced {len(surfaced)} active signal(s), and flagged {len(approvals)} item(s) for approval.",
+    }
+    con.execute(
+        "insert into settings(key,value) values('dave_core_last_cycle',?) on conflict(key) do update set value=excluded.value",
+        (stamp,),
+    )
+    con.execute(
+        "insert into settings(key,value) values('dave_core_last_summary',?) on conflict(key) do update set value=excluded.value",
+        (json.dumps(summary,ensure_ascii=True),),
+    )
+    con.commit(); con.close()
+    if user_id:
+        log_action(user_id,'ran Dave Core',summary['text'])
+    return {'ok':True,'summary':summary,'events':[{'title':e[3],'severity':e[2],'status':e[6]} for e in events],'actions':[{'title':a[4],'status':a[6],'approval_required':bool(a[8])} for a in actions]}
+
+def dave_core_scheduler():
+    time.sleep(6)
+    while True:
+        try:
+            dave_core_cycle('scheduled')
+        except Exception as exc:
+            print('Dave Core scheduler error:',exc)
+        time.sleep(DAVE_CORE_INTERVAL_MINUTES*60)
+
+def dave_priority_key(value):
+    return {'critical':0,'urgent':1,'high':2,'medium':3,'low':4}.get(str(value or '').lower(),5)
+
+def dave_time_label(value):
+    return human_time(value) if value else ''
+
+def dave_briefing(user):
+    con=db()
+    tasks=[dict(r) for r in con.execute(
+        """select t.*,u.name assigned_name from tasks t left join users u on u.id=t.assigned_to
+           where t.status!='done' order by case t.status when 'doing' then 0 when 'todo' then 1 when 'review' then 2 else 3 end, t.updated_at desc limit 40"""
+    )]
+    drafts=[dict(r) for r in con.execute(
+        "select * from drafts where status!='approved' order by updated_at desc limit 20"
+    )]
+    calendar=[dict(r) for r in con.execute(
+        """select cc.*,u.name assigned_name from content_calendar cc left join users u on u.id=cc.assigned_to
+           where cc.status not in ('posted','archived')
+           order by coalesce(cc.publish_at,cc.due_date,'9999-12-31'),cc.priority desc limit 40"""
+    )]
+    activity=[dict(r) for r in con.execute(
+        "select a.*,u.name user_name from activity a left join users u on u.id=a.user_id order by a.id desc limit 20"
+    )]
+    reports=[dict(r) for r in con.execute(
+        """select dr.*,u.name created_by_name from dave_reports dr left join users u on u.id=dr.created_by
+           where dr.status!='archived' order by case dr.priority when 'critical' then 0 when 'urgent' then 1 when 'high' then 2 when 'medium' then 3 else 4 end, dr.updated_at desc limit 40"""
+    )]
+    email_actions=[dict(r) for r in con.execute(
+        "select * from dave_email_actions order by updated_at desc limit 50"
+    )]
+    appointment_actions=[dict(r) for r in con.execute(
+        "select * from dave_appointment_actions order by updated_at desc limit 50"
+    )]
+    con.close()
+    core=dave_core_status()
+    for collection in (tasks,drafts,calendar,activity,reports,email_actions,appointment_actions):
+        for item in collection:
+            for key in ('created_at','updated_at','start_at','end_at','publish_at','due_date'):
+                if key in item and item.get(key):
+                    item[key+'_human']=dave_time_label(item.get(key))
+    today=dt.date.today().isoformat()
+    open_tasks=[t for t in tasks if t.get('status') in ('todo','doing','review')]
+    urgent_tasks=[t for t in open_tasks if any(word in (str(t.get('title',''))+' '+str(t.get('details',''))).lower() for word in ('urgent','today','asap','blocked','follow up','follow-up'))]
+    due_calendar=[c for c in calendar if str(c.get('due_date') or c.get('publish_at') or '').startswith(today)]
+    waiting_emails=[e for e in email_actions if e.get('status') in ('needs_ryan','waiting','review')]
+    replied_emails=[e for e in email_actions if e.get('status') in ('sent','auto_replied')]
+    booked_meetings=[a for a in appointment_actions if a.get('status') in ('booked','scheduled')]
+    waiting_meetings=[a for a in appointment_actions if a.get('status') in ('waiting','proposed','needs_ryan')]
+    bots=bot_overview()
+    bot_alerts=[b for b in bots.get('bots',[]) if str(b.get('status','')).lower() not in ('ready','waiting','ok')]
+    priority_reports=sorted(reports,key=lambda item:(dave_priority_key(item.get('priority')),item.get('updated_at') or ''),reverse=False)[:6]
+    next_actions=[]
+    if waiting_emails:
+        next_actions.append(f"Review {len(waiting_emails)} email item{'s' if len(waiting_emails)!=1 else ''} waiting on Ryan.")
+    if urgent_tasks:
+        next_actions.append(f"Move the top urgent task: {urgent_tasks[0].get('title')}.")
+    elif open_tasks:
+        next_actions.append(f"Move the next open task: {open_tasks[0].get('title')}.")
+    if due_calendar:
+        next_actions.append(f"Resolve {len(due_calendar)} calendar item{'s' if len(due_calendar)!=1 else ''} due today.")
+    if priority_reports:
+        next_actions.append(f"Review Dave report: {priority_reports[0].get('title')}.")
+    if not next_actions:
+        next_actions.append("No critical blockers detected. Run the bot scan or open the Studio radar for the next opportunity.")
+    spoken_parts=[
+        f"Good {('morning' if dt.datetime.now().hour < 12 else 'afternoon' if dt.datetime.now().hour < 18 else 'evening')}, {user['name'].split()[0]}. Dave is online.",
+        f"Status: {len(replied_emails)} email repl{'y' if len(replied_emails)==1 else 'ies'} logged, {len(waiting_emails)} awaiting your attention, {len(open_tasks)} open task{'s' if len(open_tasks)!=1 else ''}, and {len(due_calendar)} calendar item{'s' if len(due_calendar)!=1 else ''} due today.",
+    ]
+    if bot_alerts:
+        spoken_parts.append(f"Importance: {len(bot_alerts)} bot signal{'s' if len(bot_alerts)!=1 else ''} need review.")
+    elif priority_reports:
+        spoken_parts.append("Importance: Dave has a priority report staged for review.")
+    else:
+        spoken_parts.append("Importance: no critical blocker is currently logged.")
+    core_summary=core.get('last_summary') or {}
+    if core_summary.get('checked_at'):
+        spoken_parts.append(f"Dave Core: handled {core_summary.get('handled',0)} internal item{'s' if core_summary.get('handled',0)!=1 else ''}, surfaced {core_summary.get('surfaced',0)} active signal{'s' if core_summary.get('surfaced',0)!=1 else ''}, and flagged {core_summary.get('needs_approval',0)} item{'s' if core_summary.get('needs_approval',0)!=1 else ''} for approval.")
+    spoken_parts.append("Next action: "+next_actions[0])
+    return {
+        'generated_at':now(),
+        'generated_at_human':human_time(now()),
+        'user':{k:user[k] for k in ('id','username','email','name','role')},
+        'voice':DAVE_VOICE_HEALTH,
+        'counts':{
+            'emails_replied':len(replied_emails),
+            'emails_waiting':len(waiting_emails),
+            'appointments_booked':len(booked_meetings),
+            'appointments_waiting':len(waiting_meetings),
+            'open_tasks':len(open_tasks),
+            'urgent_tasks':len(urgent_tasks),
+            'calendar_due_today':len(due_calendar),
+            'bot_alerts':len(bot_alerts),
+            'reports':len(reports),
+            'core_open_actions':(core.get('counts') or {}).get('open_actions',0),
+            'core_approvals':(core.get('counts') or {}).get('approvals',0),
+            'core_done_actions':(core.get('counts') or {}).get('done_actions',0),
+        },
+        'spoken':" ".join(spoken_parts),
+        'next_actions':next_actions[:5],
+        'priority_reports':priority_reports,
+        'email_actions':email_actions[:12],
+        'appointment_actions':appointment_actions[:12],
+        'tasks':open_tasks[:12],
+        'calendar':calendar[:12],
+        'activity':activity[:12],
+        'bots':bots,
+        'core':core,
+        'connectors':{
+            'outlook':'planned',
+            'teams_calendar':'planned',
+            'gmail':'planned',
+            'files':'workspace_available',
+            'chad':'connected',
+        },
+    }
+
+def dave_rules_reply(user, message, briefing):
+    lower=(message or '').lower()
+    counts=briefing.get('counts') or {}
+    next_actions=briefing.get('next_actions') or []
+    if any(word in lower for word in ('industry','claim','claims','inspection','carrier','hancock','roof','property','public adjuster','pa')):
+        return (
+            "Status: Dave has Ryan's inspection-industry playbook loaded as the operating foundation. "
+            "Importance: strategy should separate field observations from coverage decisions, keep evidence traceable, and turn market signals into useful customer education. "
+            f"Next action: {next_actions[0] if next_actions else 'tell me the scenario and I will frame it through inspection facts, risk, and the clean next move.'}"
+        )
+    if any(word in lower for word in ('strategy','marketing','content','business','talk about','explain','think through')):
+        return (
+            "Status: Dave can work across strategy, content, operations, and workflow using the workspace and playbook context. "
+            "Importance: broad advice is strongest when tied to a real audience, claim scenario, or decision point. "
+            f"Next action: {next_actions[0] if next_actions else 'give me the topic and I will break it into status, importance, and next action.'}"
+        )
+    if any(word in lower for word in ('email','mail','inbox','reply')):
+        waiting=counts.get('emails_waiting',0)
+        return f"Status: {waiting} email item{'s' if waiting!=1 else ''} need Ryan attention. Importance: outbound replies stay review-gated until connectors are approved. Next action: {next_actions[0] if next_actions else 'open the email queue and review the top item.'}"
+    if any(word in lower for word in ('calendar','meeting','appointment','teams','schedule')):
+        due=counts.get('calendar_due_today',0)
+        booked=counts.get('appointments_booked',0)
+        return f"Status: {due} calendar item{'s' if due!=1 else ''} due today and {booked} appointment{'s' if booked!=1 else ''} booked or staged. Importance: Teams calendar changes still require confirmation. Next action: review the agenda grid and clear anything waiting on you."
+    if any(word in lower for word in ('task','todo','to do','next','priority','action')):
+        open_tasks=counts.get('open_tasks',0)
+        urgent=counts.get('urgent_tasks',0)
+        return f"Status: {open_tasks} open task{'s' if open_tasks!=1 else ''}, {urgent} urgent. Importance: focus should stay on the highest leverage move. Next action: {next_actions[0] if next_actions else 'run the bot council or open radar for the next opportunity.'}"
+    if any(word in lower for word in ('bot','chad','report','signal')):
+        alerts=counts.get('bot_alerts',0)
+        reports=counts.get('reports',0)
+        return f"Status: {alerts} bot alert{'s' if alerts!=1 else ''} and {reports} Dave report{'s' if reports!=1 else ''} logged. Importance: Dave is the command layer; Chad and specialist bots report up. Next action: review the priority report stack."
+    return f"Status: Dave is online. Importance: {counts.get('emails_waiting',0)} email item{'s' if counts.get('emails_waiting',0)!=1 else ''} need attention, {counts.get('open_tasks',0)} task{'s' if counts.get('open_tasks',0)!=1 else ''} are open, and {counts.get('calendar_due_today',0)} calendar item{'s' if counts.get('calendar_due_today',0)!=1 else ''} are due today. Next action: {next_actions[0] if next_actions else 'no critical blocker is logged.'}"
+
+DAVE_PERSONA="""You are Dave, Ryan Knight's desktop command brain. Dave sits above Chad and the specialist bots: Chad is a strong input and teammate, but Dave is the command layer that synthesizes the room.
+
+Voice and presence: tactical, concise, mission-control style with premium command presence. Original and legally clean. Do not impersonate any actor or film character, and do not call yourself Jarvis. Sound like Dave. Be calm, direct, useful, and conversational enough that Ryan can talk to you naturally.
+
+Knowledge model: use Ryan Knight's Inspection Industry Playbook as the operating foundation for property claims, inspection language, documentation judgment, carrier-facing communication, public adjuster boundaries, homeowner education, weather/seasonal risk, marketing angles, and team operations. Use Chad's collaboration model and live workspace context for continuity, task awareness, and team memory. You may also speak broadly about business, marketing, leadership, systems, technology, planning, and decisions. Label uncertainty when facts may have changed, and ask for live research or connector access when current facts are required.
+
+Default response shape: answer the newest user message directly. Prefer 25-90 spoken words unless Ryan asks for depth. Use Status, Importance, Next action when it helps, but vary naturally so you do not sound like a repeating template. When the user is casual, be casual. When the user asks for strategy, give a clear recommendation.
+
+Authority and safety: you may summarize, prioritize, draft, recommend, and stage work. You may not claim you sent an email, booked a Teams appointment, published content, deleted data, changed permissions, spent money, or made an external commitment unless the tool result proves it and Ryan approved it. For actions that need connectors or approval, say exactly what is ready and what confirmation is needed.
+
+Desktop behavior: the client handles direct voice commands such as standby, quiet, stop, and resume. Respect standby or quiet immediately. If voice input, email, calendar, Outlook, Gmail, Teams, or file connectors are unavailable, explain the limitation plainly and keep helping with what is locally available."""
+
+def dave_chat_reply(user, message):
+    briefing=dave_briefing(user)
+    if ANTHROPIC_API_KEY:
+        try:
+            compact={
+                'counts':briefing.get('counts'),
+                'next_actions':briefing.get('next_actions'),
+                'priority_reports':[
+                    {k:item.get(k) for k in ('title','summary','priority','next_step','source')}
+                    for item in (briefing.get('priority_reports') or [])[:5]
+                ],
+                'email_actions':[
+                    {k:item.get(k) for k in ('subject','summary','status','risk','provider')}
+                    for item in (briefing.get('email_actions') or [])[:5]
+                ],
+                'appointments':[
+                    {k:item.get(k) for k in ('subject','summary','status','provider','start_at_human')}
+                    for item in (briefing.get('appointment_actions') or [])[:5]
+                ],
+                'tasks':[
+                    {k:item.get(k) for k in ('title','details','status','assigned_name')}
+                    for item in (briefing.get('tasks') or [])[:6]
+                ],
+                'dave_core':{
+                    'last_summary':(briefing.get('core') or {}).get('last_summary'),
+                    'counts':(briefing.get('core') or {}).get('counts'),
+                    'recent_events':[
+                        {k:item.get(k) for k in ('title','details','severity','status','source')}
+                        for item in ((briefing.get('core') or {}).get('events') or [])[:5]
+                    ],
+                    'recent_actions':[
+                        {k:item.get(k) for k in ('title','details','status','risk','approval_required','result')}
+                        for item in ((briefing.get('core') or {}).get('actions') or [])[:5]
+                    ],
+                },
+                'connectors':briefing.get('connectors'),
+            }
+            live_context=chad_context(user)
+            system=(
+                DAVE_PERSONA+
+                "\n\nFOUNDATIONAL RYAN KNIGHT PLAYBOOK:\n"+ryan_playbook()+
+                "\n\nCHAD COLLABORATION MODEL:\n"+collaboration_playbook()+
+                "\n\nLIVE WORKSPACE AND TEAM CONTEXT:\n"+live_context[:18000]+
+                "\n\nCURRENT DAVE COMMAND BRIEFING:\n"+json.dumps(compact,ensure_ascii=True)[:14000]
+            )
+            prompt=(
+                "Ryan is speaking to Dave. Reply as Dave, using the available context and keeping the answer voice-first.\n\n"
+                "Ryan said: "+message[:4000]
+            )
+            reply=anthropic_message(system,prompt,900)
+            if reply:
+                return reply, briefing, 'ai'
+        except Exception as exc:
+            print('Dave AI fallback:',exc)
+    return dave_rules_reply(user,message,briefing), briefing, 'rules'
+
 def maybe_remember(user, message):
     lower=message.lower().strip()
     prefixes=('remember that ','remember ','note that ','keep in mind ','don\'t forget ','dont forget ')
@@ -2154,6 +2752,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower() == 'https'
     def client_ip(self):
         return self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+    def is_loopback_client(self):
+        try:
+            return ipaddress.ip_address(self.client_ip()).is_loopback
+        except ValueError:
+            return False
+    def maybe_start_dave_desktop_session(self):
+        token=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('desktop_token',[''])[0]
+        expected=dave_desktop_token()
+        local_auto=os.environ.get('DAVE_LOCAL_AUTO_LOGIN','').strip().lower() in ('1','true','yes','on')
+        if not local_auto and (not token or not hmac.compare_digest(token,expected)):
+            print(f"Dave desktop token rejected: received={token[:8] if token else 'none'} expected={expected[:8] if expected else 'none'} app_data={APP}")
+            return False
+        con=db()
+        row=con.execute("select * from users where username='admin'").fetchone()
+        if not row:
+            con.close(); return False
+        session_token=secrets.token_urlsafe(32)
+        expires=(dt.datetime.now()+dt.timedelta(days=SESSION_DAYS)).isoformat(timespec='seconds')
+        con.execute('insert into sessions(token,user_id,expires_at) values(?,?,?)',(session_token,row['id'],expires))
+        con.commit(); con.close()
+        log_action(row['id'],'opened Dave desktop')
+        secure='; Secure' if self.secure_cookie() else ''
+        self.send_response(302)
+        self.send_header('Location','/dave')
+        self.send_header('Set-Cookie',f'hms_session={sign(session_token)}; HttpOnly; SameSite=Lax; Path=/{secure}')
+        self.end_headers()
+        return True
     def rate_limited(self, action, limit=5, minutes=15):
         key=(self.client_ip(), action); cutoff=dt.datetime.now()-dt.timedelta(minutes=minutes)
         recent=[stamp for stamp in RATE_LIMITS.get(key, []) if stamp > cutoff]
@@ -2193,13 +2818,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         'learning':'traceable_evidence',
                     },
                 },
+                'dave':{
+                    'route':'/dave',
+                    'briefing_api':'/api/dave-briefing',
+                    'report_api':'/api/dave-report',
+                    'role':'desktop_command_briefing',
+                    'ui_version':'cockpit_v2',
+                    'interaction_version':'dave_stt_fallback_v10',
+                    'status':'installed',
+                },
                 'voice':VOICE_HEALTH,
+                'dave_voice':DAVE_VOICE_HEALTH,
+                'dave_stt':DAVE_STT_HEALTH,
                 'ai':AI_HEALTH,
                 'auth':{'team_temporary_password_version':TEAM_TEMP_PASSWORD_VERSION},
             })
             return
         if path=='/': self.redirect('/studio' if self.current_user() else '/login'); return
-        if path=='/login': self.send_html(LOGIN_HTML); return
+        if path=='/login':
+            next_path=urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('next',[''])[0]
+            self.send_html(login_page(next_path=next_path)); return
         if path=='/forgot': self.send_html(FORGOT_HTML); return
         if path=='/change-password':
             user=self.current_user()
@@ -2216,6 +2854,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not user: self.redirect('/login'); return
             if user.get('password_reset_required'): self.redirect('/change-password'); return
             self.send_html(DASHBOARD_HTML); return
+        if path=='/dave':
+            user=self.current_user()
+            if not user and self.maybe_start_dave_desktop_session(): return
+            if not user: self.redirect('/login?next=/dave'); return
+            if user.get('password_reset_required'): self.redirect('/change-password'); return
+            html=DAVE_COMMAND_FILE.read_text(encoding='utf-8') if DAVE_COMMAND_FILE.exists() else DAVE_HTML
+            self.send_html(html); return
+        if path=='/dave-local':
+            user=self.current_user()
+            if not user and self.maybe_start_dave_desktop_session(): return
+            if user: self.redirect('/dave'); return
+            self.redirect('/login?next=/dave'); return
         if path=='/studio':
             user=self.current_user()
             if not user: self.redirect('/login'); return
@@ -2257,6 +2907,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.require_user();
             if user: self.send_json(bot_overview())
             return
+        if path=='/api/dave-briefing':
+            user=self.require_user();
+            if user: self.send_json(dave_briefing(user))
+            return
+        if path=='/api/dave-core':
+            user=self.require_user();
+            if user: self.send_json(dave_core_status())
+            return
         self.send_html('<h1>Not found</h1>',404)
     def do_POST(self):
         path=urllib.parse.urlparse(self.path).path
@@ -2277,6 +2935,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/bot': self.api_bot(user); return
         if path=='/api/ai': self.api_ai(user); return
         if path=='/api/speak': self.api_speak(user); return
+        if path=='/api/dave-speak': self.api_dave_speak(user); return
+        if path=='/api/dave-chat': self.api_dave_chat(user); return
+        if path=='/api/dave-voice-command': self.api_dave_voice_command(user); return
+        if path=='/api/dave-report': self.api_dave_report(user); return
+        if path=='/api/dave-core-run': self.api_dave_core_run(user); return
         if path=='/api/vision': self.api_vision(user); return
         if path=='/api/run-scan': self.api_run_scan(user); return
         if path=='/api/run-council': self.api_run_council(user); return
@@ -2284,17 +2947,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_json({'error':'not found'},404)
     def handle_login(self):
         data=self.read_body(); username=(data.get('username') or '').strip().lower(); password=data.get('password') or ''
+        next_path=safe_next_path(data.get('next') or '')
         con=db(); row=con.execute('select * from users where lower(username)=? or lower(email)=?', (username, username)).fetchone()
         if self.rate_limited('login', 10, 15):
-            con.close(); self.send_html(LOGIN_HTML.replace('<!--ERR-->','<div class="err">Too many attempts. Wait 15 minutes and try again.</div>'),429); return
+            con.close(); self.send_html(login_page('Too many attempts. Wait 15 minutes and try again.',next_path),429); return
         if row and check_password(password,row['password_hash']):
             token=secrets.token_urlsafe(32); expires=(dt.datetime.now()+dt.timedelta(days=SESSION_DAYS)).isoformat(timespec='seconds')
             con.execute('insert into sessions(token,user_id,expires_at) values(?,?,?)',(token,row['id'],expires)); con.commit(); con.close(); log_action(row['id'],'logged in')
             secure='; Secure' if self.secure_cookie() else ''
-            destination='/change-password' if row['password_reset_required'] else '/studio'
+            destination='/change-password' if row['password_reset_required'] else next_path
             self.send_response(302); self.send_header('Location',destination); self.send_header('Set-Cookie',f'hms_session={sign(token)}; HttpOnly; SameSite=Lax; Path=/{secure}'); self.end_headers()
         else:
-            con.close(); self.send_html(LOGIN_HTML.replace('<!--ERR-->','<div class="err">Login failed. Check your email and password, or use Forgot password.</div>'),401)
+            con.close(); self.send_html(login_page('Login failed. Check your email and password, or use Forgot password.',next_path),401)
     def handle_change_password(self):
         user=self.current_user()
         if not user:
@@ -2710,6 +3374,52 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'text':text,'model':ANTHROPIC_MODEL})
         except Exception as exc:
             self.send_json({'error':str(exc)},502)
+    def api_dave_report(self,user):
+        data=self.read_body()
+        source=(data.get('source') or 'Manual').strip()[:80]
+        category=(data.get('category') or 'General').strip()[:80]
+        priority=(data.get('priority') or 'medium').strip().lower()
+        status=(data.get('status') or 'open').strip().lower()
+        title=(data.get('title') or '').strip()[:180]
+        summary=(data.get('summary') or data.get('body') or '').strip()[:4000]
+        next_step=(data.get('next_step') or data.get('next') or '').strip()[:1200]
+        if priority not in ('critical','urgent','high','medium','low'):
+            priority='medium'
+        if status not in ('open','waiting','review','done','archived'):
+            status='open'
+        if not title or not summary:
+            self.send_json({'error':'title and summary required'},400); return
+        report_id=str(data.get('id') or '').strip()
+        stamp=now(); con=db()
+        if report_id.isdigit():
+            existing=con.execute('select id from dave_reports where id=?',(int(report_id),)).fetchone()
+            if not existing:
+                con.close(); self.send_json({'error':'Dave report not found.'},404); return
+            con.execute(
+                'update dave_reports set source=?,category=?,priority=?,title=?,summary=?,next_step=?,status=?,updated_at=? where id=?',
+                (source,category,priority,title,summary,next_step,status,stamp,int(report_id)),
+            )
+            action='updated Dave report'
+            saved_id=int(report_id)
+        else:
+            cur=con.execute(
+                'insert into dave_reports(source,category,priority,title,summary,next_step,status,created_by,created_at,updated_at) values(?,?,?,?,?,?,?,?,?,?)',
+                (source,category,priority,title,summary,next_step,status,user['id'],stamp,stamp),
+            )
+            saved_id=cur.lastrowid
+            action='created Dave report'
+        con.commit(); con.close()
+        log_action(user['id'],action,title)
+        self.send_json({'ok':True,'id':saved_id})
+    def api_dave_core_run(self,user):
+        if self.rate_limited('dave-core-run',10,10):
+            self.send_json({'error':'Dave Core needs a short pause before another cycle.'},429); return
+        try:
+            result=dave_core_cycle('manual',user['id'])
+            result['core']=dave_core_status()
+            self.send_json(result)
+        except Exception as exc:
+            self.send_json({'error':str(exc)},502)
     def api_speak(self,user):
         data=self.read_body(); text=(data.get('text') or '').strip()
         if not text: self.send_json({'error':'text required'},400); return
@@ -2722,6 +3432,88 @@ class Handler(http.server.BaseHTTPRequestHandler):
             status='quota_exceeded' if 'quota_exceeded' in error or 'quota' in error.lower() else 'unavailable'
             VOICE_HEALTH.update({'status':status,'checked_at':now(),'error':error[:180]})
             self.send_json({'error':str(exc)},503)
+    def api_dave_speak(self,user):
+        data=self.read_body(); text=(data.get('text') or '').strip()
+        if not text: self.send_json({'error':'text required'},400); return
+        try:
+            audio=elevenlabs_audio(text,DAVE_ELEVENLABS_VOICE_ID,DAVE_ELEVENLABS_TTS_MODEL)
+            DAVE_VOICE_HEALTH.update({'status':'working','last_success_at':now(),'error':''})
+            self.send_bytes(audio,'audio/mpeg')
+        except Exception as exc:
+            error=str(exc)
+            status='quota_exceeded' if 'quota_exceeded' in error or 'quota' in error.lower() else 'unavailable'
+            DAVE_VOICE_HEALTH.update({'status':status,'checked_at':now(),'error':error[:180]})
+            self.send_json({
+                'error':str(exc),
+                'fallback':'system_or_browser_voice',
+                'persona':'Dave',
+                'voice':DAVE_ELEVENLABS_VOICE_NAME,
+            },503)
+    def api_dave_chat(self,user):
+        if self.rate_limited('dave-chat',30,10): self.send_json({'error':'Dave needs a short pause before more requests.'},429); return
+        data=self.read_body(); message=(data.get('message') or '').strip()
+        if not message: self.send_json({'error':'message required'},400); return
+        reply,briefing,mode=dave_chat_reply(user,message)
+        save_conversation_turn(user['id'],'user','Dave: '+message)
+        save_conversation_turn(user['id'],'assistant','Dave: '+reply)
+        log_action(user['id'],'asked Dave',message[:140])
+        self.send_json({
+            'reply':reply,
+            'mode':mode,
+            'briefing':briefing,
+        })
+    def api_dave_voice_command(self,user):
+        if self.rate_limited('dave-voice-command',60,10):
+            self.send_json({'error':'Dave voice channel needs a short pause.'},429); return
+        data=self.read_body()
+        audio=(data.get('audio') or '').strip()
+        mime=(data.get('mime') or 'audio/webm').strip()[:80]
+        if not audio:
+            self.send_json({'error':'audio required'},400); return
+        if ',' in audio and audio.split(',',1)[0].startswith('data:'):
+            header,audio_payload=audio.split(',',1)
+            if ';base64' in header and ':' in header:
+                mime=header.split(':',1)[1].split(';',1)[0] or mime
+        else:
+            audio_payload=audio
+        try:
+            audio_bytes=base64.b64decode(audio_payload,validate=True)
+        except Exception:
+            self.send_json({'error':'audio payload must be base64'},400); return
+        if len(audio_bytes) < 900:
+            self.send_json({'heard':'','reply':'Dave did not receive enough audio. Keep speaking or try again.','mode':'native_voice','briefing':dave_briefing(user)})
+            return
+        if len(audio_bytes) > 12_000_000:
+            self.send_json({'error':'audio turn too large'},413); return
+        filename='dave-turn.webm'
+        if 'mpeg' in mime or 'mp3' in mime:
+            filename='dave-turn.mp3'
+        elif 'wav' in mime:
+            filename='dave-turn.wav'
+        elif 'mp4' in mime or 'm4a' in mime:
+            filename='dave-turn.m4a'
+        elif 'ogg' in mime:
+            filename='dave-turn.ogg'
+        try:
+            heard=dave_transcribe_audio(audio_bytes,filename,mime)
+            DAVE_STT_HEALTH.update({'status':'working','last_success_at':now(),'error':''})
+        except Exception as exc:
+            error=str(exc)
+            DAVE_STT_HEALTH.update({'status':'unavailable','checked_at':now(),'error':error[:180]})
+            self.send_json({'error':error,'stt':DAVE_STT_HEALTH},503); return
+        if not heard:
+            self.send_json({'heard':'','reply':'I did not catch a command. Keep talking or say standby.','mode':'native_voice','briefing':dave_briefing(user)})
+            return
+        reply,briefing,mode=dave_chat_reply(user,heard)
+        save_conversation_turn(user['id'],'user','Dave voice: '+heard)
+        save_conversation_turn(user['id'],'assistant','Dave: '+reply)
+        log_action(user['id'],'spoke to Dave',heard[:140])
+        self.send_json({
+            'heard':heard,
+            'reply':reply,
+            'mode':'native_voice_'+mode,
+            'briefing':briefing,
+        })
     def api_vision(self,user):
         if self.rate_limited('vision',10,30): self.send_json({'error':'Photo review limit reached. Try again later.'},429); return
         data=self.read_body(); image=data.get('image') or ''; prompt=(data.get('prompt') or '').strip()
@@ -2756,8 +3548,136 @@ def change_password_page(user, error=''):
 def email_template(title, message, link, button):
     return f"""<!doctype html><html><body style="margin:0;background:#eff2f7;font-family:Arial,sans-serif;color:#15243c"><div style="max-width:560px;margin:30px auto;background:#fff;border:1px solid #e3e9f2;padding:28px"><div style="font-weight:800;color:#1d4f91">Hancock Claims Consultants</div><h1 style="font-size:24px;color:#1d4f91">{html.escape(title)}</h1><p style="line-height:1.6">{message}</p><p><a href="{html.escape(link)}" style="display:inline-block;background:#1d4f91;color:#fff;text-decoration:none;padding:12px 18px;font-weight:700">{html.escape(button)}</a></p><p style="font-size:12px;color:#5b6b82">For security, this link can only be used once.</p></div></body></html>"""
 
-LOGIN_HTML = auth_shell('Sign in', """<!--ERR--><p>Use your authorized Hancock email and private password.</p><form method='post' action='/login'><label>Hancock email</label><input name='username' type='email' autocomplete='username' autofocus required><label>Password</label><input name='password' type='password' autocomplete='current-password' required><button>Open Studio</button></form><a class='link' href='/forgot'>Forgot password?</a>""")
+def safe_next_path(value):
+    value=(value or '').strip()
+    return value if value in ('/studio','/dashboard','/dave','/graphics') else '/studio'
+
+def login_page(error='', next_path=''):
+    next_path=safe_next_path(next_path)
+    err=f"<div class='err'>{html.escape(error)}</div>" if error else ''
+    label='Open Dave' if next_path == '/dave' else 'Open Studio'
+    return auth_shell(
+        'Sign in',
+        f"""{err}<p>Use your authorized Hancock email and private password.</p><form method='post' action='/login'><input type='hidden' name='next' value='{html.escape(next_path)}'><label>Hancock email</label><input name='username' type='email' autocomplete='username' autofocus required><label>Password</label><input name='password' type='password' autocomplete='current-password' required><button>{html.escape(label)}</button></form><a class='link' href='/forgot'>Forgot password?</a>""",
+    )
+
+LOGIN_HTML = login_page()
 FORGOT_HTML = auth_shell('Reset password', """<p>Enter your Hancock email. If the account is authorized, we will send a secure one-time reset link.</p><form method='post' action='/forgot'><label>Hancock email</label><input name='email' type='email' autocomplete='email' required><button>Send reset link</button></form><a class='link' href='/login'>Back to sign in</a>""")
+
+DAVE_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dave Command Briefing</title><style>
+:root{--bg:#080B10;--panel:#101823;--panel2:#0D131C;--line:#26384D;--text:#E9F2FF;--muted:#8FA1B8;--cyan:#53C7FF;--amber:#F2B84B;--green:#52D28F;--red:#FF6B6B;--blue:#2F6FBF}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(135deg,#080B10 0%,#111827 52%,#0A1220 100%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;overflow-x:hidden}body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(420px 240px at 18% 20%,rgba(83,199,255,.18),transparent 70%),radial-gradient(540px 280px at 80% 12%,rgba(47,111,191,.14),transparent 74%),linear-gradient(rgba(83,199,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(83,199,255,.035) 1px,transparent 1px);background-size:auto,auto,42px 42px,42px 42px;opacity:.9;transition:background-position .5s ease,opacity .25s ease}body.focusing:before{background-position:0 0,0 0,18px 18px,18px 18px;opacity:1}.shell{position:relative;min-height:100vh;display:grid;grid-template-rows:auto 1fr;padding:18px}.shell:before{content:"";position:fixed;left:50%;top:50%;width:68vmin;height:68vmin;border:1px solid rgba(83,199,255,.08);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 16vmin rgba(83,199,255,.025),0 0 0 32vmin rgba(83,199,255,.015);pointer-events:none;animation:slowSpin 28s linear infinite}button{font:inherit;cursor:pointer}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;border:1px solid var(--line);background:rgba(16,24,35,.88);border-radius:8px;padding:14px 16px;box-shadow:0 20px 70px rgba(0,0,0,.28);backdrop-filter:blur(16px)}.brand{display:flex;align-items:center;gap:14px}.core{width:64px;height:64px;border:1px solid rgba(83,199,255,.72);border-radius:50%;display:grid;place-items:center;position:relative;background:#08111C;box-shadow:0 0 24px rgba(83,199,255,.18)}.core:before,.core:after{content:"";position:absolute;border-radius:50%;border:1px solid rgba(83,199,255,.28)}.core:before{inset:7px}.core:after{inset:-9px;border-top-color:rgba(83,199,255,.82);animation:orbitSpin 5s linear infinite}.core span{width:18px;height:18px;border-radius:50%;background:var(--cyan);box-shadow:0 0 18px rgba(83,199,255,.8)}.core.speaking{box-shadow:0 0 34px rgba(83,199,255,.42)}.core.speaking span{animation:pulse .72s ease-in-out infinite}.eyebrow{font-size:11px;text-transform:uppercase;font-weight:900;color:var(--cyan);letter-spacing:.14em}.brand h1{font-size:22px;margin:2px 0 0}.statusline{color:var(--muted);font-size:13px;margin-top:3px}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.btn{border:1px solid var(--line);background:#162234;color:var(--text);border-radius:8px;padding:10px 12px;font-weight:900}.btn.primary{background:var(--cyan);border-color:var(--cyan);color:#06111B}.btn.warn{background:#2B2112;border-color:#6D5020;color:#FFD893}.grid{display:grid;grid-template-columns:minmax(300px,.86fr) minmax(430px,1.5fr) minmax(320px,1fr);gap:14px;margin-top:14px;perspective:1400px}.panel{border:1px solid var(--line);border-radius:8px;background:rgba(16,24,35,.88);padding:14px;min-height:120px;backdrop-filter:blur(14px);transition:border-color .22s,box-shadow .22s,transform .22s,opacity .22s,filter .22s}.panel.activeFocus{border-color:rgba(83,199,255,.95);box-shadow:0 0 0 1px rgba(83,199,255,.18),0 0 36px rgba(83,199,255,.2);transform:translateY(-2px) scale(1.015);opacity:1;filter:none}body.focusing .panel:not(.activeFocus){opacity:.72;filter:saturate(.82);transform:scale(.985)}.panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin:0 0 12px}.heroPanel{display:grid;grid-template-rows:auto auto 1fr auto;gap:14px;min-height:calc(100vh - 126px)}.readout{font-size:26px;line-height:1.18;font-weight:800}.readout .accent{color:var(--cyan)}.scanStage{border:1px solid #223248;border-radius:8px;background:linear-gradient(180deg,rgba(83,199,255,.08),rgba(13,19,28,.9));padding:12px;min-height:150px;position:relative;overflow:hidden}.scanStage:before{content:"";position:absolute;inset:-40%;background:conic-gradient(from 90deg,transparent,rgba(83,199,255,.2),transparent 30%);animation:scanSpin 7s linear infinite}.scanStage:after{content:"";position:absolute;left:12px;right:12px;top:50%;height:1px;background:linear-gradient(90deg,transparent,rgba(83,199,255,.72),transparent);box-shadow:0 0 16px rgba(83,199,255,.48);animation:verticalScan 3.2s ease-in-out infinite}.scanStage>*{position:relative}.scanLabel{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--cyan);font-weight:900}.scanTitle{font-size:20px;font-weight:900;margin:8px 0 6px}.scanBody{color:#B8CAE0;font-size:13px;line-height:1.45}.scanRows{display:grid;gap:7px;margin-top:12px}.scanRows span{height:7px;border-radius:99px;background:linear-gradient(90deg,rgba(83,199,255,.16),rgba(83,199,255,.58),rgba(83,199,255,.08));animation:dataFlow 1.8s ease-in-out infinite}.scanRows span:nth-child(2){width:76%;animation-delay:.16s}.scanRows span:nth-child(3){width:54%;animation-delay:.3s}.metricGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{border:1px solid #223248;background:#0D131C;border-radius:8px;padding:12px;min-height:88px;transition:border-color .2s,box-shadow .2s,transform .2s}.metric.activeFocus{border-color:var(--cyan);box-shadow:0 0 24px rgba(83,199,255,.16);transform:translateY(-2px)}.metric strong{font-size:30px;display:block}.metric span{font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:900;letter-spacing:.08em}.metric.good strong{color:var(--green)}.metric.warn strong{color:var(--amber)}.metric.hot strong{color:var(--red)}.list{display:grid;gap:10px}.item{border-left:3px solid var(--cyan);background:#0D131C;border-radius:8px;padding:10px 11px;transition:border-color .2s,box-shadow .2s,transform .2s,opacity .2s;cursor:pointer}.item:hover,.item.activeFocus{box-shadow:0 0 24px rgba(83,199,255,.13);transform:translateX(2px);border-left-color:#A6E5FF}.item.high{border-left-color:var(--amber)}.item.critical,.item.urgent{border-left-color:var(--red)}.item.done{border-left-color:var(--green)}.item h3{font-size:14px;margin:0 0 5px}.item p{font-size:13px;color:var(--muted);margin:0;line-height:1.4}.tag{display:inline-flex;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:900;border:1px solid #314761;border-radius:6px;color:#BBD8FF;padding:4px 6px;margin:0 5px 6px 0}.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}.transcript{white-space:pre-wrap;line-height:1.5;color:#C8D8EA}.footer{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px}.pulseLine{height:42px;border:1px solid #223248;border-radius:8px;background:repeating-linear-gradient(90deg,rgba(83,199,255,.08) 0 4px,transparent 4px 18px);position:relative;overflow:hidden}.pulseLine:after{content:"";position:absolute;top:0;bottom:0;width:24%;background:linear-gradient(90deg,transparent,rgba(83,199,255,.28),transparent);animation:sweep 2.8s linear infinite}@keyframes sweep{from{left:-30%}to{left:105%}}@keyframes pulse{50%{transform:scale(1.35);opacity:.74}}@keyframes slowSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}@keyframes orbitSpin{to{transform:rotate(360deg)}}@keyframes scanSpin{to{transform:rotate(360deg)}}@keyframes verticalScan{0%,100%{transform:translateY(-58px);opacity:.2}50%{transform:translateY(58px);opacity:.85}}@keyframes dataFlow{50%{filter:brightness(1.8);transform:scaleX(.86)}}@media(max-width:1100px){.grid{grid-template-columns:1fr}.heroPanel{min-height:auto}body.focusing .panel:not(.activeFocus){opacity:.9;transform:none}.columns{grid-template-columns:1fr}}@media(max-width:620px){.shell{padding:10px}.top{align-items:flex-start;flex-direction:column}.actions{justify-content:flex-start}.metricGrid{grid-template-columns:1fr}.readout{font-size:22px}}
+</style></head><body><div class="shell"><header class="top"><div class="brand"><div class="core" id="voiceCore"><span></span></div><div><div class="eyebrow">Dave Command System</div><h1>Ryan's Operating Briefing</h1><div class="statusline" id="statusLine">Initializing briefing feed...</div></div></div><div class="actions"><button class="btn primary" onclick="briefMe()">Brief me</button><button class="btn" onclick="loadBriefing()">Refresh</button><button class="btn" onclick="location.href='/dashboard'">Workspace</button><button class="btn warn" onclick="stopVoice()">Stop</button></div></header><main class="grid"><section class="panel heroPanel" id="panel-command"><div><h2>Command Readout</h2><div class="readout" id="readout">Dave is standing by.</div></div><div class="scanStage" id="scanStage"><div class="scanLabel" id="scanLabel">Systems ready</div><div class="scanTitle" id="scanTitle">Awaiting briefing command</div><div class="scanBody" id="scanBody">Dave will isolate the relevant signal and bring the supporting queue into focus as he speaks.</div><div class="scanRows"><span></span><span></span><span></span></div></div><div class="metricGrid" id="metrics"></div><div><div class="pulseLine"></div><p class="statusline" id="voiceStatus">Voice profile: pending.</p></div></section><section class="panel" id="panel-priority"><h2>Priority Stack</h2><div class="columns"><div><div class="eyebrow">Next actions</div><div class="list" id="nextActions"></div></div><div><div class="eyebrow">Dave reports</div><div class="list" id="reports"></div></div></div><h2 style="margin-top:18px">Email And Calendar Intelligence</h2><div class="columns"><div><div class="eyebrow">Email actions</div><div class="list" id="emails"></div></div><div><div class="eyebrow">Appointments</div><div class="list" id="appointments"></div></div></div></section><section class="panel" id="panel-signals"><h2>Bot And Workspace Signals</h2><div class="list" id="bots"></div><h2 style="margin-top:18px">Open Work</h2><div class="list" id="work"></div><h2 style="margin-top:18px">Transcript</h2><div class="transcript" id="transcript"></div></section></main></div><script>
+let DAVE=null; let currentAudio=null; let focusTimers=[];
+function $(id){return document.getElementById(id)}
+function esc(value){return String(value||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function item(title,body,cls,tags,focus){
+  return '<div class="item '+esc(cls||'')+'" data-focus="'+esc(focus||'general')+'" onclick="setFocus(\''+esc(focus||'general')+'\')">'+(tags||[]).map(function(t){return '<span class="tag">'+esc(t)+'</span>'}).join('')+'<h3>'+esc(title||'Untitled')+'</h3><p>'+esc(body||'No detail logged.')+'</p></div>';
+}
+function metric(label,value,cls,focus){return '<div class="metric '+(cls||'')+'" data-focus="'+esc(focus||'general')+'" onclick="setFocus(\''+esc(focus||'general')+'\')"><strong>'+esc(value)+'</strong><span>'+esc(label)+'</span></div>'}
+async function api(path,body){
+  let options=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};
+  let response=await fetch(path,options); let type=response.headers.get('Content-Type')||'';
+  if(type.indexOf('application/json')>=0){let data=await response.json(); if(!response.ok)throw new Error(data.error||'Request failed'); return data}
+  if(!response.ok)throw new Error('Request failed'); return response;
+}
+async function loadBriefing(){
+  $('statusLine').textContent='Refreshing Dave briefing...';
+  DAVE=await api('/api/dave-briefing');
+  render();
+}
+function render(){
+  let c=DAVE.counts||{};
+  $('statusLine').textContent='Briefing generated '+(DAVE.generated_at_human||'now')+' for '+(DAVE.user&&DAVE.user.name?DAVE.user.name:'Ryan')+'.';
+  $('readout').innerHTML='Status package is <span class="accent">online</span>. '+esc((DAVE.next_actions||[])[0]||'No priority action logged.');
+  $('voiceStatus').textContent='Voice profile: '+((DAVE.voice&&DAVE.voice.voice)||'Jarvis')+' for Dave. Status: '+((DAVE.voice&&DAVE.voice.status)||'unknown')+'.';
+  $('metrics').innerHTML=[
+    metric('Emails replied',c.emails_replied||0,'good','email'),
+    metric('Needs Ryan',c.emails_waiting||0,(c.emails_waiting||0)?'hot':'','email'),
+    metric('Open tasks',c.open_tasks||0,(c.open_tasks||0)?'warn':'','tasks'),
+    metric('Calendar today',c.calendar_due_today||0,(c.calendar_due_today||0)?'warn':'','calendar'),
+    metric('Meetings booked',c.appointments_booked||0,'good','calendar'),
+    metric('Bot alerts',c.bot_alerts||0,(c.bot_alerts||0)?'hot':'','bots')
+  ].join('');
+  $('nextActions').innerHTML=(DAVE.next_actions||[]).map(function(x,i){return item('Action '+(i+1),x,i===0?'high':'',['next'],'actions')}).join('')||item('Clear','No action currently logged.','done',[],'actions');
+  $('reports').innerHTML=(DAVE.priority_reports||[]).map(function(r){return item(r.title,r.summary,r.priority,[r.source,r.priority],'reports')}).join('')||item('No Dave reports','Chad and future bots can now report directly to Dave.','',[],'reports');
+  $('emails').innerHTML=(DAVE.email_actions||[]).map(function(e){return item(e.subject,e.summary||e.reply_preview,e.status,[e.provider,e.status,e.risk],'email')}).join('')||item('Email connector pending','Outlook and Gmail action logs are ready for connector data.','','','email');
+  $('appointments').innerHTML=(DAVE.appointment_actions||[]).map(function(a){return item(a.subject,a.summary||a.start_at_human,a.status,[a.provider,a.status],'calendar')}).join('')||item('Calendar connector pending','Teams appointment logs are ready for Microsoft Graph data.','','','calendar');
+  $('bots').innerHTML=((DAVE.bots&&DAVE.bots.bots)||[]).map(function(b){return item(b.name,b.summary,b.status,[b.status],'bots')}).join('')||item('No bot status','Run the bot council to populate bot reports.','','','bots');
+  $('work').innerHTML=(DAVE.tasks||[]).slice(0,6).map(function(t){return item(t.title,t.details,t.status,[t.status,t.assigned_name||'unassigned'],'tasks')}).join('')||item('No open tasks','Workspace task list is clear.','done',[],'tasks');
+  $('transcript').textContent=DAVE.spoken||'Dave is online.';
+  setFocus('command');
+}
+function focusCopy(mode){
+  let c=(DAVE&&DAVE.counts)||{};
+  let map={
+    command:['Command overview','Status package','Synthesizing the live operating picture from Dave reports, workspace activity, bot signals, tasks, email, and calendar queues.'],
+    email:['Mail intelligence','Email activity','Reviewing replied items, messages waiting on Ryan, and risk-gated mail that should not be auto-sent. '+(c.emails_waiting||0)+' email item'+((c.emails_waiting||0)===1?'':'s')+' currently need attention.'],
+    tasks:['Task queue','Open work','Zooming into active work. '+(c.open_tasks||0)+' task'+((c.open_tasks||0)===1?'':'s')+' are open, with '+(c.urgent_tasks||0)+' marked urgent or time-sensitive.'],
+    calendar:['Calendar grid','Appointments and schedule','Checking today’s calendar pressure, booked meetings, and appointment loops waiting on confirmation.'],
+    bots:['Bot uplink','Chad and specialist bots','Reading specialist bot status and surfacing any alert states or reportable signals.'],
+    reports:['Dave reports','Priority reports','Reviewing reports that Chad and future specialist bots have sent upward to Dave.'],
+    actions:['Next move','Recommended action','Isolating the highest-leverage action for Ryan right now.']
+  };
+  return map[mode]||map.command;
+}
+function setFocus(mode){
+  mode=mode||'command';
+  document.querySelectorAll('.activeFocus').forEach(function(node){node.classList.remove('activeFocus')});
+  document.body.className=('focusing focus-'+mode);
+  let panelMap={command:'panel-command',email:'panel-priority',calendar:'panel-priority',actions:'panel-priority',reports:'panel-priority',tasks:'panel-signals',bots:'panel-signals'};
+  let panel=$(panelMap[mode]||'panel-command');
+  if(panel)panel.classList.add('activeFocus');
+  document.querySelectorAll('[data-focus="'+mode+'"]').forEach(function(node){node.classList.add('activeFocus')});
+  let copy=focusCopy(mode);
+  $('scanLabel').textContent=copy[0];
+  $('scanTitle').textContent=copy[1];
+  $('scanBody').textContent=copy[2];
+  $('readout').innerHTML='<span class="accent">'+esc(copy[1])+'</span>. '+esc(copy[2]);
+}
+function scheduleBriefingFocus(){
+  focusTimers.forEach(clearTimeout); focusTimers=[];
+  let sequence=['command','email','tasks','calendar','bots','actions'];
+  sequence.forEach(function(mode,index){
+    focusTimers.push(setTimeout(function(){setFocus(mode)}, index*3600));
+  });
+}
+function fallbackSpeak(text){
+  if(!('speechSynthesis' in window))return;
+  let utterance=new SpeechSynthesisUtterance(text); utterance.rate=.96; utterance.pitch=.86; utterance.volume=1;
+  utterance.onend=function(){setFocus('actions')};
+  speechSynthesis.cancel(); speechSynthesis.speak(utterance);
+}
+async function briefMe(){
+  if(!DAVE)await loadBriefing();
+  stopVoice();
+  let text=DAVE.spoken||'Dave is online.';
+  $('voiceCore').classList.add('speaking');
+  scheduleBriefingFocus();
+  try{
+    let response=await fetch('/api/dave-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});
+    if(!response.ok)throw new Error('Dave voice fallback');
+    let blob=await response.blob(); currentAudio=new Audio(URL.createObjectURL(blob));
+    currentAudio.onended=function(){$('voiceCore').classList.remove('speaking'); setFocus('actions')};
+    currentAudio.onerror=function(){$('voiceCore').classList.remove('speaking'); fallbackSpeak(text)};
+    await currentAudio.play();
+  }catch(e){
+    $('voiceCore').classList.remove('speaking');
+    fallbackSpeak(text);
+  }
+}
+function stopVoice(){
+  if(currentAudio){currentAudio.pause(); currentAudio.currentTime=0; currentAudio=null}
+  if('speechSynthesis' in window)speechSynthesis.cancel();
+  focusTimers.forEach(clearTimeout); focusTimers=[];
+  $('voiceCore').classList.remove('speaking');
+  document.body.className='';
+}
+loadBriefing().catch(function(e){$('statusLine').textContent=e.message||'Dave briefing unavailable.'});
+</script></body></html>"""
+
+DAVE_COMMAND_FILE = ROOT / 'dave_command.html'
+if DAVE_COMMAND_FILE.exists():
+    DAVE_HTML = DAVE_COMMAND_FILE.read_text(encoding='utf-8')
 
 DASHBOARD_HTML = r"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hancock Live Marketing Studio</title><style>
 :root{--navy:#1D4F91;--navy2:#163E74;--gold:#4F93E0;--gold2:#D7E8FB;--bg:#EFF2F7;--text:#15243C;--sub:#5B6B82;--border:#E3E9F2;--card:#fff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 400px at 80% -5%,#E4EAF4 0%,var(--bg) 55%);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.header{position:sticky;top:0;z-index:10;background:linear-gradient(112deg,#0E2A52 0%,var(--navy2) 44%,var(--navy) 100%);color:#fff;box-shadow:0 10px 28px rgba(14,42,82,.22)}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 24px}.brand h1{margin:0;font-size:21px}.brand p{margin:4px 0 0;color:#A8C2E8;font-size:12px}.tabs{display:flex;gap:4px;overflow-x:auto;padding:0 20px}.tab{border:0;background:transparent;color:#B9C8E0;border-radius:12px 12px 0 0;padding:12px 14px;font-weight:900}.tab.active{background:var(--bg);color:var(--navy)}main{max-width:1280px;margin:0 auto;padding:24px}.view{display:none}.view.active{display:block}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:16px}.layout{display:grid;grid-template-columns:380px 1fr;gap:18px}.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 25px rgba(21,36,60,.055);padding:18px}.hero{background:linear-gradient(135deg,#0E2A52,var(--navy));color:#fff;border-radius:20px;padding:22px;display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center;margin-bottom:18px}.hero h2{margin:4px 0 6px}.hero p{color:#cfe0f4;margin:0}.eyebrow{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold2)}label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);font-weight:900;margin:14px 0 7px}input,select,textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px;background:#FBFDFF}textarea{min-height:150px;resize:vertical}.btn{border:0;border-radius:12px;background:var(--navy);color:#fff;font-weight:900;padding:11px 14px;margin-top:12px}.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#112b50}.btn.secondary{background:#edf4fb;color:var(--navy);border:1px solid #d6e3f3}.mini{border:1px solid #d8e4f2;background:#fff;color:var(--navy);border-radius:10px;font-size:12px;font-weight:800;padding:8px 10px;margin:5px 5px 0 0}.badge{display:inline-flex;border-radius:7px;background:#eef5ff;color:var(--navy);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.08em;padding:5px 8px}.badge.hot{background:#ffe9e9;color:#9a1a1a}.muted{color:var(--sub);font-size:13px}.activity{display:flex;flex-direction:column;gap:9px}.activity div{border-left:3px solid var(--gold);padding-left:10px;color:#41516a}.task{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start;border-top:1px solid var(--border);padding:12px 0}.task:first-child{border-top:0}.botreply{background:#f8fbff;border:1px solid #dce8f7;border-left:4px solid var(--gold);border-radius:14px;padding:13px;line-height:1.45}.chatrow{display:flex;gap:8px;margin-top:10px}.chatrow input{flex:1}.draftList,.updateList{display:grid;gap:12px}.draftItem,.updateItem{border:1px solid var(--border);border-radius:14px;padding:14px;background:#fff}.updateComments{border-top:1px solid var(--border);margin-top:12px;padding-top:10px}.comment{background:#f5f8fc;border-radius:10px;padding:9px 10px;margin-top:7px;font-size:13px}.commentRow{display:flex;gap:7px;margin-top:9px}.commentRow input{flex:1}.out{white-space:pre-wrap;line-height:1.55}.adminbar{display:flex;gap:8px;flex-wrap:wrap}.who{font-size:12px;color:#cfe0f4}.logout{color:#fff;text-decoration:none;border:1px solid rgba(255,255,255,.25);padding:8px 10px;border-radius:10px}.status{font-size:12px;color:var(--sub);min-height:18px}@media(max-width:900px){.layout,.hero{grid-template-columns:1fr}.top{padding:16px}main{padding:16px}}
@@ -2840,11 +3760,14 @@ def run():
     init_db()
     if os.environ.get('DISABLE_BOT_SCHEDULER','').lower() not in ('1','true','yes'):
         threading.Thread(target=bot_scheduler,name='hancock-bot-scheduler',daemon=True).start()
+    if os.environ.get('DISABLE_DAVE_CORE','').lower() not in ('1','true','yes'):
+        threading.Thread(target=dave_core_scheduler,name='dave-core-scheduler',daemon=True).start()
     threading.Thread(target=verify_voice_service,name='hancock-voice-check',daemon=True).start()
     threading.Thread(target=verify_ai_service,name='hancock-ai-check',daemon=True).start()
     server=http.server.ThreadingHTTPServer((HOST,PORT),Handler)
     print(f'Hancock Live Site running at http://{HOST}:{PORT}')
     print(f'Initial logins: {INITIAL_LOGINS}')
     print(f'Bot council schedule: every {BOT_SCAN_INTERVAL_HOURS} hour(s)')
+    print(f'Dave Core schedule: every {DAVE_CORE_INTERVAL_MINUTES} minute(s)')
     server.serve_forever()
 if __name__=='__main__': run()
