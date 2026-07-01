@@ -49,12 +49,6 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_TRANSCRIBE_MODEL = os.environ.get('OPENAI_TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe').strip()
-OPENART_MCP_URL = os.environ.get('OPENART_MCP_URL', 'https://mcp.openart.ai/mcp').strip()
-OPENART_MCP_AUTH_TOKEN = (os.environ.get('OPENART_MCP_AUTH_TOKEN') or os.environ.get('OPENART_API_KEY') or '').strip()
-OPENART_MCP_TOOL = os.environ.get('OPENART_MCP_TOOL', '').strip()
-OPENART_MCP_IMAGE_FIELD = os.environ.get('OPENART_MCP_IMAGE_FIELD', 'image').strip() or 'image'
-OPENART_MCP_PROMPT_FIELD = os.environ.get('OPENART_MCP_PROMPT_FIELD', 'prompt').strip() or 'prompt'
-OPENART_MCP_MODEL = os.environ.get('OPENART_MCP_MODEL', '').strip()
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2').strip()
@@ -409,179 +403,6 @@ def anthropic_vision(prompt, image_data_url):
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'Photo review was rejected: {detail}') from exc
 
-OPENART_MASTER_PROMPT = """Use the uploaded Hancock Portal, scheduling workflow, document screenshot, or inspection workflow image as the source/reference. Create a premium Apple-style landing page hero visual for Hancock Claims Consultants.
-
-Keep the uploaded interface recognizable as the central product proof, but make the composition cleaner, sharper, and more dramatic. Place the portal or workflow image on a soft white and pale-blue glass stage with crisp shadows, subtle depth, and restrained cyan focus rings over the most important workflow areas: search, status, deliverables, scheduling map/calendar, and new request or claim action.
-
-The image should feel like a high-end scheduling portal for insurance inspections and claims operations. It should communicate: schedule inspection, track claim status, assign work, and pull deliverables from one professional portal.
-
-Style: clean enterprise SaaS, Apple product-launch restraint, premium command-center clarity, Hancock navy and blue accents, strong product trust. Original and legally clean. Similar conversion appeal to a technical roof-measurement landing page, but not a copy of any competitor.
-
-No extra text. No fake UI labels. No distorted interface. No people. No watermarks. No movie references. Wide 16:9 composition with negative space for a landing-page headline and CTA."""
-
-OPENART_NEGATIVE_PROMPT = "busy layout, cluttered dashboard, distorted UI, fake text, misspelled text, extra labels, random buttons, extra logos, watermark, people, cartoon, fantasy, movie still, actor likeness, Iron Man, Jarvis, orange glow, dark chaotic background, stock insurance photo, blurry interface, low resolution, unrealistic perspective"
-
-def openart_visual_prompt(target_keyword='', audience='', workflow_focus='', extra=''):
-    details=[]
-    if target_keyword: details.append(f'Target keyword: {target_keyword}')
-    if audience: details.append(f'Audience: {audience}')
-    if workflow_focus: details.append(f'Workflow focus: {workflow_focus}')
-    if extra: details.append(f'Extra direction: {extra}')
-    tail='\n\n'.join(details)
-    prompt=OPENART_MASTER_PROMPT
-    if tail:
-        prompt += '\n\nCampaign fields:\n' + tail
-    prompt += '\n\nNegative prompt:\n' + OPENART_NEGATIVE_PROMPT
-    return prompt
-
-def openart_configured():
-    return bool(OPENART_MCP_URL and OPENART_MCP_AUTH_TOKEN)
-
-def openart_headers():
-    headers={
-        'Content-Type':'application/json',
-        'Accept':'application/json, text/event-stream',
-        'MCP-Protocol-Version':'2025-06-18',
-    }
-    if OPENART_MCP_AUTH_TOKEN:
-        headers['Authorization']='Bearer '+OPENART_MCP_AUTH_TOKEN
-    return headers
-
-def parse_mcp_response(raw, content_type=''):
-    text=raw.decode('utf-8', errors='replace')
-    if 'text/event-stream' in (content_type or '') or text.lstrip().startswith('event:') or '\ndata:' in text:
-        data_lines=[]
-        for line in text.splitlines():
-            if line.startswith('data:'):
-                data_lines.append(line[5:].strip())
-        for item in reversed(data_lines):
-            if item and item != '[DONE]':
-                return json.loads(item)
-        raise RuntimeError('MCP server returned an empty event stream.')
-    return json.loads(text or '{}')
-
-def openart_mcp_rpc(method, params=None, request_id=None):
-    if not OPENART_MCP_URL:
-        raise RuntimeError('OpenArt MCP URL is not configured.')
-    body={'jsonrpc':'2.0','id':request_id or secrets.token_urlsafe(8),'method':method}
-    if params is not None:
-        body['params']=params
-    request=urllib.request.Request(
-        OPENART_MCP_URL,
-        data=json.dumps(body).encode(),
-        headers=openart_headers(),
-        method='POST',
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            data=parse_mcp_response(response.read(), response.headers.get('Content-Type',''))
-    except urllib.error.HTTPError as exc:
-        detail=exc.read().decode(errors='replace')[:700]
-        if exc.code in (401,403):
-            raise RuntimeError('OpenArt MCP rejected the request. Add the OpenArt MCP auth token on the server, then try again.')
-        raise RuntimeError(f'OpenArt MCP request failed {exc.code}: {detail}') from exc
-    if data.get('error'):
-        message=data['error'].get('message') if isinstance(data.get('error'),dict) else str(data['error'])
-        raise RuntimeError(f'OpenArt MCP error: {message}')
-    return data.get('result', data)
-
-def openart_mcp_initialize():
-    return openart_mcp_rpc('initialize',{
-        'protocolVersion':'2025-06-18',
-        'capabilities':{},
-        'clientInfo':{'name':'Hancock Marketing Studio','version':'1.0'},
-    }, 'openart-init')
-
-def openart_mcp_tools():
-    openart_mcp_initialize()
-    result=openart_mcp_rpc('tools/list', {}, 'openart-tools')
-    return result.get('tools',[]) if isinstance(result,dict) else []
-
-def choose_openart_tool(tools):
-    if OPENART_MCP_TOOL:
-        for tool in tools:
-            if (tool.get('name') or '').strip()==OPENART_MCP_TOOL:
-                return tool
-        return {'name':OPENART_MCP_TOOL,'description':'Configured by OPENART_MCP_TOOL'}
-    candidates=('image','generate','create','render','variation','edit')
-    for tool in tools:
-        name=(tool.get('name') or '').lower()
-        desc=(tool.get('description') or '').lower()
-        haystack=name+' '+desc
-        if any(word in haystack for word in candidates):
-            return tool
-    return None
-
-def extract_openart_image_urls(value):
-    urls=[]
-    def walk(node):
-        if isinstance(node,str):
-            if node.startswith('http') and re.search(r'\.(png|jpe?g|webp|gif)(\?|$)', node, re.I):
-                urls.append(node)
-        elif isinstance(node,list):
-            for item in node: walk(item)
-        elif isinstance(node,dict):
-            for key,item in node.items():
-                if key.lower() in ('url','image_url','output_url','download_url') and isinstance(item,str) and item.startswith('http'):
-                    urls.append(item)
-                else:
-                    walk(item)
-    walk(value)
-    seen=[]
-    for url in urls:
-        if url not in seen: seen.append(url)
-    return seen
-
-def openart_generate_visual(data):
-    image=(data.get('image') or '').strip()
-    if not image.startswith('data:image/'):
-        raise RuntimeError('Upload a PNG, JPEG, or WebP image for OpenArt.')
-    if len(image)>14_000_000:
-        raise RuntimeError('The image is too large. Use a file under about 10 MB.')
-    prompt=openart_visual_prompt(
-        (data.get('target_keyword') or '').strip()[:140],
-        (data.get('audience') or '').strip()[:140],
-        (data.get('workflow_focus') or '').strip()[:180],
-        (data.get('extra') or '').strip()[:1200],
-    )
-    if not openart_configured():
-        return {
-            'ok':False,
-            'mode':'needs_auth',
-            'configured':False,
-            'prompt':prompt,
-            'message':'OpenArt MCP is wired, but OpenArt appears to require an OAuth connector session. Use the prompt/manual OpenArt flow for now, or add OPENART_MCP_AUTH_TOKEN only if OpenArt provides a service bearer token for this account.',
-        }
-    tools=openart_mcp_tools()
-    tool=choose_openart_tool(tools)
-    if not tool:
-        return {
-            'ok':False,
-            'mode':'tool_discovery',
-            'configured':True,
-            'prompt':prompt,
-            'tools':tools,
-            'message':'Connected to OpenArt MCP, but no obvious image generation tool was found. Set OPENART_MCP_TOOL to the right tool name after reviewing the discovered tools.',
-        }
-    args={
-        OPENART_MCP_PROMPT_FIELD:prompt,
-        OPENART_MCP_IMAGE_FIELD:image,
-        'negative_prompt':OPENART_NEGATIVE_PROMPT,
-        'aspect_ratio':'16:9',
-        'style':'premium enterprise SaaS landing page hero',
-        'variation_count':4,
-    }
-    if OPENART_MCP_MODEL:
-        args['model']=OPENART_MCP_MODEL
-    result=openart_mcp_rpc('tools/call',{'name':tool.get('name'),'arguments':args},'openart-generate')
-    return {
-        'ok':True,
-        'mode':'generated',
-        'tool':tool.get('name'),
-        'prompt':prompt,
-        'result':result,
-        'image_urls':extract_openart_image_urls(result),
-    }
 def elevenlabs_audio(text, voice_id=None, model_id=None):
     if not ELEVENLABS_API_KEY:
         raise RuntimeError('Voice is not configured on the server.')
@@ -3095,10 +2916,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.require_user();
             if user: self.send_json(dave_core_status())
             return
-        if path=='/api/openart-status':
-            user=self.require_user();
-            if user: self.api_openart_status(user)
-            return
         self.send_html('<h1>Not found</h1>',404)
     def do_POST(self):
         path=urllib.parse.urlparse(self.path).path
@@ -3125,7 +2942,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/dave-report': self.api_dave_report(user); return
         if path=='/api/dave-core-run': self.api_dave_core_run(user); return
         if path=='/api/vision': self.api_vision(user); return
-        if path=='/api/openart-generate': self.api_openart_generate(user); return
         if path=='/api/run-scan': self.api_run_scan(user); return
         if path=='/api/run-council': self.api_run_council(user); return
         if path=='/api/invite': self.api_invite(user); return
@@ -3707,37 +3523,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
             reply=anthropic_vision(prompt[:8000],image)
             log_action(user['id'],'reviewed an inspection photo','Chad vision review')
             self.send_json({'reply':reply})
-        except Exception as exc:
-            self.send_json({'error':str(exc)},502)
-    def api_openart_status(self,user):
-        payload={
-            'configured':openart_configured(),
-            'url':OPENART_MCP_URL,
-            'tool':OPENART_MCP_TOOL,
-            'image_field':OPENART_MCP_IMAGE_FIELD,
-            'prompt_field':OPENART_MCP_PROMPT_FIELD,
-            'model':OPENART_MCP_MODEL,
-            'status':'needs_auth' if not openart_configured() else 'configured',
-        }
-        if not openart_configured():
-            payload['message']='OpenArt MCP appears to require OAuth connector authorization. Use the prompt/manual OpenArt flow for now, or add OPENART_MCP_AUTH_TOKEN only if OpenArt provides a service bearer token for this account.'
-            self.send_json(payload); return
-        try:
-            tools=openart_mcp_tools()
-            payload.update({'status':'connected','tools':tools,'selected_tool':(choose_openart_tool(tools) or {}).get('name','')})
-            self.send_json(payload)
-        except Exception as exc:
-            payload.update({'status':'unavailable','error':str(exc)})
-            self.send_json(payload,502)
-    def api_openart_generate(self,user):
-        if self.rate_limited('openart-generate',8,30):
-            self.send_json({'error':'OpenArt generation limit reached. Try again later.'},429); return
-        data=self.read_body()
-        try:
-            result=openart_generate_visual(data)
-            log_action(user['id'],'requested OpenArt visual',(data.get('target_keyword') or 'Landing visual')[:140])
-            status=200 if result.get('ok') else 202
-            self.send_json(result,status)
         except Exception as exc:
             self.send_json({'error':str(exc)},502)
     def api_run_scan(self,user):
