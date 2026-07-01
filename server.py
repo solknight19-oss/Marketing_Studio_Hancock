@@ -36,6 +36,17 @@ INITIAL_LOGINS = APP / 'INITIAL_LOGINS.md'
 DAVE_DESKTOP_TOKEN_FILE = APP / '.dave_desktop_token'
 PLAYBOOK = ROOT / 'Ryan_Knight_Inspection_Industry_Playbook.md'
 COLLABORATION_PLAYBOOK = ROOT / 'Chad_Collaboration_Playbook.md'
+
+def local_secret(*paths):
+    for path in paths:
+        try:
+            value=Path(path).read_text(encoding='utf-8').strip()
+            if value:
+                return value
+        except Exception:
+            pass
+    return ''
+
 SESSION_DAYS = 7
 INVITE_HOURS = 24
 RESET_HOURS = 1
@@ -49,6 +60,9 @@ ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '').strip()
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_TRANSCRIBE_MODEL = os.environ.get('OPENAI_TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe').strip()
+FAL_KEY = (os.environ.get('FAL_KEY') or os.environ.get('FAL_API_KEY') or local_secret(ROOT/'fal_key.txt', ROOT.parent/'Hancock_CoPilot'/'fal_key.txt')).strip()
+FAL_IMAGE_MODEL = os.environ.get('FAL_IMAGE_MODEL', 'fal-ai/flux-pro/kontext').strip() or 'fal-ai/flux-pro/kontext'
+FAL_RUN_BASE = os.environ.get('FAL_RUN_BASE', 'https://fal.run').strip().rstrip('/') or 'https://fal.run'
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
 ELEVENLABS_TTS_MODEL = os.environ.get('ELEVENLABS_TTS_MODEL', 'eleven_multilingual_v2').strip()
@@ -120,6 +134,12 @@ AI_HEALTH = {
     'configured': bool(ANTHROPIC_API_KEY),
     'model': ANTHROPIC_MODEL,
     'status': 'pending' if ANTHROPIC_API_KEY else 'not_configured',
+}
+FAL_HEALTH = {
+    'configured': bool(FAL_KEY),
+    'provider': 'fal',
+    'model': FAL_IMAGE_MODEL,
+    'status': 'configured' if FAL_KEY else 'not_configured',
 }
 USERS = [
     ('admin', 'rknight@hancockclaims.com', 'Ryan Knight', 'owner'),
@@ -402,6 +422,111 @@ def anthropic_vision(prompt, image_data_url):
     except urllib.error.HTTPError as exc:
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'Photo review was rejected: {detail}') from exc
+
+FAL_VISUAL_PROMPT = """Use the uploaded image as the source reference and keep its main content recognizable. Create a premium Hancock Claims Consultants landing-page hero visual for scheduling, inspection workflow, portal, document, or operational proof.
+
+The visual should feel like a clean Apple-style enterprise product launch: white and pale-blue glass stage, crisp shadows, professional depth, Hancock navy accents, and restrained technical highlights. Add thin intelligent tracing lines, edge highlights, callout glows, and subtle scan passes that follow real borders, text blocks, controls, maps, cards, forms, tables, or document areas visible in the uploaded image. The highlighting must adapt to the uploaded image instead of using fixed circles or generic overlays.
+
+The result should communicate: schedule inspection, track claim or assignment status, route work, see map/calendar context, and pull deliverables from a trusted professional portal or workflow.
+
+Keep it legally clean and original. Do not copy a competitor page. Do not include people, movie references, actor likenesses, watermarks, fake logos, or random interface text. Avoid distorted UI. Wide 16:9 landing-page hero with useful negative space for a headline and call to action."""
+
+FAL_NEGATIVE_PROMPT = "static blue circles, generic overlay, distorted UI, unreadable text, fake labels, extra logos, watermark, people, cartoon, fantasy, movie still, actor likeness, Iron Man, Jarvis, dark chaotic background, stock insurance photo, blurry interface, low resolution"
+
+def fal_visual_prompt(target_keyword='', audience='', workflow_focus='', extra=''):
+    details=[]
+    if target_keyword: details.append(f'Target keyword: {target_keyword}')
+    if audience: details.append(f'Audience: {audience}')
+    if workflow_focus: details.append(f'Workflow focus: {workflow_focus}')
+    if extra: details.append(f'Extra direction: {extra}')
+    prompt=FAL_VISUAL_PROMPT
+    if details:
+        prompt += '\n\nCampaign fields:\n' + '\n'.join(details)
+    prompt += '\n\nNegative prompt:\n' + FAL_NEGATIVE_PROMPT
+    return prompt
+
+def extract_fal_image_urls(value):
+    urls=[]
+    def walk(node):
+        if isinstance(node,str):
+            if node.startswith('http') and re.search(r'\.(png|jpe?g|webp|gif)(\?|$)', node, re.I):
+                urls.append(node)
+        elif isinstance(node,list):
+            for item in node:
+                walk(item)
+        elif isinstance(node,dict):
+            for key,item in node.items():
+                if key.lower() in ('url','image_url','output_url','download_url') and isinstance(item,str) and item.startswith('http'):
+                    urls.append(item)
+                else:
+                    walk(item)
+    walk(value)
+    seen=[]
+    for url in urls:
+        if url not in seen:
+            seen.append(url)
+    return seen
+
+def fal_generate_visual(data):
+    image=(data.get('image') or '').strip()
+    if not image.startswith('data:image/'):
+        raise RuntimeError('Upload a PNG, JPEG, or WebP image for FAL.')
+    if len(image)>14_000_000:
+        raise RuntimeError('The image is too large. Use a file under about 10 MB.')
+    prompt=fal_visual_prompt(
+        (data.get('target_keyword') or '').strip()[:140],
+        (data.get('audience') or '').strip()[:140],
+        (data.get('workflow_focus') or '').strip()[:180],
+        (data.get('extra') or '').strip()[:1200],
+    )
+    if not FAL_KEY:
+        return {
+            'ok':False,
+            'configured':False,
+            'model':FAL_IMAGE_MODEL,
+            'prompt':prompt,
+            'message':'FAL is wired, but the server needs FAL_KEY or FAL_API_KEY before it can generate visuals.',
+        }
+    try:
+        count=max(1,min(4,int(data.get('num_images') or 1)))
+    except Exception:
+        count=1
+    payload={
+        'prompt':prompt,
+        'image_url':image,
+        'num_images':count,
+        'output_format':'png',
+        'aspect_ratio':'16:9',
+        'guidance_scale':3.5,
+        'safety_tolerance':'2',
+        'enhance_prompt':True,
+    }
+    request=urllib.request.Request(
+        FAL_RUN_BASE+'/'+FAL_IMAGE_MODEL.strip('/'),
+        data=json.dumps(payload).encode('utf-8'),
+        headers={
+            'Authorization':'Key '+FAL_KEY,
+            'Content-Type':'application/json',
+            'Accept':'application/json',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(request,timeout=150) as response:
+            result=json.loads(response.read().decode('utf-8') or '{}')
+    except urllib.error.HTTPError as exc:
+        detail=exc.read().decode(errors='replace')[:700]
+        if exc.code in (401,403):
+            raise RuntimeError('FAL rejected the server key. Update FAL_KEY/FAL_API_KEY and try again.') from exc
+        raise RuntimeError(f'FAL request failed {exc.code}: {detail}') from exc
+    return {
+        'ok':True,
+        'configured':True,
+        'model':FAL_IMAGE_MODEL,
+        'prompt':prompt,
+        'result':result,
+        'image_urls':extract_fal_image_urls(result),
+    }
 
 def elevenlabs_audio(text, voice_id=None, model_id=None):
     if not ELEVENLABS_API_KEY:
@@ -2916,6 +3041,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.require_user();
             if user: self.send_json(dave_core_status())
             return
+        if path=='/api/fal-status':
+            user=self.require_user();
+            if user: self.api_fal_status(user)
+            return
         self.send_html('<h1>Not found</h1>',404)
     def do_POST(self):
         path=urllib.parse.urlparse(self.path).path
@@ -2942,6 +3071,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/dave-report': self.api_dave_report(user); return
         if path=='/api/dave-core-run': self.api_dave_core_run(user); return
         if path=='/api/vision': self.api_vision(user); return
+        if path=='/api/fal-generate': self.api_fal_generate(user); return
         if path=='/api/run-scan': self.api_run_scan(user); return
         if path=='/api/run-council': self.api_run_council(user); return
         if path=='/api/invite': self.api_invite(user); return
@@ -3523,6 +3653,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             reply=anthropic_vision(prompt[:8000],image)
             log_action(user['id'],'reviewed an inspection photo','Chad vision review')
             self.send_json({'reply':reply})
+        except Exception as exc:
+            self.send_json({'error':str(exc)},502)
+    def api_fal_status(self,user):
+        self.send_json({
+            'configured':bool(FAL_KEY),
+            'provider':'fal',
+            'model':FAL_IMAGE_MODEL,
+            'status':'configured' if FAL_KEY else 'not_configured',
+            'message':'FAL is ready.' if FAL_KEY else 'Add FAL_KEY or FAL_API_KEY on the server to enable visual generation.',
+        })
+    def api_fal_generate(self,user):
+        if self.rate_limited('fal-generate',8,30):
+            self.send_json({'error':'FAL generation limit reached. Try again later.'},429); return
+        data=self.read_body()
+        try:
+            result=fal_generate_visual(data)
+            if result.get('ok'):
+                log_action(user['id'],'generated FAL visual',(data.get('target_keyword') or 'Landing visual')[:140])
+            status=200 if result.get('ok') else 202
+            self.send_json(result,status)
         except Exception as exc:
             self.send_json({'error':str(exc)},502)
     def api_run_scan(self,user):

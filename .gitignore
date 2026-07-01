@@ -5,6 +5,7 @@ app_data/
 .env.local
 anthropic_key.txt
 elevenlabs_key.txt
+fal_key.txt
 *.key
 *.pem
 
