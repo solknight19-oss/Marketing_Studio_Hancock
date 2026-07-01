@@ -550,7 +550,7 @@ def openart_generate_visual(data):
             'mode':'needs_auth',
             'configured':False,
             'prompt':prompt,
-            'message':'OpenArt MCP is wired, but the server needs OPENART_MCP_AUTH_TOKEN before it can push images to OpenArt.',
+            'message':'OpenArt MCP is wired, but OpenArt appears to require an OAuth connector session. Use the prompt/manual OpenArt flow for now, or add OPENART_MCP_AUTH_TOKEN only if OpenArt provides a service bearer token for this account.',
         }
     tools=openart_mcp_tools()
     tool=choose_openart_tool(tools)
@@ -3720,7 +3720,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             'status':'needs_auth' if not openart_configured() else 'configured',
         }
         if not openart_configured():
-            payload['message']='Add OPENART_MCP_AUTH_TOKEN on the server to connect this Studio to OpenArt MCP.'
+            payload['message']='OpenArt MCP appears to require OAuth connector authorization. Use the prompt/manual OpenArt flow for now, or add OPENART_MCP_AUTH_TOKEN only if OpenArt provides a service bearer token for this account.'
             self.send_json(payload); return
         try:
             tools=openart_mcp_tools()
