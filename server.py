@@ -453,6 +453,49 @@ def fal_visual_prompt(target_keyword='', audience='', workflow_focus='', extra='
         prompt += f'\n\n{extra.strip()}'
     return prompt
 
+FAL_PROMPT_WRITER_SYSTEM = """You write edit instructions for FLUX Kontext, an image-editing model. You will be shown the exact image that will be edited. Write ONE instruction, in plain imperative prose, tailored to what is actually in this image. Output only the instruction text — no preamble, no quotes, no markdown.
+
+Hard rules for every instruction you write:
+- The uploaded content is the hero's proof object. Keep it pixel-identical: same colors, same layout, same text, same faces. Say this explicitly.
+- NEVER place the content inside a device mockup (tablet, iPad, phone, laptop, monitor) or a glass slab. Present the content itself, large and direct.
+- Fit the presentation to the content you actually see: a software screenshot becomes a clean floating panel with a soft shadow on a white/pale-blue backdrop; a photo of a person or jobsite becomes a full-bleed or lightly framed photographic hero; a document becomes a crisp presented page. Describe the real elements you can see so the treatment is grounded in this specific image.
+- Add thin, precise deep-navy and electric-blue accent lines that trace the real outer edges and one or two real regions visible in this image — restrained, around the content, never repainting it.
+- Wide 16:9 landing-page hero, generous clear negative space on the left third for a future headline and call-to-action button. Calm, premium, professional enterprise style.
+- Do not add any new text, labels, logos, watermarks, or people."""
+
+def fal_adaptive_prompt(image_data_url, target_keyword='', audience='', workflow_focus='', extra=''):
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError('Live AI is not configured on the server.')
+    header, encoded=image_data_url.split(',',1)
+    media_type=header.split(';',1)[0].split(':',1)[1]
+    asks=[]
+    if workflow_focus: asks.append(f'Give the strongest accent emphasis to whatever in the image relates to: {workflow_focus}.')
+    if target_keyword: asks.append(f'The landing page this supports is about: {target_keyword}.')
+    if audience: asks.append(f'The audience is: {audience}.')
+    if extra: asks.append(f'Extra direction from the marketing team (honor it): {extra}')
+    user_text='Write the FLUX Kontext edit instruction for this image.'+((' '+' '.join(asks)) if asks else '')
+    payload=json.dumps({
+        'model':ANTHROPIC_MODEL,
+        'max_tokens':500,
+        'system':FAL_PROMPT_WRITER_SYSTEM,
+        'messages':[{'role':'user','content':[
+            {'type':'image','source':{'type':'base64','media_type':media_type,'data':encoded}},
+            {'type':'text','text':user_text},
+        ]}],
+    }).encode()
+    request=urllib.request.Request(
+        'https://api.anthropic.com/v1/messages',
+        data=payload,
+        headers={'content-type':'application/json','x-api-key':ANTHROPIC_API_KEY,'anthropic-version':'2023-06-01'},
+        method='POST',
+    )
+    with urllib.request.urlopen(request,timeout=60) as response:
+        data=json.loads(response.read().decode())
+    text=''.join(part.get('text','') for part in data.get('content',[])).strip()
+    if len(text)<80:
+        raise RuntimeError('Adaptive prompt came back too short.')
+    return text
+
 def fal_key_value():
     return (FAL_KEY or setting_get('fal_key','')).strip()
 
@@ -484,12 +527,19 @@ def fal_generate_visual(data):
         raise RuntimeError('Upload a PNG, JPEG, or WebP image for FAL.')
     if len(image)>14_000_000:
         raise RuntimeError('The image is too large. Use a file under about 10 MB.')
-    prompt=fal_visual_prompt(
-        (data.get('target_keyword') or '').strip()[:140],
-        (data.get('audience') or '').strip()[:140],
-        (data.get('workflow_focus') or '').strip()[:180],
-        (data.get('extra') or '').strip()[:1200],
-    )
+    kw=(data.get('target_keyword') or '').strip()[:140]
+    aud=(data.get('audience') or '').strip()[:140]
+    focus=(data.get('workflow_focus') or '').strip()[:180]
+    extra=(data.get('extra') or '').strip()[:1200]
+    prompt_source='adaptive'
+    try:
+        # Claude looks at the actual upload and writes a Kontext instruction
+        # fitted to it (screenshot vs photo vs document), so the treatment
+        # follows the image instead of forcing one canned stage/device look.
+        prompt=fal_adaptive_prompt(image,kw,aud,focus,extra)
+    except Exception:
+        prompt=fal_visual_prompt(kw,aud,focus,extra)
+        prompt_source='standard'
     fal_key=fal_key_value()
     if not fal_key:
         return {
@@ -535,6 +585,7 @@ def fal_generate_visual(data):
         'configured':True,
         'model':FAL_IMAGE_MODEL,
         'prompt':prompt,
+        'prompt_source':prompt_source,
         'result':result,
         'image_urls':extract_fal_image_urls(result),
     }
@@ -3671,6 +3722,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         configured=bool(fal_key_value())
         self.send_json({
             'configured':configured,
+            'can_manage_key':user['role']=='owner',
             'provider':'fal',
             'model':FAL_IMAGE_MODEL,
             'status':'configured' if configured else 'not_configured',
@@ -3684,7 +3736,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_json({'error':'That does not look like a valid FAL key.'},400); return
         setting_set('fal_key',key)
         log_action(user['id'],'updated FAL key','FAL Visual Lab')
-        self.send_json({'ok':True,'configured':True,'message':'FAL key saved for the live Studio server.'})
+        self.send_json({'ok':True,'configured':True,'can_manage_key':True,'model':FAL_IMAGE_MODEL,'message':'FAL key saved for the live Studio server.'})
     def api_fal_generate(self,user):
         if self.rate_limited('fal-generate',8,30):
             self.send_json({'error':'FAL generation limit reached. Try again later.'},429); return
