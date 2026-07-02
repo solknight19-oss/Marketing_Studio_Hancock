@@ -61,7 +61,11 @@ ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-opus-4-8').strip()
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '').strip()
 OPENAI_TRANSCRIBE_MODEL = os.environ.get('OPENAI_TRANSCRIBE_MODEL', 'gpt-4o-mini-transcribe').strip()
 FAL_KEY = (os.environ.get('FAL_KEY') or os.environ.get('FAL_API_KEY') or local_secret(ROOT/'fal_key.txt', ROOT.parent/'Hancock_CoPilot'/'fal_key.txt')).strip()
-FAL_IMAGE_MODEL = os.environ.get('FAL_IMAGE_MODEL', 'fal-ai/flux-pro/kontext').strip() or 'fal-ai/flux-pro/kontext'
+# Kontext Max preserves in-image text/typography noticeably better than Kontext Pro —
+# worth it for text-dense portal/document screenshots ($0.08 vs $0.04 per image).
+# NOTE: the fal_generate_visual payload is Kontext-schema-specific; if this env var is
+# pointed at a non-Kontext model (different input fields), generation will fail.
+FAL_IMAGE_MODEL = os.environ.get('FAL_IMAGE_MODEL', 'fal-ai/flux-pro/kontext/max').strip() or 'fal-ai/flux-pro/kontext/max'
 FAL_RUN_BASE = os.environ.get('FAL_RUN_BASE', 'https://fal.run').strip().rstrip('/') or 'https://fal.run'
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 ELEVENLABS_VOICE_ID = os.environ.get('ELEVENLABS_VOICE_ID', 'cjVigY5qzO86Huf0OWal').strip()
@@ -423,26 +427,30 @@ def anthropic_vision(prompt, image_data_url):
         detail=exc.read().decode(errors='replace')[:500]
         raise RuntimeError(f'Photo review was rejected: {detail}') from exc
 
-FAL_VISUAL_PROMPT = """Use the uploaded image as the source reference and keep its main content recognizable. Create a premium Hancock Claims Consultants landing-page hero visual for scheduling, inspection workflow, portal, document, or operational proof.
+# FLUX Kontext is an instruction-editing model: it responds best to short imperative
+# edit instructions that say exactly what to PRESERVE and what to CHANGE. It has no
+# negative_prompt input — never append unwanted-term lists to this text, because the
+# model attends to those tokens and can ADD the very things being listed.
+FAL_VISUAL_PROMPT = """Restage this exact screenshot as a premium enterprise landing-page hero image.
 
-The visual should feel like a clean Apple-style enterprise product launch: white and pale-blue glass stage, crisp shadows, professional depth, Hancock navy accents, and restrained technical highlights. Add thin intelligent tracing lines, edge highlights, callout glows, and subtle scan passes that follow real borders, text blocks, controls, maps, cards, forms, tables, or document areas visible in the uploaded image. The highlighting must adapt to the uploaded image instead of using fixed circles or generic overlays.
+Keep the screenshot itself pixel-identical: same light color scheme, same white background, same layout, panels, tables, text, buttons, map, and calendar exactly as they appear. Do not re-theme it, do not darken it, and do not redraw, blur, invent, or replace any interface elements or words.
 
-The result should communicate: schedule inspection, track claim or assignment status, route work, see map/calendar context, and pull deliverables from a trusted professional portal or workflow.
+Set the unchanged screenshot on a clean white and pale-blue studio stage with a soft realistic shadow and gentle perspective depth, like a modern enterprise software product launch page. Around the outside of the screenshot — on the stage, not on the interface itself — trace its outer border and the outlines of its main panels with thin, precise glowing accent lines in deep navy and electric blue that follow the true edges of the elements in this specific image.
 
-Keep it legally clean and original. Do not copy a competitor page. Do not include people, movie references, actor likenesses, watermarks, fake logos, or random interface text. Avoid distorted UI. Wide 16:9 landing-page hero with useful negative space for a headline and call to action."""
-
-FAL_NEGATIVE_PROMPT = "static blue circles, generic overlay, distorted UI, unreadable text, fake labels, extra logos, watermark, people, cartoon, fantasy, movie still, actor likeness, Iron Man, Jarvis, dark chaotic background, stock insurance photo, blurry interface, low resolution"
+Leave generous clear negative space on the left third of the frame for a future headline and call-to-action button. Wide 16:9 composition, crisp and high-resolution, calm and professional. Do not add any new text, labels, logos, watermarks, or people."""
 
 def fal_visual_prompt(target_keyword='', audience='', workflow_focus='', extra=''):
-    details=[]
-    if target_keyword: details.append(f'Target keyword: {target_keyword}')
-    if audience: details.append(f'Audience: {audience}')
-    if workflow_focus: details.append(f'Workflow focus: {workflow_focus}')
-    if extra: details.append(f'Extra direction: {extra}')
     prompt=FAL_VISUAL_PROMPT
-    if details:
-        prompt += '\n\nCampaign fields:\n' + '\n'.join(details)
-    prompt += '\n\nNegative prompt:\n' + FAL_NEGATIVE_PROMPT
+    if workflow_focus:
+        prompt += f'\n\nGive the strongest glow accents to the part of the interface related to: {workflow_focus}.'
+    if target_keyword and audience:
+        prompt += f'\n\nThis hero image supports a landing page about "{target_keyword}" aimed at {audience.lower()}.'
+    elif target_keyword:
+        prompt += f'\n\nThis hero image supports a landing page about "{target_keyword}".'
+    elif audience:
+        prompt += f'\n\nThis hero image supports a landing page aimed at {audience.lower()}.'
+    if extra:
+        prompt += f'\n\n{extra.strip()}'
     return prompt
 
 def fal_key_value():
@@ -503,7 +511,6 @@ def fal_generate_visual(data):
         'aspect_ratio':'16:9',
         'guidance_scale':3.5,
         'safety_tolerance':'2',
-        'enhance_prompt':True,
     }
     request=urllib.request.Request(
         FAL_RUN_BASE+'/'+FAL_IMAGE_MODEL.strip('/'),
