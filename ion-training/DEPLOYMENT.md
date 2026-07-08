@@ -4,6 +4,10 @@ Production domain:
 
 `ion-training.hancockclaims.com`
 
+Render service URL:
+
+`https://hancock-ion-training.onrender.com`
+
 ## What this is
 
 This folder is a static training site. It does not need a backend, database, API keys, or server-side code.
@@ -22,11 +26,11 @@ Publish the entire `ION_Guide_Walkthrough` folder:
 
 ## Recommended launch path
 
-1. Create a static site in Netlify, Vercel, GitHub Pages, Cloudflare Pages, or Render Static Site.
-2. Set the publish/output directory to this folder.
-3. Add the custom domain `ion-training.hancockclaims.com`.
-4. In DNS for `hancockclaims.com`, add the CNAME record requested by the host.
-5. Enable HTTPS/SSL in the host dashboard.
+1. Deploy the `hancock-ion-training` Render service from this folder.
+2. Confirm `https://hancock-ion-training.onrender.com` opens the training site.
+3. Add the custom domain `ion-training.hancockclaims.com` to that Render service.
+4. In DNS for `hancockclaims.com`, add the CNAME record requested by Render.
+5. Enable HTTPS/SSL in the Render dashboard.
 6. Open `https://ion-training.hancockclaims.com` on desktop and phone.
 
 ## DNS note
