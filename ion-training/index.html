@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ION Training | ion-training.hancockclaims.com</title>
+  <meta name="description" content="Hancock Claims ION underwriting form training walkthrough and simulation.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="rail" aria-label="Training sections">
+      <div class="brand">
+        <span class="brand-mark">ION</span>
+        <span class="brand-subtitle">ion-training.hancockclaims.com</span>
+      </div>
+      <div class="progress-block">
+        <div class="progress-label">
+          <span id="progressText">Step 1 of 16</span>
+          <span id="progressPercent">6%</span>
+        </div>
+        <div class="progress-track" aria-hidden="true">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+      </div>
+      <nav id="stepNav" class="step-nav"></nav>
+    </aside>
+
+    <section class="stage" aria-live="polite">
+      <div class="phone-panel">
+        <div class="phone-label">
+          <span id="screenLabel">Current app screen</span>
+          <span id="screenFile">IMG_3424.PNG</span>
+        </div>
+        <div class="phone-frame">
+          <img id="screenImage" alt="ION app screenshot" src="assets/IMG_3424.PNG">
+          <div id="hotspot" class="hotspot" aria-hidden="true"></div>
+        </div>
+      </div>
+
+      <article class="lesson-panel">
+        <div class="lesson-kicker" id="sectionName">Launch</div>
+        <h1 id="lessonTitle">Open the ION app dashboard</h1>
+        <p id="lessonSummary" class="summary"></p>
+
+        <div class="mode-row" role="group" aria-label="Simulation mode">
+          <button id="guideMode" class="mode-button active" type="button">Guide</button>
+          <button id="practiceMode" class="mode-button" type="button">Practice</button>
+        </div>
+
+        <section class="card">
+          <h2>What To Do</h2>
+          <ol id="actionList" class="action-list"></ol>
+        </section>
+
+        <section class="card split-card">
+          <div>
+            <h2>Sample Information Entered</h2>
+            <div id="sampleFields" class="field-grid"></div>
+          </div>
+          <div>
+            <h2>Quality Check</h2>
+            <ul id="qualityList" class="quality-list"></ul>
+          </div>
+        </section>
+
+        <section class="card practice-card" id="practiceCard">
+          <h2>Practice Prompt</h2>
+          <p id="practicePrompt"></p>
+          <button id="fillButton" class="primary-button" type="button">Show Filled Example</button>
+          <div id="filledPreview" class="filled-preview"></div>
+        </section>
+
+        <div class="controls">
+          <button id="prevButton" type="button">Previous</button>
+          <button id="completeButton" type="button">Mark Step Complete</button>
+          <button id="nextButton" class="primary-button" type="button">Next Step</button>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

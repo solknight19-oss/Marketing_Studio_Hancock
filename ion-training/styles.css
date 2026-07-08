@@ -1,0 +1,392 @@
+:root {
+  --navy: #06365c;
+  --blue: #0b73ba;
+  --teal: #238ea2;
+  --amber: #e9902e;
+  --ink: #17212b;
+  --muted: #66717f;
+  --line: #d7dce3;
+  --panel: #f5f7fa;
+  --white: #ffffff;
+  --complete: #247a4c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+  background: #e9edf2;
+}
+
+button {
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.primary-button {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--white);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.rail {
+  background: var(--navy);
+  color: var(--white);
+  padding: 24px 20px;
+  overflow: auto;
+}
+
+.brand {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 24px;
+}
+
+.brand-mark {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.brand-subtitle {
+  color: #c5d3df;
+  font-size: 14px;
+}
+
+.progress-block {
+  margin-bottom: 20px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #dbe6ef;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.progress-track {
+  height: 9px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.2);
+}
+
+.progress-bar {
+  height: 100%;
+  width: 6%;
+  background: var(--amber);
+}
+
+.step-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.step-link {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  color: #d8e3ec;
+  text-align: left;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.step-link.active {
+  background: var(--white);
+  color: var(--navy);
+}
+
+.step-link.complete .step-number {
+  background: var(--complete);
+  color: var(--white);
+}
+
+.step-number {
+  display: inline-grid;
+  place-items: center;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.16);
+  font-size: 12px;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(330px, 470px) minmax(420px, 1fr);
+  gap: 24px;
+  padding: 24px;
+}
+
+.phone-panel,
+.lesson-panel {
+  min-width: 0;
+}
+
+.phone-panel {
+  align-self: start;
+  position: sticky;
+  top: 24px;
+}
+
+.phone-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.phone-frame {
+  position: relative;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: #111923;
+  box-shadow: 0 18px 45px rgba(6, 17, 31, .3);
+}
+
+.phone-frame img {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  background: var(--white);
+}
+
+.hotspot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid var(--amber);
+  background: rgba(233, 144, 46, .2);
+  box-shadow: 0 0 0 8px rgba(233, 144, 46, .18);
+}
+
+.lesson-panel {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.lesson-kicker {
+  color: var(--teal);
+  font-weight: 900;
+  text-transform: uppercase;
+  font-size: 13px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.summary {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.45;
+  max-width: 860px;
+}
+
+.mode-row {
+  display: inline-flex;
+  width: max-content;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--white);
+}
+
+.mode-button {
+  border: 0;
+  border-radius: 0;
+  min-width: 110px;
+}
+
+.mode-button.active {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  box-shadow: 0 8px 22px rgba(36, 47, 61, .07);
+}
+
+.split-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(250px, .85fr);
+  gap: 18px;
+}
+
+.action-list {
+  display: grid;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding-left: 22px;
+}
+
+.action-list li,
+.quality-list li {
+  line-height: 1.45;
+}
+
+.field-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: minmax(130px, .6fr) minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.field-name {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.field-value {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.quality-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding-left: 20px;
+}
+
+.practice-card {
+  border-left: 5px solid var(--amber);
+}
+
+.practice-card p {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.filled-preview {
+  display: none;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 6px;
+  background: #eef7f4;
+  border: 1px solid #b9d8cd;
+  line-height: 1.45;
+}
+
+.filled-preview.show {
+  display: block;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: static;
+  }
+
+  .step-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stage {
+    grid-template-columns: 1fr;
+  }
+
+  .phone-panel {
+    position: static;
+  }
+}
+
+@media (max-width: 680px) {
+  .rail,
+  .stage {
+    padding: 16px;
+  }
+
+  .step-nav,
+  .split-card {
+    grid-template-columns: 1fr;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    width: 100%;
+  }
+}

@@ -36,6 +36,8 @@ INITIAL_LOGINS = APP / 'INITIAL_LOGINS.md'
 DAVE_DESKTOP_TOKEN_FILE = APP / '.dave_desktop_token'
 PLAYBOOK = ROOT / 'Ryan_Knight_Inspection_Industry_Playbook.md'
 COLLABORATION_PLAYBOOK = ROOT / 'Chad_Collaboration_Playbook.md'
+ION_TRAINING_ROOT = ROOT / 'ion-training'
+ION_TRAINING_DOMAIN = 'ion-training.hancockclaims.com'
 
 def local_secret(*paths):
     for path in paths:
@@ -3008,7 +3010,52 @@ class Handler(http.server.BaseHTTPRequestHandler):
         data=json.dumps(obj,ensure_ascii=False).encode('utf-8'); self.send_response(code); self.send_header('Content-Type','application/json; charset=utf-8'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def send_bytes(self,data,content_type,code=200):
         self.send_response(code); self.send_header('Content-Type',content_type); self.send_header('Cache-Control','no-store'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+    def send_static_file(self,path,content_type,code=200,cache='public, max-age=3600'):
+        data=path.read_bytes(); self.send_response(code); self.send_header('Content-Type',content_type); self.send_header('Cache-Control',cache); self.send_header('X-Content-Type-Options','nosniff'); self.send_header('Referrer-Policy','strict-origin-when-cross-origin'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
     def redirect(self,path): self.send_response(302); self.send_header('Location',path); self.end_headers()
+    def host_name(self):
+        return (self.headers.get('Host','').split(':')[0] or '').strip().lower()
+    def is_ion_training_host(self):
+        return self.host_name()==ION_TRAINING_DOMAIN
+    def ion_training_file(self,path):
+        if not ION_TRAINING_ROOT.exists():
+            self.send_html('<h1>ION Training site not found</h1>',404); return True
+        route=path
+        if self.is_ion_training_host():
+            if route=='/': route='/index.html'
+        else:
+            if route=='/ion-training':
+                self.redirect('/ion-training/'); return True
+            if route=='/ion-training/': route='/index.html'
+            elif route.startswith('/ion-training/'): route=route[len('/ion-training'):]
+            else: return False
+        if route in ('','/'): route='/index.html'
+        relative=route.lstrip('/')
+        if not relative or '..' in Path(relative).parts:
+            self.send_html('<h1>Not found</h1>',404); return True
+        target=(ION_TRAINING_ROOT / relative).resolve()
+        try:
+            target.relative_to(ION_TRAINING_ROOT.resolve())
+        except ValueError:
+            self.send_html('<h1>Not found</h1>',404); return True
+        if not target.exists() or not target.is_file():
+            self.send_html('<h1>Not found</h1>',404); return True
+        suffix=target.suffix.lower()
+        content_types={
+            '.html':'text/html; charset=utf-8',
+            '.css':'text/css; charset=utf-8',
+            '.js':'application/javascript; charset=utf-8',
+            '.png':'image/png',
+            '.jpg':'image/jpeg',
+            '.jpeg':'image/jpeg',
+            '.pdf':'application/pdf',
+            '.txt':'text/plain; charset=utf-8',
+            '.md':'text/plain; charset=utf-8',
+            '.json':'application/json; charset=utf-8',
+        }
+        cache='public, max-age=31536000, immutable' if route.startswith('/assets/') else 'public, max-age=300'
+        self.send_static_file(target,content_types.get(suffix,'application/octet-stream'),cache=cache)
+        return True
     def secure_cookie(self):
         return self.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower() == 'https'
     def client_ip(self):
@@ -3066,10 +3113,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return user
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
+        if self.is_ion_training_host() or path=='/ion-training' or path.startswith('/ion-training/'):
+            if self.ion_training_file(path): return
         if path=='/healthz':
             self.send_json({
                 'ok':True,
                 'service':'hancock-live-site',
+                'ion_training':{'domain':ION_TRAINING_DOMAIN,'route':'/ion-training/','installed':ION_TRAINING_ROOT.exists()},
                 'chad':{
                     'agent_version':CHAD_AGENT_VERSION,
                     'tools':['studio_navigation','studio_page_awareness','carrier_email_automation','adaptive_opening_briefings','seasonal_content_triggers','future_month_content_planning','freshness_aware_weather','learning_evidence_briefings','workspace_unified_chad','turn_complete_listening','live_transcript','voice_standby','voice_text_only_commands','marketing_calendar_guidance','content_calendar_forecasting','workspace_management','team_update_collaboration','team_log_update_capture','codex_update_handoff','specialist_bots','live_web_research','source_backed_learning','source_page_navigation'],
