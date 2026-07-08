@@ -9,11 +9,13 @@ Included:
 - Chad guidance connected to the bot council
 - Chad embedded directly in the approved Studio with authenticated chat and optional ElevenLabs voice
 - Dave command briefing at `/dave`, with a local `Start Dave.command` launcher
+- Carrier Email Automation Studio at `/email-automation`, built from the June 2026 BD SOP
 - Ryan Knight's full Inspection Industry Playbook installed as Chad's learning foundation
 - Traceable learning records with source identifiers, dates, confidence labels, and corroboration counts
 - Live industry scan action using `marketing_bot.py`
 - Daily scheduled runs of the Industry Radar, Storm Watch, Content Opportunity, and SEO/AEO bots
 - Approved Marketing Studio at `/studio`
+- SOP-aligned email automation trigger checker, template library, cross-sell matrix, metrics, compliance rules, and activation plan
 - Chad feed endpoint at `/api/chad-feed`
 - Health check at `/healthz`
 
@@ -27,6 +29,8 @@ python3 server.py
 Open `http://127.0.0.1:8765`.
 
 Open Dave directly at `http://127.0.0.1:8765/dave`, or double-click `Start Dave.command`.
+
+Open Email Automation directly at `http://127.0.0.1:8765/email-automation` after signing in.
 
 Local-only bootstrap logins are written to `app_data/INITIAL_LOGINS.md` on first run.
 
@@ -61,3 +65,4 @@ Before broader use:
 - Keep API keys only in environment variables.
 - Add admin user-management UI.
 - Add paid voice layer: OpenAI Realtime or ElevenLabs Conversational AI.
+- Keep carrier email sending behind human approval, suppression checks, and audit logging before any CRM/email connector is allowed to send.

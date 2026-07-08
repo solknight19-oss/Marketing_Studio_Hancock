@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HCC &mdash; Carrier Email Automation Studio</title>
+<style>
+  :root{--navy:#0a2a45;--navy2:#103a5c;--blue:#2f6fbf;--blue2:#4f93e0;--ink:#1a2230;--muted:#64727f;--line:#e3e8ee;--bg:#f4f7fb;--card:#fff;--green:#1e7e45;--red:#c0392b;--amber:#b9770e}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:14px 24px;box-shadow:0 2px 12px rgba(10,42,69,.20)}
+  .hrow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:13px}
+  .crest{width:44px;height:44px;border-radius:9px;background:#fff;color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;border:2px solid var(--blue2)}
+  .brand h1{font-size:17px;margin:0;letter-spacing:.2px}.brand p{margin:2px 0 0;font-size:12px;color:#b9c6d6}
+  .keybar{display:flex;align-items:center;gap:8px}
+  .keybar input{padding:8px 10px;border-radius:8px;border:1px solid #2c4a66;background:#0d2c49;color:#fff;font-size:12.5px;width:210px}
+  .keybar input::placeholder{color:#8fa6bd}
+  .headbtn{padding:8px 11px;border-radius:8px;border:1px solid #2c4a66;background:#123a5c;color:#dbe7f5;font-weight:800;font-size:12px;cursor:pointer}
+  .headbtn:hover{background:#1c4f79;color:#fff}
+  .pill{padding:5px 11px;border-radius:20px;font-weight:700;font-size:11.5px;white-space:nowrap}
+  .pill.off{background:#1c3e5c;color:#aebfd0}.pill.on{background:var(--blue2);color:var(--navy)}
+  .tabs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+  .tab{padding:9px 15px;border-radius:9px 9px 0 0;background:#1c3e5c;color:#cdd8e6;font-weight:700;font-size:13px;cursor:pointer;border:none}
+  .tab.active{background:#fff;color:var(--navy)}
+  main{max-width:1420px;margin:0 auto;padding:20px}
+  .briefbar{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 17px;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+  .briefbar .d{font-size:13px;color:var(--muted)}.briefbar .d b{color:var(--ink);font-size:15px}
+  .secttitle{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:20px 0 10px;font-weight:800}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 6px}
+  .card .sub{font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.45}
+  label{display:block;font-size:12.5px;font-weight:600;margin:12px 0 5px}
+  input,select,textarea{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;background:#fbfcfe}
+  textarea{resize:vertical;min-height:110px}
+  .btn{margin-top:14px;padding:12px 18px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer}
+  .btn:hover{background:var(--blue2)}.btn:disabled{opacity:.55;cursor:default}
+  .mini{padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:12.5px;font-weight:600;cursor:pointer}.mini:hover{border-color:var(--blue)}
+  .status{font-size:12px;margin-top:10px;min-height:16px}.status.err{color:var(--red)}.status.ok{color:var(--green)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:14px}
+  .empty{color:var(--muted);text-align:center;padding:50px 20px}.empty .big{font-size:38px}
+  .hide{display:none}
+  .note{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .callout{font-size:12.5px;background:#fff7e8;border:1px solid #f0dcb0;border-left:3px solid var(--amber);border-radius:0 8px 8px 0;padding:11px 13px;margin:10px 0;line-height:1.5}
+  .callout b{color:#8a5a06}
+  footer{max-width:1280px;margin:8px auto 30px;padding:0 20px;color:var(--muted);font-size:11.5px;text-align:center}
+  /* sequences */
+  .seqcard{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:16px;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(16,24,40,.04)}
+  .seqcard .num{width:30px;height:30px;border-radius:8px;background:var(--navy);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .seqcard .top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .seqcard h3{font-size:16px;margin:0;color:var(--navy)}
+  .seqcard .obj{font-size:12.5px;color:#3a4350;line-height:1.5;margin:0 0 10px}
+  .kv{display:grid;grid-template-columns:92px 1fr;gap:4px 10px;font-size:12.5px;margin-bottom:3px}
+  .kv .k{color:var(--muted);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.4px;padding-top:2px}
+  .kv .v{color:#2a333f}
+  .steps{margin:9px 0 0;padding:9px 0 0;border-top:1px solid var(--line);font-size:12px}
+  .steps .s{display:flex;gap:8px;margin-bottom:5px}.steps .s b{color:var(--navy)}
+  /* templates */
+  .tmpl{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px;margin-bottom:12px}
+  .tmpl .th{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .tmpl .badge{font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;letter-spacing:.3px;background:#eef4fb;color:var(--blue)}
+  .tmpl h3{font-size:14.5px;color:var(--navy);margin:6px 0 2px}
+  .tmpl .subj{font-size:13px;font-weight:600;margin:8px 0 4px}
+  .tmpl textarea.body{min-height:230px;font-size:13px;line-height:1.5;background:#fff;white-space:pre-wrap;font-family:inherit}
+  .tmpl input.subj-in{font-size:13.5px;font-weight:600}
+  .rowbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .mergehint{font-size:11px;color:var(--muted);margin-top:6px}
+  .mergehint code{background:#eef4fb;border-radius:4px;padding:1px 5px;color:var(--navy)}
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:12.5px;background:#fff;border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f0f5fb;color:var(--navy);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  tr:last-child td{border-bottom:none}
+  .trigtag{display:inline-block;background:#eef4fb;color:var(--navy);border:1px solid #d6e4f5;border-radius:6px;padding:2px 7px;font-size:11px;font-weight:700;margin:2px 4px 2px 0}
+  .trigtag.supp{background:#fdecec;color:var(--red);border-color:#f3c9c9}
+  .trigtag.none{background:#eef1f5;color:var(--muted);border-color:#e0e4ea}
+  /* matrix */
+  .angle{font-size:12px;background:#eef4fb;border-left:3px solid var(--blue);padding:7px 10px;border-radius:0 6px 6px 0}
+  .submode{display:flex;gap:6px;margin-bottom:14px}
+  .submode .sm{padding:7px 14px;border:1px solid var(--line);border-radius:8px;background:#fff;font-weight:700;font-size:12.5px;cursor:pointer;color:var(--muted)}
+  .submode .sm.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .two{display:grid;grid-template-columns:380px 1fr;gap:18px;align-items:start}
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-top:6px}
+  .checks label{display:flex;align-items:center;gap:7px;font-weight:500;margin:4px 0;font-size:12.5px}
+  .checks input{width:auto}
+  .multi{border:1px solid var(--line);border-radius:9px;padding:8px;background:#fbfcfe;max-height:150px;overflow:auto}
+  .multi label{display:flex;align-items:center;gap:7px;font-weight:500;margin:3px 0;font-size:12.5px}
+  .multi input{width:auto}
+  .resbox{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;min-height:120px}
+  .firecard{border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:0 9px 9px 0;padding:11px 13px;margin-bottom:10px;background:#fbfcfe}
+  .firecard.dormant{border-left-color:var(--amber);background:#fff7e8}
+  .firecard h4{margin:0 0 4px;font-size:14px;color:var(--navy)}
+  .firecard .sl{font-size:12.5px;color:#2a333f;margin:2px 0}
+  .firecard .ac{font-size:11.5px;color:var(--muted);margin-top:4px}
+  /* metrics */
+  .metric{background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px}
+  .metric h4{margin:0 0 2px;font-size:14px;color:var(--navy)}
+  .metric .tgt{font-size:12px;color:var(--muted)}
+  .metric .act{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.45;border-top:1px solid var(--line);padding-top:8px}
+  .metric .flag{font-size:11px;font-weight:800;padding:3px 9px;border-radius:6px;float:right}
+  .flag.ok{background:#e3f4ea;color:var(--green)}.flag.bad{background:#fdecec;color:var(--red)}.flag.na{background:#eef1f5;color:var(--muted)}
+  .metric input{width:120px;margin-top:8px;display:inline-block}
+  /* rules */
+  .rulecol h3{color:var(--navy);font-size:15px;margin:0 0 8px}
+  .rulelist{list-style:none;padding:0;margin:0}
+  .rulelist li{font-size:13px;line-height:1.5;padding:7px 0 7px 26px;border-bottom:1px solid var(--line);position:relative}
+  .rulelist li:before{content:"\2713";position:absolute;left:0;top:7px;color:var(--blue);font-weight:800}
+  .rulelist li.stop:before{content:"\2715";color:var(--red)}
+  /* live desk */
+  .deskHero{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;align-items:stretch;margin-bottom:16px}
+  .deskCommand{border:1px solid rgba(47,111,191,.22);border-radius:16px;background:linear-gradient(135deg,#062742,#0e3b65 52%,#2f6fbf);color:#fff;padding:20px;box-shadow:0 18px 44px rgba(10,42,69,.18);min-height:260px;position:relative;overflow:hidden}
+  .deskCommand:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:28px 28px;opacity:.32}
+  .deskCommand>*{position:relative}
+  .deskCommand h2{margin:0 0 8px;font-size:28px;line-height:1.05;letter-spacing:0;color:#fff;text-transform:none}
+  .deskCommand p{font-size:14px;line-height:1.55;color:#dbe9fb;max-width:760px;margin:0}
+  .deskKpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:20px}
+  .deskKpi{border:1px solid rgba(255,255,255,.26);background:rgba(255,255,255,.11);border-radius:10px;padding:12px;min-height:88px}
+  .deskKpi b{display:block;font-size:32px;line-height:1;color:#fff}
+  .deskKpi span{display:block;margin-top:8px;color:#c8def7;font-size:11px;text-transform:uppercase;font-weight:800;letter-spacing:.04em}
+  .briefPanel{border:1px solid var(--line);background:#fff;border-radius:16px;padding:16px;display:grid;gap:12px}
+  .briefPanel h3,.lane h3,.queuePanel h3,.approvalPanel h3{margin:0;color:var(--navy);font-size:14px;text-transform:uppercase;letter-spacing:.5px}
+  .briefLine{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;border-bottom:1px solid var(--line);padding-bottom:10px}
+  .briefLine:last-child{border-bottom:none;padding-bottom:0}
+  .briefDot{width:10px;height:10px;border-radius:50%;background:var(--blue);margin-top:4px;box-shadow:0 0 0 4px #e9f2ff}
+  .briefLine b{display:block;font-size:13px;color:var(--ink)}
+  .briefLine span{display:block;font-size:12px;color:var(--muted);line-height:1.45;margin-top:2px}
+  .deskGrid{display:grid;grid-template-columns:1.75fr .85fr;gap:16px;align-items:start}
+  .deskControls{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+  .deskFilters{display:flex;gap:6px;flex-wrap:wrap}
+  .filterBtn{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:999px;padding:7px 11px;font-size:12px;font-weight:800;cursor:pointer}
+  .filterBtn.active{background:var(--navy);border-color:var(--navy);color:#fff}
+  .contactTable{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+  .contactRow{display:grid;grid-template-columns:1.05fr .86fr .82fr 1.35fr .8fr;gap:0;border-bottom:1px solid var(--line);min-height:92px}
+  .contactRow:last-child{border-bottom:none}
+  .contactRow.head{min-height:0;background:#f0f5fb;color:var(--navy);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.45px}
+  .contactRow>div{padding:12px;border-right:1px solid var(--line)}
+  .contactRow>div:last-child{border-right:none}
+  .contactRow.head>div{padding:9px 12px}
+  .person b{display:block;color:var(--navy);font-size:14px}
+  .person span,.contactMeta,.nextStep,.ownerLine{display:block;color:var(--muted);font-size:12px;line-height:1.45;margin-top:4px}
+  .stagePill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;background:#eef4fb;color:var(--blue);border:1px solid #d8e8fa}
+  .stagePill.week-one{background:#e8f4ff;color:#0e5a96}.stagePill.recapture{background:#fff7e8;color:#9a6108;border-color:#f1ddb4}.stagePill.cross-sell{background:#eef8f2;color:#1e7e45;border-color:#d5efde}.stagePill.permission{background:#fdecec;color:#a32219;border-color:#f3c9c9}.stagePill.milestone{background:#f2f6ff;color:#314b9b;border-color:#d9e1ff}
+  .statusStack{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .miniStatus{font-size:10.5px;font-weight:800;border-radius:6px;background:#f5f8fc;color:#56677a;padding:3px 6px;border:1px solid var(--line)}
+  .miniStatus.hot{background:#fdecec;color:var(--red);border-color:#f3c9c9}.miniStatus.ready{background:#e3f4ea;color:var(--green);border-color:#ccebd8}
+  .sideStack{display:grid;gap:14px}
+  .lane,.queuePanel,.approvalPanel{border:1px solid var(--line);background:#fff;border-radius:14px;padding:14px}
+  .laneGrid{display:grid;gap:8px;margin-top:10px}
+  .laneCard{border-left:4px solid var(--blue);background:#fbfcfe;border-radius:0 10px 10px 0;padding:10px}
+  .laneCard b{display:block;color:var(--navy);font-size:13px}.laneCard span{display:block;color:var(--muted);font-size:12px;line-height:1.4;margin-top:3px}
+  .laneCard.recapture{border-left-color:var(--amber)}.laneCard.permission{border-left-color:var(--red)}.laneCard.ready{border-left-color:var(--green)}
+  .queueList{display:grid;gap:8px;margin-top:10px}
+  .queueItem{display:grid;grid-template-columns:58px 1fr auto;gap:9px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:9px;background:#fbfcfe}
+  .queueItem time{font-size:11px;font-weight:900;color:var(--blue);text-transform:uppercase}.queueItem b{display:block;font-size:13px;color:var(--navy)}.queueItem span{display:block;font-size:11.5px;color:var(--muted)}
+  .approvalItem{border:1px solid #f3c9c9;background:#fff8f8;border-radius:11px;padding:11px;margin-top:10px}
+  .approvalItem b{display:block;color:#9c261d;font-size:13px}.approvalItem span{display:block;color:#6d5960;font-size:12px;line-height:1.45;margin-top:4px}
+  @media(max-width:1050px){.deskHero,.deskGrid{grid-template-columns:1fr}.deskKpis{grid-template-columns:repeat(2,1fr)}.contactRow{grid-template-columns:1fr}.contactRow.head{display:none}.contactRow>div{border-right:none;border-bottom:1px solid var(--line)}.contactRow>div:last-child{border-bottom:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <div class="brand">
+      <div class="crest">H</div>
+      <div><h1>HCC &mdash; Carrier Email Automation Studio</h1>
+      <p>Sequences &rarr; ready-to-send copy &rarr; trigger checks &rarr; cross-sell &rarr; metrics</p></div>
+    </div>
+    <div class="keybar">
+      <input id="apiKey" type="password" placeholder="Anthropic API key (sk-ant-...)" autocomplete="off"/>
+      <button class="headbtn" onclick="goPath('/studio')">Marketing Studio</button>
+      <button class="headbtn" onclick="goPath('/dave')">Dave</button>
+      <span class="pill off" id="modePill">Offline copy</span>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-tab="desk" onclick="showTab('desk')">Live Desk</button>
+    <button class="tab" data-tab="sequences" onclick="showTab('sequences')">Sequences</button>
+    <button class="tab" data-tab="templates" onclick="showTab('templates')">Templates</button>
+    <button class="tab" data-tab="check" onclick="showTab('check')">Carrier Check</button>
+    <button class="tab" data-tab="crosssell" onclick="showTab('crosssell')">Cross-Sell Matrix</button>
+    <button class="tab" data-tab="metrics" onclick="showTab('metrics')">Metrics</button>
+    <button class="tab" data-tab="rules" onclick="showTab('rules')">Rules &amp; Compliance</button>
+    <button class="tab" data-tab="activation" onclick="showTab('activation')">Activation Plan</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===== LIVE DESK ===== -->
+  <section id="desk">
+    <div class="deskHero">
+      <div class="deskCommand">
+        <h2>Email Automation Live Desk</h2>
+        <p id="deskNarrative">Loading the current carrier contact picture...</p>
+        <div class="deskKpis" id="deskKpis"></div>
+      </div>
+      <div class="briefPanel">
+        <h3>Dave's 30,000ft View</h3>
+        <div id="deskBrief"></div>
+      </div>
+    </div>
+
+    <div class="deskGrid">
+      <div>
+        <div class="deskControls">
+          <div>
+            <div class="secttitle" style="margin:0 0 4px">Contacted adjusters</div>
+            <div class="note" style="margin:0">Simulated operating view from the SOP logic: who was contacted, why, and what happens next.</div>
+          </div>
+          <div class="deskFilters" id="deskFilters"></div>
+        </div>
+        <div class="contactTable" id="contactTable"></div>
+      </div>
+      <div class="sideStack">
+        <div class="lane">
+          <h3>Activity Lanes</h3>
+          <div class="laneGrid" id="activityLanes"></div>
+        </div>
+        <div class="queuePanel">
+          <h3>Next-Day Email Queue</h3>
+          <div class="queueList" id="nextDayQueue"></div>
+        </div>
+        <div class="approvalPanel">
+          <h3>Permission Requests</h3>
+          <div id="permissionQueue"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SEQUENCES ===== -->
+  <section id="sequences" class="hide">
+    <div class="briefbar">
+      <div class="d">Carrier Email Program &mdash; <b>6 automated sequences</b><br><span>From the BD Standard Operating Procedure &middot; Effective June 2026 &middot; Owner: AVP, Business Development</span></div>
+      <span class="pill on">SOP-aligned</span>
+    </div>
+    <div class="callout"><b>How to use this Studio:</b> read the sequences here, pull the exact email copy on the <b>Templates</b> tab, then use <b>Carrier Check</b> to see which sequence any carrier (or a whole list) triggers today. Everything is export-first &mdash; copy approved emails into whatever HCC uses to send. All templates require AVP approval before first use (&sect;7).</div>
+    <div class="grid" id="seqGrid"></div>
+  </section>
+
+  <!-- ===== TEMPLATES ===== -->
+  <section id="templates" class="hide">
+    <div class="briefbar">
+      <div class="d">10 ready-to-send templates <b>&mdash; edit, copy, download</b><br><span>Written in Hancock voice from each SOP key message. Edits save automatically in this browser.</span></div>
+      <div><button class="mini" onclick="resetTemplates()">Reset to original copy</button></div>
+    </div>
+    <div class="callout"><b>Compliance baked in:</b> every template ends with the unsubscribe line and HCC address footer (&sect;7). Reps may personalize the opening line; subject line, core message, and CTA need AVP sign-off. The address shown is a <b>placeholder</b> &mdash; replace it with HCC's real physical address before sending.</div>
+    <div class="mergehint">Merge fields: <code>{{adjuster_name}}</code> <code>{{rep_name}}</code> <code>{{carrier}}</code> <code>{{turnaround}}</code> <code>{{assignment_count}}</code> <code>{{service}}</code> <code>{{next_service}}</code> <code>{{milestone}}</code> <code>{{angle}}</code></div>
+    <div id="tmplList" style="margin-top:14px"></div>
+  </section>
+
+  <!-- ===== CARRIER CHECK ===== -->
+  <section id="check" class="hide">
+    <div class="submode">
+      <button class="sm active" id="smSingle" onclick="setCheckMode('single')">Single carrier</button>
+      <button class="sm" id="smBatch" onclick="setCheckMode('batch')">Batch (CSV list)</button>
+    </div>
+
+    <!-- single -->
+    <div id="checkSingle" class="two">
+      <div class="card">
+        <h2>Carrier snapshot</h2>
+        <p class="sub">Enter what the CRM shows today. The engine applies the SOP &sect;3 timing rules and &sect;7 suppression.</p>
+        <label>Carrier name</label><input id="qCarrier" placeholder="e.g. Allstate / ABC Mutual"/>
+        <label>Adjuster name</label><input id="qAdjuster" placeholder="e.g. Jordan Reyes"/>
+        <label>Assigned BD rep</label><select id="qRep"></select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div><label>First assignment date</label><input id="qFirst" type="date"/></div>
+          <div><label>Last assignment date</label><input id="qLast" type="date"/></div>
+          <div><label>Cumulative assignments</label><input id="qCum" type="number" min="0" placeholder="0"/></div>
+          <div><label>Rolling 30-day count</label><input id="qRoll" type="number" min="0" placeholder="0"/></div>
+        </div>
+        <label>Current active services</label>
+        <div class="multi" id="qServices"></div>
+        <label>Suppression flags</label>
+        <div class="checks">
+          <label><input type="checkbox" id="fUnsub"> Unsubscribed</label>
+          <label><input type="checkbox" id="fVendor"> Vendor-mgmt only</label>
+          <label><input type="checkbox" id="fHold"> On hold</label>
+          <label><input type="checkbox" id="fContract"> Contract negotiation</label>
+        </div>
+        <label>As-of date</label><input id="qAsof" type="date"/>
+        <button class="btn" onclick="runSingle()">Check triggers</button>
+      </div>
+      <div>
+        <div class="resbox" id="singleRes"><div class="empty"><div class="big">&#128269;</div><p>Enter a carrier and check which sequences fire today.</p></div></div>
+      </div>
+    </div>
+
+    <!-- batch -->
+    <div id="checkBatch" class="hide">
+      <div class="card">
+        <h2>Batch carrier list</h2>
+        <p class="sub">Paste CSV (or upload a .csv). One carrier per row. Headers required &mdash; see the format below.</p>
+        <div class="mergehint" style="margin-bottom:8px">Columns: <code>carrier,adjuster_name,adjuster_email,first_assignment_date,last_assignment_date,cumulative_count,rolling_30_count,services,flags</code><br>Dates <code>YYYY-MM-DD</code>. <code>services</code> and <code>flags</code> are <code>;</code>-separated. Flag values: <code>unsubscribed</code> <code>vendor_mgmt</code> <code>on_hold</code> <code>contract_negotiation</code>.</div>
+        <textarea id="bCsv" placeholder="Paste CSV here..."></textarea>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px">
+          <label style="margin:0">As-of date</label><input id="bAsof" type="date" style="width:160px"/>
+          <input id="bFile" type="file" accept=".csv,text/csv" style="width:auto;border:none;padding:0;background:none"/>
+        </div>
+        <div class="rowbtns">
+          <button class="btn" onclick="runBatch()">Run list</button>
+          <button class="mini" onclick="loadSampleCsv()">Load sample CSV</button>
+          <button class="mini" onclick="exportBatch()">Export results CSV</button>
+        </div>
+        <div class="status" id="bStatus"></div>
+      </div>
+      <div id="batchRes" style="margin-top:16px"></div>
+    </div>
+  </section>
+
+  <!-- ===== CROSS-SELL ===== -->
+  <section id="crosssell" class="hide">
+    <div class="briefbar">
+      <div class="d">Cross-Sell Matrix <b>&mdash; map each active service to its next step</b><br><span>SOP &sect;5. Carriers using 2+ services retain significantly better. Pick a service to generate the cross-sell email.</span></div>
+    </div>
+    <div class="two">
+      <div class="card">
+        <h2>Build a cross-sell pitch</h2>
+        <p class="sub">Pick the carrier's current service. We surface the recommended next service, the angle, and a filled Sequence-5 email.</p>
+        <label>Carrier currently uses</label><select id="csService"></select>
+        <label>Carrier name (optional)</label><input id="csCarrier" placeholder="for the email merge"/>
+        <button class="btn" onclick="runCrossSell()">Generate cross-sell email</button>
+        <div class="status" id="csStatus"></div>
+      </div>
+      <div>
+        <div class="resbox" id="csRes"><div class="empty"><div class="big">&#129518;</div><p>Pick a service to see the recommended next step.</p></div></div>
+      </div>
+    </div>
+    <div class="secttitle">Full matrix</div>
+    <table id="csTable"><thead><tr><th>Current service in use</th><th>Recommended next service</th><th>Suggested angle</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ===== METRICS ===== -->
+  <section id="metrics" class="hide">
+    <div class="briefbar">
+      <div class="d">Program performance <b>&mdash; reviewed monthly by the AVP</b><br><span>SOP &sect;5 targets. Log this month's actuals to auto-flag anything below target.</span></div>
+      <div><button class="mini" onclick="clearMetrics()">Clear entries</button></div>
+    </div>
+    <div class="grid" id="metricGrid"></div>
+  </section>
+
+  <!-- ===== RULES ===== -->
+  <section id="rules" class="hide">
+    <div class="briefbar">
+      <div class="d">CRM data &amp; compliance <b>&mdash; what keeps the program running clean</b><br><span>SOP &sect;6 and &sect;7. These rules are also enforced by the Carrier Check engine.</span></div>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(330px,1fr))">
+      <div class="card rulecol"><h3>CRM data to maintain (&sect;6)</h3><ul class="rulelist" id="ruleData"></ul></div>
+      <div class="card rulecol"><h3>Template approval (&sect;7)</h3><ul class="rulelist" id="ruleApproval"></ul></div>
+      <div class="card rulecol"><h3>Do NOT send if (&sect;7)</h3><ul class="rulelist" id="ruleSupp"></ul></div>
+      <div class="card rulecol"><h3>Compliance (&sect;7)</h3><ul class="rulelist" id="ruleComp"></ul></div>
+    </div>
+  </section>
+
+  <!-- ===== ACTIVATION ===== -->
+  <section id="activation" class="hide">
+    <div class="briefbar">
+      <div class="d">Activation Plan <b>&mdash; turn the SOP into a controlled operating system</b><br><span>Built for CRM/email platform setup, Dave/Jarvis coordination, and AVP approval gates.</span></div>
+      <div><button class="mini" onclick="exportActivationPlan()">Download implementation plan</button></div>
+    </div>
+    <div class="callout"><b>Operating principle:</b> this Studio prepares, checks, drafts, and exports. It does not auto-send. Any live integration with Dave, Jarvis, CRM, Gmail, Outlook, or a marketing platform should keep outbound email behind human approval and audit logging.</div>
+    <div class="grid" id="activationGrid"></div>
+    <div class="secttitle">Dave / Jarvis connection model</div>
+    <div class="card">
+      <table id="integrationTable"><thead><tr><th>Mode</th><th>What Dave/Jarvis can do</th><th>Approval boundary</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+
+<footer>HCC Carrier Email Automation Studio &middot; Built from the BD SOP (v1.0, June 2026) &middot; Export-first: this tool authors, checks, and exports &mdash; sending stays in HCC's platform. All templates require AVP approval before use.</footer>
+
+<script>
+/* ===================== DATA (from the SOP) ===================== */
+const FOOTER = "\n\n—\nHancock Claims Consultants · [HCC physical address — replace before sending]\nFull Claims Lifecycle Support Under One Roof.\nYou are receiving this because you partner with Hancock Claims Consultants.\nUnsubscribe: reply STOP, or use the unsubscribe link in your email platform.";
+
+const REPS = ["Doug","Justin","Noah","Ryan","Wyatt"];
+
+const SERVICES = ["Contents Onsite","Contents Pricing / Pricing Genie","DI / Direct Inspection","DI with Estimate","Ladder Assist","Engineering","HRN / Contractor Network","Leak Detection","Tree Removal"];
+
+const SEQUENCES = [
+  {n:1,name:"New Carrier Welcome",trigger:"First assignment from a carrier not previously in HCC system",timing:"Day 1, Day 7, Day 30",audience:"Adjuster who submitted the assignment",owner:"Assigned BD rep (personalized send, not generic HCC address)",goal:"Set expectations, build relationship",obj:"Establish a strong first impression, confirm service expectations, and introduce the full breadth of HCC offerings before the carrier defaults to one service.",
+   emails:[{lbl:"Email 1 of 3",send:"Day 1 (same day as first assignment)"},{lbl:"Email 2 of 3",send:"Day 7"},{lbl:"Email 3 of 3",send:"Day 30"}]},
+  {n:2,name:"Good Carrier Recognition",trigger:"Carrier reaches 20+ assignments in a rolling 30-day window",timing:"Within 24 hrs of threshold met",audience:"Adjuster who submitted the assignment",owner:"Assigned BD rep — must be personally signed",goal:"Reinforce relationship, introduce expansion services",obj:"Acknowledge high-performing relationships, strengthen loyalty, and use positive momentum to introduce expansion. Do not over-automate — this should feel personal.",
+   emails:[{lbl:"Email 1 of 1",send:"Within 24 hrs of threshold being met"}],note:"AVP: flag any carrier hitting this threshold for the first time. BD rep should also call within 48 hours."},
+  {n:3,name:"Volume Milestone",trigger:"Carrier crosses 100, 500, or 1,000 cumulative assignments",timing:"Within 24 hrs of milestone",audience:"Adjuster who submitted the assignment",owner:"Assigned BD rep (1,000+ : AVP or VP co-signs)",goal:"Celebrate partnership, position for next service",obj:"Mark meaningful milestones in a way that builds loyalty and opens a natural conversation about expanding services.",
+   emails:[{lbl:"Email 1 of 1",send:"Within 24 hrs of milestone"}],note:"1,000+ milestone: consider a handwritten note from Noah or the AVP in addition to email."},
+  {n:4,name:"30-Day Win-Back",trigger:"No assignment in 30 days from a previously active carrier",timing:"Day 30, Day 45, Day 60",audience:"Adjuster who submitted the assignment",owner:"Assigned BD rep — AVP notified of all Day 60 sends",goal:"Re-engage, identify issue, recover volume",obj:"Re-engage quiet carriers and find out whether silence is volume, a service issue, competitor activity, or internal change — recover before the relationship is lost.",
+   emails:[{lbl:"Email 1 of 3",send:"Day 30 of inactivity"},{lbl:"Email 2 of 3",send:"Day 45 of inactivity"},{lbl:"Email 3 of 3",send:"Day 60 — then move to 'dormant', rep takes over"}]},
+  {n:5,name:"Cross-Sell Sequence",trigger:"Active carrier using only 1 HCC service for 60+ days",timing:"Monthly, max 1x/month",audience:"Adjuster who submitted the assignment",owner:"Assigned BD rep — CRM suppression must be confirmed",goal:"Introduce adjacent services, drive multi-service adoption",obj:"Move active single-service carriers toward multi-service adoption — HCC's strongest advantage is breadth.",
+   emails:[{lbl:"Email 1 of 1",send:"Monthly. Suppress if pitched this service in the last 90 days."}]},
+  {n:6,name:"Seasonal / CAT Readiness",trigger:"Calendar: April 1 and September 1 each year",timing:"April 1 and September 1",audience:"All active carriers (adjuster contacts)",owner:"Assigned BD rep — AVP approves content 2 weeks ahead",goal:"Position HCC capacity ahead of CAT events",obj:"Position HCC as the partner carriers call first when CAT volume spikes. A useful heads-up, not a promotion.",
+   emails:[{lbl:"Email 1 of 1",send:"April 1 & September 1, 8:00 AM local"}]}
+];
+
+const TEMPLATES = [
+  {id:"s1e1",seq:1,lbl:"Seq 1 · Email 1 · Day 1",subject:"Welcome to Hancock Claims Consultants — here's what to expect",
+   body:`Hi {{adjuster_name}},
+
+Thank you for sending your first assignment to Hancock Claims Consultants. I'm {{rep_name}}, your dedicated point of contact, and I'll make sure {{carrier}} gets fast, defensible results on every file.
+
+Here's what to expect:
+• Turnaround: {{turnaround}} on standard assignments.
+• One point of contact — me. Rush files, questions, and escalations come straight to my desk.
+• Submission: send assignments the same way you sent this one. We confirm receipt every time.
+
+Hancock supports the full claims lifecycle under one roof — inspections, estimates, contents, engineering, mitigation, appraisals, and more. I've attached a one-page menu so your team can see everything available.
+
+Glad to be working with you. Reply any time.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s1e2",seq:1,lbl:"Seq 1 · Email 2 · Day 7",subject:"How is your first week with HCC going?",
+   body:`Hi {{adjuster_name}},
+
+You've been working with Hancock for a week now. How are we doing on quality and turnaround?
+
+If anything hasn't met your expectations, tell me directly. I'd rather hear it early and fix it fast.
+
+One thing worth knowing: many adjusters who send us {{service}} also lean on {{next_service}} to close files faster without a second vendor. Happy to walk you through it whenever it's useful.
+
+Thanks for the early trust.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s1e3",seq:1,lbl:"Seq 1 · Email 3 · Day 30",subject:"One month in — your HCC performance summary",
+   body:`Hi {{adjuster_name}},
+
+You've been with Hancock a month. Here's a quick look:
+
+• Assignments completed: {{assignment_count}}
+• Average turnaround: {{turnaround}}
+• Quality: consistent and defensible on every file.
+
+That's the standard you can expect from us going forward.
+
+When you're ready, I'd like to show you one more way Hancock can take work off your desk — {{next_service}}. Fifteen minutes is all it takes. Want me to find a time?
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s2e1",seq:2,lbl:"Seq 2 · Recognition",subject:"You're one of our top partners this month — thank you",
+   body:`Hi {{adjuster_name}},
+
+I wanted to reach out personally. {{carrier}} sent Hancock {{assignment_count}} assignments this month — that puts you among our top partners, and I don't take it for granted.
+
+Your files came back at an average turnaround of {{turnaround}}, completed and defensible.
+
+If it's useful, I'd love to show you {{next_service}} — one more way we can support your team. No pressure at all. Better yet, let's grab fifteen minutes by phone or in person so I can hear what's working and what isn't.
+
+Thank you for the partnership.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s3e1",seq:3,lbl:"Seq 3 · Milestone",subject:"A milestone worth celebrating — {{milestone}} assignments with HCC",
+   body:`Hi {{adjuster_name}},
+
+{{carrier}} just crossed {{milestone}} assignments with Hancock. That's a real milestone, and it says a lot about the trust your team has placed in us.
+
+From the first file to this one, the standard hasn't changed: fast, defensible work, one point of contact, full lifecycle support under one roof.
+
+I'd welcome the chance to sit down for a short partnership review — where we're strong, and where Hancock can do more for you. Want me to set it up?
+
+Here's to the next {{milestone}}.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s4e1",seq:4,lbl:"Seq 4 · Email 1 · Day 30",subject:"Checking in — how can HCC support your team?",
+   body:`Hi {{adjuster_name}},
+
+It's been about a month since your last assignment to Hancock, and I wanted to check in — no agenda.
+
+How's your volume right now? If your needs have shifted, or if there's something we could be doing differently, I'd genuinely like to know.
+
+We're flexible — a different service, a pricing conversation, or a pilot on a new offering. Whatever makes your job easier.
+
+Reply any time. I'm here.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s4e2",seq:4,lbl:"Seq 4 · Email 2 · Day 45",subject:"A quick update from Hancock — new services you may not have seen",
+   body:`Hi {{adjuster_name}},
+
+Quick note while we're between files. Hancock recently expanded {{next_service}}, and it's been a strong fit for carriers handling work like yours.
+
+We recently rolled it out for a similar carrier and took a full step out of their workflow.
+
+If that's relevant to anything on your desk, I'm one reply away.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s4e3",seq:4,lbl:"Seq 4 · Email 3 · Day 60",subject:"Still here when you need us",
+   body:`Hi {{adjuster_name}},
+
+We haven't connected in a while, and that's okay — I know how full your plate gets.
+
+I just want you to know the door is open. Whenever {{carrier}} needs fast, defensible inspection or estimate support, Hancock is ready, and I'm your contact.
+
+No pressure, no pitch. Reach out when the time is right.
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s5e1",seq:5,lbl:"Seq 5 · Cross-Sell",subject:"One thing our {{service}} clients are adding this quarter",
+   body:`Hi {{adjuster_name}},
+
+Since {{carrier}} is already using Hancock for {{service}}, I wanted to put one idea in front of you: {{next_service}}.
+
+{{angle}}
+
+It's a natural extension of what we already do for you — same team, same standard, one less vendor to manage.
+
+Worth a short call, or want me to send the one-pager?
+
+{{rep_name}}
+Hancock Claims Consultants`},
+  {id:"s6e1",seq:6,lbl:"Seq 6 · Seasonal / CAT",subject:"CAT season is here — HCC capacity and readiness update",
+   body:`Hi {{adjuster_name}},
+
+Storm season is here, and I want {{carrier}} ready before the first event hits.
+
+Hancock is CAT-ready across the board: Direct Inspection, DI with Estimate, Contents Onsite, Tree Removal, Engineering, and our Contractor Network. We're fully staffed in the Southeast and Midwest and positioned to absorb surge volume without slipping on turnaround.
+
+One ask: take two minutes to confirm your Hancock contact and the services you'll want active this season. When volume spikes, that head start matters.
+
+Ready when you are.
+
+{{rep_name}}
+Hancock Claims Consultants`}
+];
+
+const CROSSSELL = [
+  {cur:"Contents Onsite",next:"Contents Pricing / Pricing Genie",angle:"Same claim, faster resolution — let us price what we inventoried."},
+  {cur:"Contents Pricing / Pricing Genie",next:"Contents Onsite",angle:"Eliminate handoff errors — one vendor for the full contents workflow."},
+  {cur:"DI / Direct Inspection",next:"DI with Estimate",angle:"Add scoped estimates to your DI program — no second vendor needed."},
+  {cur:"DI with Estimate",next:"Engineering",angle:"Complex losses on your desk? HCC Engineering handles what DI can't."},
+  {cur:"Ladder Assist",next:"DI with Estimate",angle:"Your adjusters are already on-site — let HCC complete the estimate."},
+  {cur:"Engineering",next:"HRN / Contractor Network",angle:"Post-engineering, we can connect the repair — close the loop faster."},
+  {cur:"HRN / Contractor Network",next:"Leak Detection",angle:"Stop recurring water losses before they reopen — HCC Leak Detection."},
+  {cur:"Any single service",next:"Tree Removal",angle:"CAT season is coming — do you have a tree removal partner in place?"}
+];
+
+const METRICS = [
+  {id:"open",name:"Open rate",target:"≥ 35%",dir:"gte",val:35,unit:"%",action:"Review subject lines; test 2 variants; check send time."},
+  {id:"reply",name:"Reply / response rate",target:"≥ 8%",dir:"gte",val:8,unit:"%",action:"Increase personalization; reduce automation signals in copy."},
+  {id:"winback",name:"Win-back conversion (Day 60)",target:"≥ 20% return in 90 days",dir:"gte",val:20,unit:"%",action:"BD rep manual call required for all Day 60 accounts."},
+  {id:"crosssell",name:"Cross-sell conversion",target:"≥ 15% add 2nd service in 6 mo",dir:"gte",val:15,unit:"%",action:"Review cross-sell pairing logic; involve rep earlier."},
+  {id:"unsub",name:"Unsubscribe rate",target:"< 0.5%",dir:"lt",val:0.5,unit:"%",action:"Immediately review and reduce frequency; AVP approval required to resume."}
+];
+
+const RULES = {
+  data:["First assignment date (auto-populated from operations system)","Last assignment date (auto-updated on each new assignment)","Current active services (maintained by BD rep, reviewed monthly)","Cumulative assignment count (auto-calculated)","Rolling 30-day assignment count (auto-calculated)","Assigned BD rep (update immediately on rep change)","Suppression flags: unsubscribed, on hold, in active contract negotiation"],
+  approval:["All templates must be approved by the AVP before first use","Any template change — even minor copy edits — requires AVP sign-off","Reps may personalize the opening line, but not the subject line, core message, or CTA without approval"],
+  supp:["Contact has unsubscribed from HCC communications","Carrier has requested no direct contact — all communication goes through vendor management"],
+  comp:["Every email includes a plain-text unsubscribe link","HCC physical address appears in the footer of every email","Comply with CAN-SPAM","Do not send to personal email addresses without explicit opt-in"]
+};
+
+const ACTIVATION = [
+  {phase:"1. Data foundation",items:["Confirm CRM has first assignment date, last assignment date, cumulative assignment count, rolling 30-day count, active services, assigned BD rep, and suppression flags.","Map service names in CRM to the Studio service list so cross-sell logic does not misfire.","Choose the source of truth for send history so 90-day cross-sell suppression can be enforced."]},
+  {phase:"2. Template approval",items:["Replace the placeholder physical address in the footer before any production send.","AVP approves all subject lines, core messages, CTAs, and footer language.","Lock approved templates in the sending platform; reps may personalize only the opening line unless AVP approves a larger edit."]},
+  {phase:"3. Pilot",items:["Run one week in export-only mode with Doug, Justin, Noah, Ryan, and Wyatt reviewing triggered sends before anything leaves the platform.","Compare Studio trigger output against CRM reports for at least 25 carrier contacts.","Log false positives, missing triggers, and any suppression misses before live activation."]},
+  {phase:"4. Live operation",items:["Schedule weekly BD review of automated sends and flagged replies.","AVP reviews metrics monthly: open rate, reply rate, win-back conversion, cross-sell conversion, and unsubscribe rate.","Any Day 60 win-back send creates a manual rep follow-up and AVP review item."]},
+  {phase:"5. Future automation",items:["Connect CRM reads first, then draft creation, then approval queue. Do not start with automatic sending.","Use Dave/Jarvis to brief reps, prepare draft reviews, and flag accounts that need a call.","Only allow platform sends after recipient, template, merge fields, and suppression status are confirmed."]}
+];
+
+const INTEGRATION = [
+  {mode:"Observe",can:"Read CRM snapshots, review send history, summarize which carriers trigger today, and brief the assigned BD rep.",approval:"No approval needed if read access is already granted."},
+  {mode:"Prepare",can:"Generate filled email drafts, export CSV task lists, stage rep call reminders, and assemble AVP review queues.",approval:"Human reviews drafts before they enter the sending platform."},
+  {mode:"Execute",can:"Create approved tasks or drafts in connected systems once integrations exist.",approval:"Outbound email always requires explicit human confirmation with recipient, subject, body, and suppression status shown."}
+];
+
+const DESK_CONTACTS = [
+  {name:"Maya Thompson",carrier:"Summit Mutual",email:"maya.thompson@summit.example",stage:"new",stageLabel:"New",sequence:"Seq 1 / Email 1",service:"Direct Inspection",rep:"Cassie",status:"Sent 8:14 AM",next:"Watch for first reply. Day-7 check-in is queued unless she replies with a need first.",bot:"Welcome Scout",risk:"ready"},
+  {name:"Chris Valdez",carrier:"NorthStar Claims",email:"chris.valdez@northstar.example",stage:"new",stageLabel:"New",sequence:"Seq 1 / Email 1",service:"Ladder Assist",rep:"Jennifer",status:"Needs approval",next:"Confirm rep signature and first-assignment data before welcome email leaves.",bot:"Draft Control",risk:"hot"},
+  {name:"Alicia Brown",carrier:"Keystone Casualty",email:"alicia.brown@keystone.example",stage:"week-one",stageLabel:"Week One",sequence:"Seq 1 / Email 2",service:"DI with Estimate",rep:"Cassie",status:"Sent 9:03 AM",next:"Operations Bot detected territory-manager friction. Internal note goes to Jason Harris before any external contact info is sent.",bot:"Operations Bot",risk:"hot",permission:true},
+  {name:"Ryan Patel",carrier:"Harbor National",email:"ryan.patel@harbor.example",stage:"week-one",stageLabel:"Week One",sequence:"Seq 1 / Email 2",service:"CAT Damage",rep:"Jennifer",status:"Monitoring",next:"If he asks for after-hours CAT escalation, route to Operations and prepare an approved response.",bot:"Operations Bot",risk:"ready"},
+  {name:"Dana Brooks",carrier:"Ozark Mutual",email:"dana.brooks@ozark.example",stage:"recapture",stageLabel:"Recapture",sequence:"Seq 4 / Email 1",service:"Ladder Assist",rep:"Ryan",status:"Queued today",next:"Send low-pressure win-back. If no reply in 15 days, prep Day-45 service update.",bot:"Quiet Account Watch",risk:"ready"},
+  {name:"Evan Keller",carrier:"Prairie Rock Insurance",email:"evan.keller@prairierock.example",stage:"recapture",stageLabel:"Recapture",sequence:"Suppressed",service:"Engineering",rep:"Wyatt",status:"Blocked",next:"Do not contact. Vendor-management-only flag is active until CRM owner clears it.",bot:"Compliance Sentinel",risk:"hot"},
+  {name:"Marcus Reed",carrier:"Continental Shield",email:"marcus.reed@continental.example",stage:"cross-sell",stageLabel:"Cross-Sell",sequence:"Seq 5 / Email 1",service:"Ladder Assist -> DI with Estimate",rep:"Justin",status:"Rep review",next:"Prepare adjacent-service note, then ask Justin to confirm no similar pitch in last 90 days.",bot:"Expansion Mapper",risk:"ready"},
+  {name:"Natalie Wynn",carrier:"Gulfline Property",email:"natalie.wynn@gulfline.example",stage:"milestone",stageLabel:"Milestone",sequence:"Seq 3 / Email 1",service:"Tree Removal",rep:"Noah",status:"Drafted",next:"500-assignment thank-you draft is ready. Rep should add a personal opener before send.",bot:"Milestone Captain",risk:"ready"}
+];
+
+const NEXT_DAY_EMAILS = [
+  {time:"8:00 AM",name:"Blake Harris",carrier:"Cobalt Casualty",stage:"New",sequence:"Seq 1 / Email 1"},
+  {time:"9:15 AM",name:"Erica Nguyen",carrier:"Southern Mutual",stage:"Week One",sequence:"Seq 1 / Email 2"},
+  {time:"10:30 AM",name:"Luis Moreno",carrier:"Pinnacle Claims",stage:"Recapture",sequence:"Seq 4 / Email 2"},
+  {time:"1:00 PM",name:"Kim Shaw",carrier:"Frontier Property",stage:"Cross-Sell",sequence:"Seq 5 / Email 1"}
+];
+
+let DESK_FILTER="all";
+
+/* ===================== STATE / HELPERS ===================== */
+const STATE={key:''};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const TODAY=new Date().toISOString().slice(0,10);
+function goPath(path){
+  if(location.protocol==='file:'){alert('This link works when the Studio is opened through the live Hancock app.');return;}
+  location.href=path;
+}
+function toast(el,msg,ok){el.textContent=msg;el.className='status '+(ok?'ok':'err');}
+function daysBetween(a,b){ // (b - a) in whole days; a,b are yyyy-mm-dd
+  if(!a||!b) return null;
+  const da=new Date(a+"T00:00:00"), db=new Date(b+"T00:00:00");
+  if(isNaN(da)||isNaN(db)) return null;
+  return Math.round((db-da)/86400000);
+}
+
+/* ===================== API key ===================== */
+const keyEl=$('apiKey'),modePill=$('modePill');
+keyEl.addEventListener('input',()=>{STATE.key=keyEl.value.trim();const on=STATE.key.length>10;modePill.textContent=on?'Live AI mode':'Offline copy';modePill.className='pill '+(on?'on':'off');});
+async function callClaude(system,user,maxTokens){
+  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+    headers:{"content-type":"application/json","x-api-key":STATE.key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-opus-4-8",max_tokens:maxTokens,system,messages:[{role:"user",content:user}]})});
+  if(!res.ok)throw new Error("API "+res.status);
+  const d=await res.json();return d.content.map(c=>c.text||"").join("");
+}
+const VOICE="You write for Hancock Claims Consultants, an insurance-inspection partner to carriers. Voice: spartan, active, short impactful sentences. Values: trust, communication, consistency, defensibility, accountability. Never sound like mass automation.";
+
+/* ===================== TABS ===================== */
+function showTab(t){
+  ['desk','sequences','templates','check','crosssell','metrics','rules','activation'].forEach(id=>$(id).classList.toggle('hide',id!==t));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));
+  window.scrollTo(0,0);
+}
+
+/* ===================== LIVE DESK ===================== */
+function stageClass(stage){return String(stage||'').toLowerCase().replace(/[_\s]+/g,'-')}
+function filteredContacts(){return DESK_FILTER==="all"?DESK_CONTACTS:DESK_CONTACTS.filter(c=>c.stage===DESK_FILTER)}
+function renderDesk(){
+  const total=DESK_CONTACTS.length;
+  const sent=DESK_CONTACTS.filter(c=>/sent|queued|drafted|monitoring/i.test(c.status)).length;
+  const permission=DESK_CONTACTS.filter(c=>c.permission).length;
+  const blocked=DESK_CONTACTS.filter(c=>/blocked|approval/i.test(c.status)).length;
+  $('deskNarrative').textContent=`Dave is illustrating today's email floor: ${sent} adjusters contacted or staged, ${permission} permission request routed internally, ${blocked} item${blocked===1?'':'s'} held behind approval or suppression, and ${NEXT_DAY_EMAILS.length} next-day emails already queued.`;
+  $('deskKpis').innerHTML=[
+    ['25','welcome emails'],
+    ['30','week-one check-ins'],
+    ['18','replies monitored'],
+    [String(NEXT_DAY_EMAILS.length),'next-day queued']
+  ].map(k=>`<div class="deskKpi"><b>${esc(k[0])}</b><span>${esc(k[1])}</span></div>`).join('');
+  $('deskBrief').innerHTML=[
+    ['New adjusters','Welcome Scout sent first-touch emails and is watching for service questions, bad data, or warm replies.'],
+    ['First-week follow-up','Week-one check-ins are monitoring quality, turnaround, and friction before the relationship goes quiet.'],
+    ['Recapture business','Quiet Account Watch is looking for carriers slipping toward dormant status and staging low-pressure win-back notes.'],
+    ['Approval boundary','Draft Control and Compliance Sentinel keep external sends locked until recipient, suppression, template, and permission checks pass.']
+  ].map(x=>`<div class="briefLine"><div class="briefDot"></div><div><b>${esc(x[0])}</b><span>${esc(x[1])}</span></div></div>`).join('');
+  renderDeskFilters();
+  renderContactTable();
+  renderActivityLanes();
+  renderNextDayQueue();
+  renderPermissionQueue();
+}
+function renderDeskFilters(){
+  const filters=[['all','All'],['new','New'],['week-one','Week One'],['recapture','Recapture'],['cross-sell','Cross-Sell'],['milestone','Milestone']];
+  $('deskFilters').innerHTML=filters.map(f=>`<button class="filterBtn ${DESK_FILTER===f[0]?'active':''}" onclick="setDeskFilter('${f[0]}')">${esc(f[1])}</button>`).join('');
+}
+function setDeskFilter(filter){DESK_FILTER=filter;renderDeskFilters();renderContactTable()}
+function renderContactTable(){
+  const rows=filteredContacts().map(c=>`<div class="contactRow">
+    <div class="person"><b>${esc(c.name)}</b><span>${esc(c.carrier)}<br>${esc(c.email)}</span></div>
+    <div><span class="stagePill ${stageClass(c.stage)}">${esc(c.stageLabel)}</span><span class="contactMeta">${esc(c.sequence)}<br>${esc(c.service)}</span></div>
+    <div><b>${esc(c.status)}</b><span class="ownerLine">Owner: ${esc(c.rep)}<br>Bot: ${esc(c.bot)}</span><div class="statusStack"><span class="miniStatus ${c.risk==='hot'?'hot':'ready'}">${c.risk==='hot'?'needs control':'ready'}</span></div></div>
+    <div class="nextStep">${esc(c.next)}</div>
+    <div><button class="mini" onclick="loadContactIntoCheck('${esc(c.name)}')">Check</button><button class="mini" style="margin-left:5px" onclick="showTab('templates')">Template</button></div>
+  </div>`).join('');
+  $('contactTable').innerHTML=`<div class="contactRow head"><div>Adjuster</div><div>Lifecycle</div><div>Status</div><div>Next step</div><div>Action</div></div>${rows}`;
+}
+function renderActivityLanes(){
+  const lanes=[
+    {cls:"ready",title:"New adjuster onboarding",body:"Welcome emails sent, Day-7 touchpoints pre-staged, first replies watched for friction."},
+    {cls:"ready",title:"Week-one quality check",body:"30 adjusters asked about turnaround, quality, and support needs after the first week."},
+    {cls:"recapture",title:"Recapture business",body:"Quiet carriers are moving into Day-30 and Day-45 win-back paths with rep ownership visible."},
+    {cls:"permission",title:"Operations permission",body:"Alicia Brown's territory-manager issue is held until Jason Harris approves the contact path."}
+  ];
+  $('activityLanes').innerHTML=lanes.map(l=>`<div class="laneCard ${esc(l.cls)}"><b>${esc(l.title)}</b><span>${esc(l.body)}</span></div>`).join('');
+}
+function renderNextDayQueue(){
+  $('nextDayQueue').innerHTML=NEXT_DAY_EMAILS.map(q=>`<div class="queueItem"><time>${esc(q.time)}</time><div><b>${esc(q.name)}</b><span>${esc(q.carrier)} / ${esc(q.sequence)}</span></div><span class="stagePill ${stageClass(q.stage)}">${esc(q.stage)}</span></div>`).join('');
+}
+function renderPermissionQueue(){
+  const items=DESK_CONTACTS.filter(c=>c.permission);
+  $('permissionQueue').innerHTML=items.map(c=>`<div class="approvalItem"><b>${esc(c.name)} / ${esc(c.carrier)}</b><span>${esc(c.next)}</span><div class="rowbtns"><button class="mini">Draft Jason note</button><button class="mini">Hold external reply</button></div></div>`).join('')||'<p class="note">No permission requests staged.</p>';
+}
+function loadContactIntoCheck(name){
+  const c=DESK_CONTACTS.find(x=>x.name===name);
+  if(!c)return;
+  showTab('check');
+  $('qCarrier').value=c.carrier;$('qAdjuster').value=c.name;$('qRep').value=REPS.includes(c.rep)?c.rep:'Ryan';
+  SERVICES.forEach((s,i)=>{$('svc_'+i).checked=c.service.indexOf(s)>=0});
+  $('qCum').value=c.stage==='milestone'?500:(c.stage==='recapture'?140:1);
+  $('qRoll').value=c.stage==='new'?1:(c.stage==='week-one'?4:0);
+  $('qFirst').value=c.stage==='new'?TODAY:'2026-05-09';
+  $('qLast').value=c.stage==='recapture'?'2026-06-08':TODAY;
+  runSingle();
+}
+
+/* ===================== SEQUENCES ===================== */
+function renderSequences(){
+  $('seqGrid').innerHTML=SEQUENCES.map(s=>{
+    const steps=s.emails.map(e=>`<div class="s"><b>${esc(e.lbl)}</b>&nbsp;&mdash;&nbsp;${esc(e.send)}</div>`).join('');
+    const note=s.note?`<div class="callout" style="margin:9px 0 0">${esc(s.note)}</div>`:'';
+    return `<div class="seqcard">
+      <div class="top"><div class="num">${s.n}</div><h3>${esc(s.name)}</h3></div>
+      <p class="obj">${esc(s.obj)}</p>
+      <div class="kv"><div class="k">Trigger</div><div class="v">${esc(s.trigger)}</div></div>
+      <div class="kv"><div class="k">Timing</div><div class="v">${esc(s.timing)}</div></div>
+      <div class="kv"><div class="k">Audience</div><div class="v">${esc(s.audience)}</div></div>
+      <div class="kv"><div class="k">Goal</div><div class="v">${esc(s.goal)}</div></div>
+      <div class="kv"><div class="k">Owner</div><div class="v">${esc(s.owner)}</div></div>
+      <div class="steps">${steps}</div>${note}</div>`;
+  }).join('');
+}
+
+/* ===================== TEMPLATES ===================== */
+const TKEY="hcc_tmpl_edits_v1";
+function loadEdits(){try{return JSON.parse(localStorage.getItem(TKEY)||"{}");}catch(e){return {};}}
+function saveEdits(o){localStorage.setItem(TKEY,JSON.stringify(o));}
+function tmplCurrent(t){const e=loadEdits()[t.id]||{};return {subject:e.subject??t.subject,body:e.body??t.body};}
+function renderTemplates(){
+  $('tmplList').innerHTML=TEMPLATES.map(t=>{
+    const c=tmplCurrent(t);
+    return `<div class="tmpl" id="tmpl_${t.id}">
+      <div class="th"><span class="badge">${esc(t.lbl)}</span>
+        <div class="rowbtns">
+          <button class="mini" onclick="copyTmpl('${t.id}')">Copy</button>
+          <button class="mini" onclick="dlTmpl('${t.id}')">Download .txt</button>
+          <button class="mini" onclick="aiPersonalize('${t.id}')">AI Personalize opener</button>
+        </div></div>
+      <label>Subject line</label>
+      <input class="subj-in" id="subj_${t.id}" value="${esc(c.subject)}" oninput="onTmplEdit('${t.id}')"/>
+      <label>Body (footer auto-appended on copy/download)</label>
+      <textarea class="body" id="body_${t.id}" oninput="onTmplEdit('${t.id}')">${esc(c.body)}</textarea>
+      <div class="status" id="st_${t.id}"></div>
+    </div>`;
+  }).join('');
+}
+function onTmplEdit(id){
+  const o=loadEdits();o[id]={subject:$('subj_'+id).value,body:$('body_'+id).value};saveEdits(o);
+}
+function fullEmail(id){
+  const subj=$('subj_'+id).value, body=$('body_'+id).value;
+  return `Subject: ${subj}\n\n${body}${FOOTER}`;
+}
+function copyTmpl(id){navigator.clipboard.writeText(fullEmail(id)).then(()=>toast($('st_'+id),"Copied with footer.",true));}
+function dlTmpl(id){
+  const blob=new Blob([fullEmail(id)],{type:"text/plain"});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=id+".txt";a.click();
+  toast($('st_'+id),"Downloaded.",true);
+}
+function resetTemplates(){
+  if(!confirm("Reset all templates to their original SOP copy? Your edits in this browser will be cleared.")) return;
+  localStorage.removeItem(TKEY);renderTemplates();
+}
+async function aiPersonalize(id){
+  const st=$('st_'+id);
+  if(STATE.key.length<10){toast(st,"Add your Anthropic API key (top right) to use AI personalize. Offline, edit the opener by hand.",false);return;}
+  toast(st,"Rewriting opener...",true);
+  const body=$('body_'+id).value;
+  try{
+    const out=await callClaude(VOICE,
+      `Rewrite ONLY the opening 1-2 sentences of this carrier email to feel warmer and less automated. Keep all merge fields like {{adjuster_name}} intact. Do NOT change the subject line, the call to action, or the core message. Return the FULL email body with just the opener revised, nothing else:\n\n${body}`,900);
+    $('body_'+id).value=out.trim();onTmplEdit(id);toast(st,"Opener personalized. Review before sending.",true);
+  }catch(e){toast(st,"AI error: "+e.message,false);}
+}
+
+/* ===================== CARRIER CHECK ===================== */
+function setCheckMode(m){
+  $('checkSingle').classList.toggle('hide',m!=='single');
+  $('checkBatch').classList.toggle('hide',m!=='batch');
+  $('smSingle').classList.toggle('active',m==='single');
+  $('smBatch').classList.toggle('active',m==='batch');
+}
+function initCheckInputs(){
+  $('qRep').innerHTML=REPS.map(r=>`<option>${esc(r)}</option>`).join('');
+  $('qServices').innerHTML=SERVICES.map((s,i)=>`<label><input type="checkbox" value="${esc(s)}" id="svc_${i}">${esc(s)}</label>`).join('');
+  $('qAsof').value=TODAY;$('bAsof').value=TODAY;
+}
+function milestoneHit(cum){ // exact-match per snapshot doctrine
+  return [1000,500,100].find(m=>cum===m)||null;
+}
+// returns {suppressed:bool, reason, fires:[{seq,name,email,template,owner,action,dormant}], notes:[]}
+function evaluate(c){
+  const out={suppressed:false,reason:"",fires:[],notes:[]};
+  const flags=c.flags||[];
+  if(flags.includes('unsubscribed')){out.suppressed=true;out.reason="Unsubscribed";return out;}
+  if(flags.includes('vendor_mgmt')){out.suppressed=true;out.reason="Vendor-management only";return out;}
+  if(flags.includes('on_hold')){out.suppressed=true;out.reason="On hold";return out;}
+  if(flags.includes('contract_negotiation')){out.suppressed=true;out.reason="In contract negotiation";return out;}
+
+  const asof=c.asof||TODAY;
+  const dFirst=daysBetween(c.first,asof);
+  const dLast=daysBetween(c.last,asof);
+  const cum=Number(c.cum)||0, roll=Number(c.roll)||0;
+  const services=c.services||[];
+
+  // Seq 1 — Welcome (Day 1/7/30 since first)
+  if(dFirst!==null){
+    const map={0:{e:"Email 1 of 3",t:"s1e1"},7:{e:"Email 2 of 3",t:"s1e2"},30:{e:"Email 3 of 3",t:"s1e3"}};
+    if(map[dFirst]) out.fires.push({seq:1,name:"New Carrier Welcome",email:map[dFirst].e,template:map[dFirst].t,owner:"Assigned BD rep",action:"Personalized send from rep, not generic address."});
+  }
+  // Seq 2 — Good Carrier (rolling30 >= 20)
+  if(roll>=20){
+    out.fires.push({seq:2,name:"Good Carrier Recognition",email:"Email 1 of 1",template:"s2e1",owner:"Assigned BD rep (personally signed)",action:"If first time over threshold: also call within 48 hrs and flag to AVP."});
+  }
+  // Seq 3 — Milestone (exact 100/500/1000)
+  const ms=milestoneHit(cum);
+  if(ms){
+    out.fires.push({seq:3,name:"Volume Milestone",email:"Email 1 of 1",template:"s3e1",owner:ms>=1000?"AVP/VP co-sign":"Assigned BD rep",action:ms>=1000?"Consider handwritten note from Noah/AVP.":(ms>=500?"Offer a partnership review meeting.":"Celebrate the milestone."),milestone:ms});
+  }
+  // Seq 4 — Win-back (Day 30/45/60 since last; previously active)
+  if(dLast!==null && (cum>0 || c.first)){
+    const map={30:{e:"Email 1 of 3",t:"s4e1"},45:{e:"Email 2 of 3",t:"s4e2"},60:{e:"Email 3 of 3",t:"s4e3"}};
+    if(map[dLast]){
+      const f={seq:4,name:"30-Day Win-Back",email:map[dLast].e,template:map[dLast].t,owner:"Assigned BD rep",action:"Low-pressure re-engagement."};
+      if(dLast===60){f.dormant=true;f.action="After send: move carrier to 'dormant'. AVP notified. Rep takes over with manual outreach.";}
+      out.fires.push(f);
+    }
+  }
+  // Seq 5 — Cross-sell (exactly 1 active service, 60+ days tenure)
+  if(services.length===1 && dFirst!==null && dFirst>=60){
+    const row=CROSSSELL.find(r=>r.cur===services[0])||CROSSSELL.find(r=>r.cur==="Any single service");
+    out.fires.push({seq:5,name:"Cross-Sell",email:"Email 1 of 1",template:"s5e1",owner:"Assigned BD rep",action:"Monthly, max 1x. Confirm not pitched "+(row?row.next:"this service")+" in last 90 days (CRM).",service:services[0],next:row?row.next:"",angle:row?row.angle:""});
+    out.notes.push("Cross-sell suppression (no same pitch in 90 days) and the monthly cadence depend on CRM send history — confirm before sending.");
+  }
+  // Seq 6 — Seasonal (Apr 1 / Sep 1)
+  const md=asof.slice(5); // mm-dd
+  if(md==="04-01"||md==="09-01"){
+    out.fires.push({seq:6,name:"Seasonal / CAT Readiness",email:"Email 1 of 1",template:"s6e1",owner:"Assigned BD rep",action:"Goes to all active carriers. AVP approves content 2 weeks ahead."});
+  }
+  return out;
+}
+function gatherSingle(){
+  const services=SERVICES.filter((s,i)=>$('svc_'+i).checked);
+  const flags=[];if($('fUnsub').checked)flags.push('unsubscribed');if($('fVendor').checked)flags.push('vendor_mgmt');if($('fHold').checked)flags.push('on_hold');if($('fContract').checked)flags.push('contract_negotiation');
+  return {carrier:$('qCarrier').value.trim(),adjuster:$('qAdjuster').value.trim(),rep:$('qRep').value,first:$('qFirst').value,last:$('qLast').value,cum:$('qCum').value,roll:$('qRoll').value,services,flags,asof:$('qAsof').value||TODAY};
+}
+function mergeFor(tid,c,fire){
+  const cur=tmplCurrent(TEMPLATES.find(t=>t.id===tid));
+  const map={adjuster_name:c.adjuster||"there",rep_name:c.rep||"{{rep_name}}",carrier:c.carrier||"your team",turnaround:"{{turnaround}}",assignment_count:c.cum||"{{assignment_count}}",service:(c.services&&c.services[0])||fire.service||"{{service}}",next_service:fire.next||"{{next_service}}",milestone:fire.milestone||"{{milestone}}",angle:fire.angle||"{{angle}}"};
+  const fill=s=>s.replace(/\{\{(\w+)\}\}/g,(m,k)=>map[k]!=null?map[k]:m);
+  return `Subject: ${fill(cur.subject)}\n\n${fill(cur.body)}${FOOTER}`;
+}
+function runSingle(){
+  const c=gatherSingle();const r=evaluate(c);const host=$('singleRes');
+  const asofTxt=new Date(c.asof+"T00:00:00").toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  if(r.suppressed){
+    host.innerHTML=`<div class="firecard dormant"><h4>&#128683; Suppressed — do not send</h4><div class="sl">Reason: <b>${esc(r.reason)}</b>. No automated emails go to this contact (SOP &sect;7).</div></div>`;
+    return;
+  }
+  if(!r.fires.length){
+    host.innerHTML=`<div class="empty"><div class="big">&#10003;</div><p>No sequence triggers for this carrier as of ${esc(asofTxt)}.</p><p class="note">That's expected most days &mdash; sequences fire on specific day-counts and thresholds.</p></div>`;
+    return;
+  }
+  let html=`<div class="secttitle" style="margin-top:0">Fires today &mdash; ${esc(asofTxt)}</div>`;
+  r.fires.forEach((f,i)=>{
+    const filled=mergeFor(f.template,c,f);
+    html+=`<div class="firecard ${f.dormant?'dormant':''}">
+      <h4>Sequence ${f.seq} &mdash; ${esc(f.name)} <span class="trigtag">${esc(f.email)}</span></h4>
+      <div class="sl"><b>Owner:</b> ${esc(f.owner)}</div>
+      <div class="ac">${esc(f.action)}</div>
+      <div class="rowbtns"><button class="mini" onclick='copyText(${JSON.stringify(filled)},this)'>Copy filled email</button>
+      <button class="mini" onclick="showTab('templates');setTimeout(()=>document.getElementById('tmpl_${f.template}').scrollIntoView({behavior:'smooth'}),60)">Open in Templates</button></div>
+    </div>`;
+  });
+  if(r.notes.length) html+=`<div class="callout">${r.notes.map(esc).join('<br>')}</div>`;
+  host.innerHTML=html;
+}
+function copyText(txt,btn){navigator.clipboard.writeText(txt).then(()=>{const o=btn.textContent;btn.textContent="Copied!";setTimeout(()=>btn.textContent=o,1200);});}
+
+/* ----- batch ----- */
+let BATCH_RESULTS=[];
+function parseCsv(text){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());
+  if(lines.length<2) return [];
+  const split=l=>{const out=[];let cur="",q=false;for(let i=0;i<l.length;i++){const ch=l[i];if(ch=='"'){q=!q;}else if(ch==','&&!q){out.push(cur);cur="";}else cur+=ch;}out.push(cur);return out.map(s=>s.trim());};
+  const headers=split(lines[0]).map(h=>h.toLowerCase());
+  return lines.slice(1).map(l=>{const cells=split(l);const o={};headers.forEach((h,i)=>o[h]=cells[i]||"");return o;});
+}
+function rowToCarrier(o,asof){
+  return {carrier:o.carrier||"",adjuster:o.adjuster_name||"",adjuster_email:o.adjuster_email||"",first:o.first_assignment_date||"",last:o.last_assignment_date||"",cum:o.cumulative_count||0,roll:o.rolling_30_count||0,
+    services:(o.services||"").split(';').map(s=>s.trim()).filter(Boolean),
+    flags:(o.flags||"").split(';').map(s=>s.trim().toLowerCase()).filter(Boolean),asof};
+}
+function runBatch(){
+  const st=$('bStatus');const asof=$('bAsof').value||TODAY;
+  const rows=parseCsv($('bCsv').value);
+  if(!rows.length){toast(st,"No rows found. Paste CSV with a header row, or load the sample.",false);return;}
+  BATCH_RESULTS=[];
+  const body=rows.map(o=>{
+    const c=rowToCarrier(o,asof);const r=evaluate(c);
+    let trig,cls;
+    if(r.suppressed){trig=`<span class="trigtag supp">Suppressed: ${esc(r.reason)}</span>`;}
+    else if(!r.fires.length){trig=`<span class="trigtag none">No trigger today</span>`;}
+    else{trig=r.fires.map(f=>`<span class="trigtag">Seq ${f.seq}: ${esc(f.email.replace('Email','E').replace(' of ','/'))}</span>`).join('');}
+    const owners=r.suppressed?"—":[...new Set(r.fires.map(f=>f.owner))].join('; ')||"—";
+    const actions=r.suppressed?("Do not send — "+r.reason):(r.fires.map(f=>f.action).join(' ')||"—");
+    BATCH_RESULTS.push({carrier:c.carrier,adjuster:c.adjuster,triggers:r.suppressed?("SUPPRESSED: "+r.reason):(r.fires.map(f=>"Seq"+f.seq+" "+f.email).join(' | ')||"none"),owner:owners,action:actions});
+    return `<tr><td>${esc(c.carrier||"—")}</td><td>${esc(c.adjuster||"—")}</td><td>${trig}</td><td>${esc(owners)}</td><td style="font-size:11.5px;color:var(--muted)">${esc(actions)}</td></tr>`;
+  }).join('');
+  const fired=BATCH_RESULTS.filter(r=>r.triggers!=="none"&&!r.triggers.startsWith("SUPPRESSED")).length;
+  const supp=BATCH_RESULTS.filter(r=>r.triggers.startsWith("SUPPRESSED")).length;
+  $('batchRes').innerHTML=`<div class="secttitle">Results &mdash; ${rows.length} carriers · ${fired} trigger today · ${supp} suppressed</div>
+    <table><thead><tr><th>Carrier</th><th>Adjuster</th><th>Triggers today</th><th>Owner</th><th>Action</th></tr></thead><tbody>${body}</tbody></table>`;
+  toast(st,"Done. "+rows.length+" carriers evaluated.",true);
+}
+function exportBatch(){
+  if(!BATCH_RESULTS.length){toast($('bStatus'),"Run a list first.",false);return;}
+  const head="carrier,adjuster,triggers_today,owner,action\n";
+  const esc2=s=>'"'+String(s).replace(/"/g,'""')+'"';
+  const csv=head+BATCH_RESULTS.map(r=>[r.carrier,r.adjuster,r.triggers,r.owner,r.action].map(esc2).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));a.download="carrier_check_results.csv";a.click();
+  toast($('bStatus'),"Results exported.",true);
+}
+function loadSampleCsv(){
+  $('bCsv').value=`carrier,adjuster_name,adjuster_email,first_assignment_date,last_assignment_date,cumulative_count,rolling_30_count,services,flags
+ABC Mutual,Jordan Reyes,jreyes@abcmutual.com,2026-06-23,2026-06-23,1,1,DI / Direct Inspection,
+Summit Insurance,Pat Lee,plee@summit.com,2026-05-24,2026-05-24,8,3,DI / Direct Inspection,
+Coastline P&C,Sam Cho,scho@coastline.com,2026-01-10,2026-06-22,260,24,Contents Onsite,
+Heartland Mutual,Dana Ford,dford@heartland.com,2024-02-01,2026-05-24,500,2,Ladder Assist,
+Evergreen Casualty,Alex Diaz,adiaz@evergreen.com,2025-09-01,2026-04-24,140,0,DI with Estimate,
+Pioneer Insurance,Casey Nguyen,cnguyen@pioneer.com,2025-03-15,2026-06-20,310,11,Engineering,unsubscribed
+Lone Star Mutual,Robin Patel,rpatel@lonestar.com,2025-12-01,2025-12-01,0,0,,vendor_mgmt`;
+  toast($('bStatus'),"Sample loaded — 7 carriers. Note: with as-of 2026-06-23, a few are tuned to trigger (Welcome Day 1, Win-back Day 30, Milestone 500). Press Run list.",true);
+}
+
+/* ===================== CROSS-SELL ===================== */
+function renderCrossSell(){
+  $('csService').innerHTML=CROSSSELL.map(r=>`<option value="${esc(r.cur)}">${esc(r.cur)}</option>`).join('');
+  $('csTable').querySelector('tbody').innerHTML=CROSSSELL.map(r=>`<tr><td><b>${esc(r.cur)}</b></td><td>${esc(r.next)}</td><td>${esc(r.angle)}</td></tr>`).join('');
+}
+function runCrossSell(){
+  const cur=$('csService').value;const row=CROSSSELL.find(r=>r.cur===cur);const carrier=$('csCarrier').value.trim()||"your team";
+  const t=TEMPLATES.find(x=>x.id==="s5e1");const c=tmplCurrent(t);
+  const map={adjuster_name:"there",rep_name:"{{rep_name}}",carrier,service:cur==="Any single service"?"{{service}}":cur,next_service:row.next,angle:row.angle};
+  const fill=s=>s.replace(/\{\{(\w+)\}\}/g,(m,k)=>map[k]!=null?map[k]:m);
+  const email=`Subject: ${fill(c.subject)}\n\n${fill(c.body)}${FOOTER}`;
+  $('csRes').innerHTML=`<div class="firecard"><h4>${esc(cur)} &rarr; ${esc(row.next)}</h4>
+    <div class="angle">${esc(row.angle)}</div>
+    <div class="rowbtns" style="margin-top:10px"><button class="mini" onclick='copyText(${JSON.stringify(email)},this)'>Copy email</button>
+    <button class="mini" onclick="showTab('templates');setTimeout(()=>document.getElementById('tmpl_s5e1').scrollIntoView({behavior:'smooth'}),60)">Open template</button></div>
+    <pre style="background:#0d2c49;color:#dbe7f5;padding:12px;border-radius:9px;overflow:auto;font-size:12px;margin-top:12px;white-space:pre-wrap">${esc(email)}</pre></div>`;
+  toast($('csStatus'),"Generated.",true);
+}
+
+/* ===================== METRICS ===================== */
+const MKEY="hcc_metrics_v1";
+function loadMetrics(){try{return JSON.parse(localStorage.getItem(MKEY)||"{}");}catch(e){return {};}}
+function renderMetrics(){
+  const vals=loadMetrics();
+  $('metricGrid').innerHTML=METRICS.map(m=>{
+    const v=vals[m.id];
+    let flag='<span class="flag na">No data</span>';
+    if(v!=null&&v!==""){
+      const ok=m.dir==='gte'?(Number(v)>=m.val):(Number(v)<m.val);
+      flag=`<span class="flag ${ok?'ok':'bad'}">${ok?'On target':'Below target'}</span>`;
+    }
+    return `<div class="metric">${flag}<h4>${esc(m.name)}</h4><div class="tgt">Target: <b>${esc(m.target)}</b></div>
+      <input type="number" step="0.1" id="m_${m.id}" placeholder="actual ${m.unit}" value="${v!=null?esc(v):''}" oninput="onMetric('${m.id}')"/>
+      <div class="act"><b>If below target:</b> ${esc(m.action)}</div></div>`;
+  }).join('');
+}
+function onMetric(id){const v=loadMetrics();v[id]=$('m_'+id).value;localStorage.setItem(MKEY,JSON.stringify(v));renderMetrics();}
+function clearMetrics(){if(confirm("Clear all logged actuals?")){localStorage.removeItem(MKEY);renderMetrics();}}
+
+/* ===================== RULES ===================== */
+function renderRules(){
+  $('ruleData').innerHTML=RULES.data.map(r=>`<li>${esc(r)}</li>`).join('');
+  $('ruleApproval').innerHTML=RULES.approval.map(r=>`<li>${esc(r)}</li>`).join('');
+  $('ruleSupp').innerHTML=RULES.supp.map(r=>`<li class="stop">${esc(r)}</li>`).join('');
+  $('ruleComp').innerHTML=RULES.comp.map(r=>`<li>${esc(r)}</li>`).join('');
+}
+
+/* ===================== ACTIVATION ===================== */
+function renderActivation(){
+  $('activationGrid').innerHTML=ACTIVATION.map(p=>`<div class="card rulecol"><h3>${esc(p.phase)}</h3><ul class="rulelist">${p.items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`).join('');
+  $('integrationTable').querySelector('tbody').innerHTML=INTEGRATION.map(r=>`<tr><td><b>${esc(r.mode)}</b></td><td>${esc(r.can)}</td><td>${esc(r.approval)}</td></tr>`).join('');
+}
+function exportActivationPlan(){
+  const seq=SEQUENCES.map(s=>`## Sequence ${s.n}: ${s.name}\nTrigger: ${s.trigger}\nTiming: ${s.timing}\nAudience: ${s.audience}\nOwner: ${s.owner}\nGoal: ${s.goal}\n\n${s.obj}\n`).join('\n');
+  const tmpl=TEMPLATES.map(t=>{const c=tmplCurrent(t);return `## ${t.lbl}\nSubject: ${c.subject}\n\n${c.body}\n${FOOTER}\n`;}).join('\n');
+  const cross=CROSSSELL.map(r=>`- ${r.cur} -> ${r.next}: ${r.angle}`).join('\n');
+  const activation=ACTIVATION.map(p=>`## ${p.phase}\n${p.items.map(x=>`- ${x}`).join('\n')}`).join('\n\n');
+  const integration=INTEGRATION.map(r=>`- ${r.mode}: ${r.can} Approval boundary: ${r.approval}`).join('\n');
+  const plan=`# HCC Carrier Email Automation Implementation Plan\n\nEffective SOP: June 2026\nGenerated: ${new Date().toLocaleString()}\n\n# Operating Model\nThis program prepares, checks, drafts, and exports carrier email actions. Production integrations must keep outbound email behind human approval, suppression checks, and audit logging.\n\n# Sequences\n${seq}\n# Cross-Sell Matrix\n${cross}\n\n# Activation Plan\n${activation}\n\n# Dave / Jarvis Connection Model\n${integration}\n\n# Approved Template Drafts\n${tmpl}`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([plan],{type:"text/markdown"}));a.download="HCC_Carrier_Email_Automation_Implementation_Plan.md";a.click();
+}
+
+/* ===================== INIT ===================== */
+renderDesk();renderSequences();renderTemplates();initCheckInputs();renderCrossSell();renderMetrics();renderRules();renderActivation();
+</script>
+</body>
+</html>

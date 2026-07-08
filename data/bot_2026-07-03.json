@@ -1,0 +1,58 @@
+{
+  "generatedAt": "2026-07-03T17:59:13",
+  "generatedHuman": "Friday, July 03, 2026 at 05:59 PM",
+  "source": "Google News RSS + Hancock Marketing Bot",
+  "stories": [
+    {
+      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
+      "tag": "Trending",
+      "summary": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News",
+      "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
+      "keywords": [
+        "hail",
+        "regularly",
+        "hitting",
+        "roof",
+        "coverage"
+      ],
+      "source": "CBS News",
+      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5",
+      "date": "Jun 22, 2026",
+      "line": "Storm / CAT Damage"
+    }
+  ],
+  "clusters": [
+    {
+      "category": "Trending Keywords",
+      "keywords": [
+        "hail regularly",
+        "regularly hitting",
+        "hitting roof",
+        "roof coverage",
+        "coverage quietly",
+        "quietly shrinks"
+      ]
+    },
+    {
+      "category": "Storm / CAT Damage",
+      "keywords": [
+        "hail",
+        "regularly",
+        "hitting",
+        "roof",
+        "coverage",
+        "quietly"
+      ]
+    }
+  ],
+  "library": [
+    {
+      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
+      "type": "Bot Draft",
+      "body": "# Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks\n\nHail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News\n\n## Hancock angle\nConnect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
+      "date": "Jul 03, 2026 05:59 PM",
+      "source": "CBS News",
+      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5"
+    }
+  ]
+}
