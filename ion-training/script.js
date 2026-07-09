@@ -102,27 +102,29 @@ const slides = [
     title: "Confirm inspector information",
     image: "IMG_3429.PNG",
     hotspot: [90, 94],
-    summary: "The inspector verifies their identity, license, phone, and email, then checks the confirmation box.",
+    summary: "The inspector verifies their identity, enters N/A for the license number, confirms phone and email, then checks the confirmation box.",
     actions: [
-      "Review the inspector name and license number.",
+      "Review the inspector name.",
+      "For Inspector License Number, type N/A for now.",
       "Enter or confirm the inspector phone number.",
       "Confirm the email address is correct.",
       "Check the confirmation box stating you are the assigned inspector completing the inspection."
     ],
     fields: [
       ["Inspector Name", "Ryan Knight"],
-      ["License Number", "X123456"],
+      ["License Number", "N/A"],
       ["Phone Number", "(727) 555-0198"],
       ["Email Address", "rknight@hancockclaims.com"],
       ["Confirmation", "Checked"]
     ],
     checks: [
       "Use the assigned inspector's information, not the trainee's practice data.",
+      "Inspector License Number should be entered as N/A until Hancock gives different guidance.",
       "Make sure the email address is spelled correctly.",
       "The confirmation checkbox is required."
     ],
-    practice: "Fill the missing phone field and check the confirmation box.",
-    filled: "Inspector Phone Number: (727) 555-0198. Confirmation: checked."
+    practice: "Enter N/A for the license number, fill the missing phone field, and check the confirmation box.",
+    filled: "Inspector License Number: N/A. Inspector Phone Number: (727) 555-0198. Confirmation: checked."
   },
   {
     section: "Home Information*",
