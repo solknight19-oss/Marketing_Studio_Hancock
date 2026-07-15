@@ -7,8 +7,8 @@
      <script>window.CHAD_CONFIG={apiBase:"https://your-brain-url",user:"Cassie"};</script>
      <script src="chad-widget.js"></script>
    - apiBase: Chad's authenticated server URL (empty means this same site)
-   - user:    the logged-in person's name (so briefings + greetings are personal).
-              Omit it and the widget asks once.
+   - user:    optional fallback name. In the live Studio, Chad reads the signed-in
+              user from the authenticated session.
 
    FOR A FULL "CHAD" TAB: just call  ChadWidget.open()  when that tab is shown
    (the same panel works as a docked section), or embed the widget and let the
@@ -18,7 +18,7 @@
   if (window.__chadWidgetLoaded) return; window.__chadWidgetLoaded = true;
   var CFG = window.CHAD_CONFIG || {};
   var API = (CFG.apiBase || "").replace(/\/$/, "");
-  var USER = CFG.user || localStorage.getItem("chad_widget_user") || null;
+  var USER = CFG.user || null;
   var standby = localStorage.getItem("chad_widget_standby") === "1";
   var muted = standby || localStorage.getItem("chad_widget_mute") === "1";
   var conversationMode = !standby && localStorage.getItem("chad_widget_conversation") !== "0";
@@ -618,7 +618,7 @@
     }
   }
   function firstGreet() {
-    if (!USER) { resolveSignedInUser(firstGreet, showPicker); return; }
+    if (!USER) { resolveSignedInUser(firstGreet, showSessionNotice); return; }
     greeted = true; loadBrief();
     var hi = "Good to see you, " + USER + ". I am pulling your briefing.";
     fetch(stateUrl()).then(function (r) { return r.json(); })
@@ -632,17 +632,16 @@
       }).catch(function () { bubble(esc(hi), "chad"); speak(hi); });
   }
   function autoOpen() {
-    if (!USER) return;
+    if (!USER) { resolveSignedInUser(autoOpen, function () {}); return; }
     var key="chad_auto_open_"+USER+"_"+new Date().toISOString().slice(0,10);
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key,"1");
     setTimeout(open,1200);
   }
-  function showPicker() {
+  function showSessionNotice() {
     var p = document.createElement("div"); p.className = "cw-pick";
-    p.innerHTML = "<b>Who's here?</b><div>So I can greet you and pull your briefing.</div><div class='row'><button data-u='Ryan'>Ryan</button><button data-u='Cassie'>Cassie</button><button data-u='Jennifer'>Jennifer</button></div>";
+    p.innerHTML = "<b>I need your signed-in Studio session.</b><div>Refresh the page or sign in again so I can recognize who is here from the login.</div>";
     msgs.appendChild(p);
-    p.querySelectorAll("button").forEach(function (b) { b.onclick = function () { USER = b.getAttribute("data-u"); localStorage.setItem("chad_widget_user", USER); p.remove(); greeted = false; firstGreet(); }; });
   }
 
   function resolveSignedInUser(done, fallback) {
@@ -651,7 +650,6 @@
       .then(function (d) {
         if (d && d.user && d.user.name) {
           USER=d.user.name.split(" ")[0];
-          localStorage.setItem("chad_widget_user",USER);
           if (done) done();
           return;
         }
@@ -841,9 +839,9 @@
       ensureAudioContext().then(function () { startListening(true); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
     },
     pageContext: collectStudioPageContext,
-    setUser: function (u) { if (!u) return; USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
+    setUser: function (u) { if (!u) return; USER = u; autoOpen(); },
     send: send,
     ask: ask
   };
-  if (USER) autoOpen();
+  resolveSignedInUser(autoOpen, function () { if (USER) autoOpen(); });
 })();
