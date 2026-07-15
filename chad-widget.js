@@ -133,7 +133,8 @@
   var msgs = root.querySelector("#cwMsgs"), brief = root.querySelector("#cwBrief"), transcript = root.querySelector("#cwTranscript"), input = root.querySelector("#cwInput"),
     stateEl = root.querySelector("#cwState"), coreEl = root.querySelector("#cwCore");
   var actx = null, analyser = null, freq = null, raf = null, curSource = null, lastAudioBuffer = null, lastSpokenText = "";
-  var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false, lastStudioFocus = null;
+  var recognition = null, recognitionGeneration = 0, listenSilenceTimer = null, listenMaxTimer = null, listenTurnStartedAt = 0, listenRestartCount = 0, bargeRecognition = null, bargeTimer = null, requestNumber = 0, activeRequest = null, listenTimer = null, micDeniedNotice = false, lastStudioFocus = null;
+  var VOICE_FINAL_PAUSE_MS = 2200, VOICE_INTERIM_PAUSE_MS = 4200, VOICE_RESTART_DELAY_MS = 220, VOICE_MAX_TURN_MS = 18000, VOICE_MAX_RESTARTS = 3;
   var panel = root.querySelector(".cw-panel"), head = root.querySelector(".cw-head");
   if (minimized) root.classList.add("cw-min");
 
@@ -259,8 +260,15 @@
     if (listenSilenceTimer) window.clearTimeout(listenSilenceTimer);
     listenSilenceTimer=null;
   }
+  function clearListenMaxTimer() {
+    if (listenMaxTimer) window.clearTimeout(listenMaxTimer);
+    listenMaxTimer=null;
+  }
   function stopRecognition() {
     clearListenSilenceTimer();
+    clearListenMaxTimer();
+    listenTurnStartedAt=0;
+    listenRestartCount=0;
     recognitionGeneration++;
     if (recognition) {
       var current=recognition;
@@ -298,6 +306,15 @@
     if (lowerNext.indexOf(lowerBase)===0) return next;
     if (lowerBase.indexOf(lowerNext)>=0) return base;
     return base+" "+next;
+  }
+  function meaningfulVoiceTurn(text) {
+    var trimmed=String(text || "").trim();
+    var words=normalizedWords(trimmed);
+    if (!trimmed) return false;
+    if (isStandbyCommand(trimmed) || isResumeCommand(trimmed)) return true;
+    if (/[?.!]$/.test(trimmed)) return true;
+    if (words.length >= 3) return true;
+    return /^(yes|no|okay|ok|help|stop|pause|resume|radar|calendar|dashboard|updates|tasks|drafts|run scan|live scan|catch me up|check skies|storm watch|industry radar|web search|look up|find news|open calendar)$/i.test(trimmed);
   }
   function startBargeIn(spokenText,delay) {
     stopBargeIn();
@@ -687,22 +704,57 @@
     var rec = new SR(), generation=++recognitionGeneration;
     recognition=rec; rec.lang = "en-US"; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
     var btn=root.querySelector("#cwMic"), committed=String(seedText || "").trim(), latest="", denied=false, submitted=false;
+    if (committed && listenTurnStartedAt) listenRestartCount++;
+    else { listenTurnStartedAt=Date.now(); listenRestartCount=0; }
+    function heardText() {
+      return (committed+" "+latest).trim();
+    }
+    function submitHeard(heard) {
+      if (!heard || submitted || generation!==recognitionGeneration) return false;
+      submitted=true;
+      input.value="";
+      listenTurnStartedAt=0;
+      listenRestartCount=0;
+      stopRecognition();
+      send(heard);
+      return true;
+    }
+    function restartWithSeed(heard) {
+      if (!heard || submitted || generation!==recognitionGeneration || standby || !conversationMode || denied) return false;
+      if ((Date.now()-listenTurnStartedAt) >= VOICE_MAX_TURN_MS || listenRestartCount >= VOICE_MAX_RESTARTS) return false;
+      input.value=heard;
+      setTranscript(heard);
+      setState("KEEP TALKING");
+      if (recognition===rec) return true;
+      recognition=null;
+      btn.classList.remove("on");
+      clearListenSilenceTimer();
+      clearListenMaxTimer();
+      window.setTimeout(function () {
+        if (!recognition && !curSource && !activeRequest && conversationMode && !standby) startListening(true,heard);
+      },VOICE_RESTART_DELAY_MS);
+      return true;
+    }
     function submitAfterPause(delay) {
       clearListenSilenceTimer();
       listenSilenceTimer=window.setTimeout(function () {
         listenSilenceTimer=null;
-        var heard=(committed+" "+latest).trim();
+        var heard=heardText();
         if (!heard || submitted || generation!==recognitionGeneration) return;
-        submitted=true;
-        input.value="";
-        stopRecognition();
-        send(heard);
+        if (meaningfulVoiceTurn(heard) || (Date.now()-listenTurnStartedAt) >= VOICE_MAX_TURN_MS) submitHeard(heard);
+        else restartWithSeed(heard);
       },delay);
     }
     rec.onstart = function () {
       btn.classList.add("on");
       setState("LISTENING");
       setTranscript((committed+" "+latest).trim());
+      clearListenMaxTimer();
+      listenMaxTimer=window.setTimeout(function () {
+        if (generation!==recognitionGeneration || submitted) return;
+        var heard=heardText();
+        if (heard) submitHeard(heard);
+      },Math.max(2500,VOICE_MAX_TURN_MS-(Date.now()-listenTurnStartedAt)));
     };
     rec.onresult = function (ev2) {
       if (generation!==recognitionGeneration) return;
@@ -718,7 +770,7 @@
         input.value=visible;
         setTranscript(visible);
       }
-      submitAfterPause(latest ? 1600 : 1100);
+      submitAfterPause(latest ? VOICE_INTERIM_PAUSE_MS : VOICE_FINAL_PAUSE_MS);
     };
     rec.onerror = function (ev3) {
       denied=ev3 && (ev3.error === "not-allowed" || ev3.error === "service-not-allowed");
@@ -735,9 +787,17 @@
     };
     rec.onend = function () {
       if (generation!==recognitionGeneration) return;
-      recognition=null; btn.classList.remove("on"); clearListenSilenceTimer();
-      var heard=(committed+" "+latest).trim();
-      if (heard && !submitted) { submitted=true; input.value=""; send(heard); return; }
+      recognition=null; btn.classList.remove("on"); clearListenSilenceTimer(); clearListenMaxTimer();
+      var heard=heardText();
+      if (heard && !submitted) {
+        if (meaningfulVoiceTurn(heard) || (Date.now()-listenTurnStartedAt) >= VOICE_MAX_TURN_MS || listenRestartCount >= VOICE_MAX_RESTARTS) {
+          submitHeard(heard);
+          return;
+        }
+        if (restartWithSeed(heard)) return;
+      }
+      listenTurnStartedAt=0;
+      listenRestartCount=0;
       setTranscript("");
       setState(conversationMode ? "RECONNECTING MIC" : "ONLINE");
       if (!denied) queueListening(250);
