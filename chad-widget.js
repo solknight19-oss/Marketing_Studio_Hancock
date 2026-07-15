@@ -520,7 +520,17 @@
       body: JSON.stringify({ message: text, request_id: requestId, page_context: collectStudioPageContext() }),
       signal: activeRequest ? activeRequest.signal : undefined
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        return r.json().then(function (d) {
+          if (!r.ok) {
+            var err = new Error(d.error || d.message || "Chad request failed");
+            err.payload = d;
+            err.status = r.status;
+            throw err;
+          }
+          return d;
+        });
+      })
       .then(function (d) {
         if (thisRequest !== requestNumber || d.superseded) return;
         activeRequest=null;
@@ -535,7 +545,8 @@
         if (error && error.name === "AbortError") return;
         if (thisRequest !== requestNumber) return;
         activeRequest=null;
-        bubble("I can't reach my brain right now — is the Chad service running?", "chad");
+        var detail = error && error.message ? error.message : "I can't reach my brain right now.";
+        bubble(esc(detail), "chad");
         setState("OFFLINE");
         queueListening(1000);
       });
@@ -607,7 +618,7 @@
     }
   }
   function firstGreet() {
-    if (!USER) { showPicker(); return; }
+    if (!USER) { resolveSignedInUser(firstGreet, showPicker); return; }
     greeted = true; loadBrief();
     var hi = "Good to see you, " + USER + ". I am pulling your briefing.";
     fetch(stateUrl()).then(function (r) { return r.json(); })
@@ -632,6 +643,21 @@
     p.innerHTML = "<b>Who's here?</b><div>So I can greet you and pull your briefing.</div><div class='row'><button data-u='Ryan'>Ryan</button><button data-u='Cassie'>Cassie</button><button data-u='Jennifer'>Jennifer</button></div>";
     msgs.appendChild(p);
     p.querySelectorAll("button").forEach(function (b) { b.onclick = function () { USER = b.getAttribute("data-u"); localStorage.setItem("chad_widget_user", USER); p.remove(); greeted = false; firstGreet(); }; });
+  }
+
+  function resolveSignedInUser(done, fallback) {
+    fetch(stateUrl())
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.user && d.user.name) {
+          USER=d.user.name.split(" ")[0];
+          localStorage.setItem("chad_widget_user",USER);
+          if (done) done();
+          return;
+        }
+        if (fallback) fallback();
+      })
+      .catch(function () { if (fallback) fallback(); });
   }
 
   /* ---------- wire events ---------- */
@@ -815,7 +841,7 @@
       ensureAudioContext().then(function () { startListening(true); }).catch(function () { setState("AUDIO UNAVAILABLE"); });
     },
     pageContext: collectStudioPageContext,
-    setUser: function (u) { USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
+    setUser: function (u) { if (!u) return; USER = u; localStorage.setItem("chad_widget_user", u); autoOpen(); },
     send: send,
     ask: ask
   };
