@@ -23,6 +23,7 @@
       }
       renderAtmosphere();
       renderCrew();
+      if(window.HancockEvents)window.HancockEvents.update(state);
       if(window.HancockCalendar)window.HancockCalendar.update(state);
     }catch(error){
       const mode=q("mode");
@@ -75,15 +76,20 @@
     ensureAtmosphere();
     const trigger=(state.seasonalTriggers||[])[0];
     const calendar=state.calendar||[];
+    const teamEvents=state.teamEvents||[];
     const today=new Date().toISOString().slice(0,10);
+    const horizon=new Date();horizon.setDate(horizon.getDate()+60);
+    const horizonIso=new Date(horizon.getTime()-horizon.getTimezoneOffset()*60000).toISOString().slice(0,10);
     const openCalendar=calendar.filter(item=>!["posted","archived"].includes(item.status)).length;
     const dueToday=calendar.filter(item=>String(item.due_date||"").slice(0,10)===today&&!["posted","archived"].includes(item.status)).length;
+    const upcomingEvents=teamEvents.filter(item=>String(item.end_date||item.start_date||"").slice(0,10)>=today&&String(item.start_date||"").slice(0,10)<=horizonIso).sort((a,b)=>String(a.start_date||"").localeCompare(String(b.start_date||"")));
     const botStamp=state.botData&&state.botData.generatedHuman?state.botData.generatedHuman:"scan pending";
     const ticker=q("liveTicker");
     if(ticker){
       const pieces=[
         bots&&bots.ai?"Chad AI online":"Bots online",
         trigger?`${trigger.name}: ${trigger.phase}`:"Seasonal triggers ready",
+        upcomingEvents.length?`Next event: ${upcomingEvents[0].title} (${String(upcomingEvents[0].start_date||"").slice(0,10)})`:"Team Events ready",
         dueToday?`${dueToday} production item${dueToday===1?"":"s"} due today`:`${openCalendar} forecasted calendar item${openCalendar===1?"":"s"}`,
         `Latest scan: ${botStamp}`
       ];
@@ -93,6 +99,7 @@
     if(pulse){
       const items=[
         "Scanning industry signals",
+        upcomingEvents.length?`Tracking ${upcomingEvents[0].title}`:"Watching team events",
         trigger?`Watching ${trigger.name}`:"Watching seasonal windows",
         "Preparing content angles"
       ];
@@ -112,6 +119,166 @@
       if(status)status.textContent=error.message;
     }
   }
+
+  const fallbackTeamEvents=[
+    {id:"sample-1",title:"NY Claims Assoc Golf Outing (Long Island)",start_date:"2026-07-19",end_date:"2026-07-19",location:"Long Island, NY",category:"Golf Outing",description:"Team event imported from the SharePoint Team Events calendar."},
+    {id:"sample-2",title:"KCA Conference (Florence, IN)",start_date:"2026-07-22",end_date:"2026-07-24",location:"Florence, IN",category:"Conference",description:"Team event imported from the SharePoint Team Events calendar."},
+    {id:"sample-3",title:"Swing Fore Sight Annual Golf Tournament",start_date:"2026-07-27",end_date:"2026-07-27",location:"",category:"Golf Outing",description:"Team event imported from the SharePoint Team Events calendar."}
+  ];
+
+  const events={
+    state:null,
+    month:new Date(2026,6,1),
+    update(next){
+      this.state=next;
+      if(q("eventsGrid"))this.render();
+    },
+    dateOnly(value){
+      return String(value||"").slice(0,10);
+    },
+    localDate(value){
+      const raw=this.dateOnly(value);
+      const parts=raw.split("-").map(Number);
+      return parts.length===3&&parts.every(Boolean)?new Date(parts[0],parts[1]-1,parts[2]):null;
+    },
+    isoDate(date){
+      const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);
+      return local.toISOString().slice(0,10);
+    },
+    monthLabel(date){
+      return date.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+    },
+    eventItems(){
+      const items=(this.state&&Array.isArray(this.state.teamEvents)&&this.state.teamEvents.length)?this.state.teamEvents:fallbackTeamEvents;
+      return items.slice().sort((a,b)=>this.dateOnly(a.start_date).localeCompare(this.dateOnly(b.start_date))||String(a.title||"").localeCompare(String(b.title||"")));
+    },
+    categoryClass(item){
+      const category=String(item.category||"").toLowerCase();
+      if(category.includes("conference"))return"conference";
+      if(category.includes("golf"))return"golf";
+      return"team";
+    },
+    eventRange(item){
+      const start=this.localDate(item.start_date);
+      const end=this.localDate(item.end_date||item.start_date)||start;
+      return {start,end:end&&start&&end<start?start:end};
+    },
+    occursOn(item,iso){
+      const range=this.eventRange(item);
+      if(!range.start||!range.end)return false;
+      const start=this.isoDate(range.start),end=this.isoDate(range.end);
+      return iso>=start&&iso<=end;
+    },
+    render(){
+      if(!q("eventsGrid"))return;
+      this.renderMini();
+      this.renderGrid();
+      this.renderAgenda();
+    },
+    renderMini(){
+      const year=this.month.getFullYear();
+      q("eventsMiniYear").textContent=year;
+      const names=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      q("eventsMonths").innerHTML=names.map((name,index)=>`<button class="eventsMonthBtn ${index===this.month.getMonth()?"active":""}" onclick="HancockEvents.setMonth(${year},${index})">${name}</button>`).join("");
+      const today=new Date();
+      q("eventsToday").innerHTML=`Today is <b>${escapeHtml(today.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"}))}</b>`;
+    },
+    renderGrid(){
+      const first=new Date(this.month.getFullYear(),this.month.getMonth(),1);
+      const start=new Date(first);start.setDate(1-first.getDay());
+      const todayIso=this.isoDate(new Date());
+      const items=this.eventItems();
+      q("eventsMonthTitle").textContent=this.monthLabel(this.month);
+      const monthIso=this.isoDate(first).slice(0,7);
+      const monthItems=items.filter(item=>this.dateOnly(item.start_date).slice(0,7)===monthIso||this.dateOnly(item.end_date||item.start_date).slice(0,7)===monthIso);
+      q("eventsMonthSummary").textContent=`${monthItems.length} team event${monthItems.length===1?"":"s"} in view.`;
+      let html=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(day=>`<div class="eventsDow">${day}</div>`).join("");
+      for(let i=0;i<42;i++){
+        const date=new Date(start);date.setDate(start.getDate()+i);
+        const iso=this.isoDate(date),muted=date.getMonth()!==this.month.getMonth();
+        const dayItems=items.filter(item=>this.occursOn(item,iso));
+        html+=`<div class="eventsDay ${muted?"mutedDay":""}"><div class="eventsDate ${iso===todayIso?"today":""}">${date.getDate()}</div>${dayItems.map(item=>`<button class="teamEvent ${this.categoryClass(item)}" title="${escapeHtml(item.title)}" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">${escapeHtml(item.title)}</button>`).join("")}</div>`;
+      }
+      q("eventsGrid").innerHTML=html;
+    },
+    renderAgenda(){
+      const month=this.isoDate(new Date(this.month.getFullYear(),this.month.getMonth(),1)).slice(0,7);
+      const items=this.eventItems().filter(item=>this.dateOnly(item.start_date).slice(0,7)===month||this.dateOnly(item.end_date||item.start_date).slice(0,7)===month);
+      q("eventsAgenda").innerHTML=items.map(item=>{
+        const start=this.dateOnly(item.start_date),end=this.dateOnly(item.end_date||item.start_date);
+        const span=end&&end!==start?`${start} to ${end}`:start;
+        return `<div class="eventsAgendaItem ${this.categoryClass(item)}"><span class="badge">${escapeHtml(item.category||"Team Event")}</span><h3>${escapeHtml(item.title)}</h3><p class="muted">${escapeHtml(span)}${item.location?" · "+escapeHtml(item.location):""}</p>${item.description?`<p>${escapeHtml(item.description)}</p>`:""}<button class="mini" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">Edit</button></div>`;
+      }).join("")||'<div class="panel empty"><h3>No events this month</h3><p>Add the next industry conference, outing, or team date.</p></div>';
+    },
+    setMonth(year,month){
+      this.month=new Date(year,month,1);
+      this.render();
+    },
+    shiftYear(delta){
+      this.month=new Date(this.month.getFullYear()+delta,this.month.getMonth(),1);
+      this.render();
+    },
+    shiftMonth(delta){
+      this.month=new Date(this.month.getFullYear(),this.month.getMonth()+delta,1);
+      this.render();
+    },
+    goToday(){
+      const today=new Date();
+      this.month=new Date(today.getFullYear(),today.getMonth(),1);
+      this.render();
+    },
+    clear(){
+      ["eventId","eventTitle","eventStart","eventEnd","eventLocation","eventDescription","eventSourceUrl"].forEach(id=>{if(q(id))q(id).value=""});
+      q("eventCategory").value="Team Event";
+      q("eventFormHeading").textContent="Event Details";
+      q("eventSaveStatus").textContent="";
+    },
+    newEvent(){
+      this.clear();
+      q("eventsForm").classList.add("open");
+      const defaultDate=this.isoDate(new Date(this.month.getFullYear(),this.month.getMonth(),1));
+      q("eventStart").value=defaultDate;
+      q("eventEnd").value=defaultDate;
+      q("eventTitle").focus();
+    },
+    edit(id){
+      const item=this.eventItems().find(event=>String(event.id)===String(id));
+      if(!item)return;
+      q("eventsForm").classList.add("open");
+      const map={eventId:item.id,eventTitle:item.title,eventStart:this.dateOnly(item.start_date),eventEnd:this.dateOnly(item.end_date||item.start_date),eventCategory:item.category||"Team Event",eventLocation:item.location||"",eventDescription:item.description||"",eventSourceUrl:item.source_url||""};
+      Object.entries(map).forEach(([key,value])=>{if(q(key))q(key).value=value});
+      q("eventFormHeading").textContent="Edit Event";
+      q("eventSaveStatus").textContent="";
+      q("eventsForm").scrollIntoView({behavior:"smooth",block:"start"});
+    },
+    payload(){
+      return {id:q("eventId").value,title:q("eventTitle").value,start_date:q("eventStart").value,end_date:q("eventEnd").value,category:q("eventCategory").value,location:q("eventLocation").value,description:q("eventDescription").value,source_url:q("eventSourceUrl").value};
+    },
+    async save(){
+      try{
+        await api("/api/team-event",this.payload());
+        q("eventSaveStatus").textContent="Event saved to Team Events. Chad has the updated event context.";
+        this.clear();
+        await load();
+        showTab("events");
+      }catch(error){
+        q("eventSaveStatus").textContent=error.message;
+      }
+    },
+    async remove(){
+      const id=q("eventId").value;
+      if(!id){q("eventSaveStatus").textContent="Choose an event first.";return}
+      try{
+        await api("/api/team-event-delete",{id});
+        this.clear();
+        await load();
+        showTab("events");
+      }catch(error){
+        q("eventSaveStatus").textContent=error.message;
+      }
+    }
+  };
+  window.HancockEvents=events;
 
   const calendar={
     state:null,
@@ -266,15 +433,23 @@
       const due=new Date();due.setDate(due.getDate()+1);
       const publish=new Date();publish.setDate(publish.getDate()+1);publish.setHours(9,0,0,0);
       for(const alert of selected){
+        const h=alert._hancock||alert;
+        const service=h.service||h.service_line||"Storm / CAT Damage";
+        const hazard=h.hazard||alert.event||"Storm";
+        const angle=h.angle||h.content_angle||"Prepare clear post-event documentation guidance without implying coverage decisions.";
         const sourceRef=alert.id||alert["@id"]||`${alert.event}|${alert._state}|${alert.areaDesc}|${alert.sent||alert.effective||""}`;
-        await api("/api/calendar",{title:`${alert.event||"Storm"} Response — ${alert._state||"Region"}`,status:"draft",content_type:"Video",platforms:"LinkedIn, Facebook, TikTok, YouTube",assigned_to:jennifer?jennifer.id:"",priority:"urgent",requested_date:new Date().toISOString().slice(0,10),due_date:this.isoDate(due),publish_at:new Date(publish.getTime()-publish.getTimezoneOffset()*60000).toISOString().slice(0,16),service_line:"Storm / CAT Damage",region:alert._state||"",location:alert.areaDesc||"",duration:"60-second master with 15-second cut",tone:"Safety-first, professional, conversational",talking_points:`Active ${alert.event||"weather alert"} in ${alert.areaDesc||alert._state||"the region"}.\n- Lead with public safety while the threat is active.\n- Prepare a clear post-event documentation message.\n- Explain how organized field evidence helps adjusters without implying a coverage decision.`,cta:"Follow local emergency guidance. When conditions are safe, learn how Hancock supports clear property documentation.",source_type:"Storm Watch",source_ref:sourceRef,notes:"Auto-forecasted by Chad from a live National Weather Service alert. Jennifer reviews before production."});
+        await api("/api/calendar",{title:`${hazard} Response — ${alert._state||alert.state||"Region"}`,status:"draft",content_type:"Video",platforms:"LinkedIn, Facebook, TikTok, YouTube",assigned_to:jennifer?jennifer.id:"",priority:"urgent",requested_date:new Date().toISOString().slice(0,10),due_date:this.isoDate(due),publish_at:new Date(publish.getTime()-publish.getTimezoneOffset()*60000).toISOString().slice(0,16),service_line:service,region:alert._state||alert.state||"",location:alert.areaDesc||alert.areas||"",duration:"60-second master with 15-second cut",tone:"Safety-first, professional, conversational",talking_points:`Active ${hazard} signal in ${alert.areaDesc||alert.areas||alert._state||alert.state||"the region"}.\n- Lead with public safety while the threat is active.\n- Hancock angle: ${angle}\n- Explain how organized field evidence helps adjusters without implying a coverage decision.`,cta:"Follow local emergency guidance. When conditions are safe, learn how Hancock supports clear property documentation.",source_type:"Storm Watch",source_ref:sourceRef,notes:"Auto-forecasted by Chad from a live official weather alert. Jennifer reviews before production."});
       }
       await load();
     },
     fromStorm(index){
       const alert=(window.HANCOCK_STORM_ALERTS||[])[index];if(!alert)return;
+      const h=alert._hancock||alert;
+      const service=h.service||h.service_line||"Storm / CAT Damage";
+      const hazard=h.hazard||alert.event||"Storm";
+      const angle=h.angle||h.content_angle||"Prepare clear post-event documentation guidance without implying coverage decisions.";
       const due=new Date();due.setDate(due.getDate()+1);const publish=new Date();publish.setDate(publish.getDate()+1);publish.setHours(9,0,0,0);
-      this.prefill({calTitle:`${alert.event||"Storm"} Response — ${alert._state||alert.areaDesc||"Region"}`,calType:"Video",calPriority:"urgent",calDue:this.isoDate(due),calPublish:new Date(publish.getTime()-publish.getTimezoneOffset()*60000).toISOString().slice(0,16),calService:"Storm / CAT Damage",calRegion:alert._state||"",calLocation:alert.areaDesc||"",calDuration:"60-second master with 15-second cut",calTone:"Safety-first, professional, conversational",calTalking:`Active ${alert.event||"weather alert"} in ${alert.areaDesc||alert._state||"the region"}.\n- Lead with public safety while the threat is active.\n- Explain what property owners should document only when conditions are safe.\n- Show how clear field documentation helps adjusters and supports a defensible file.\n- Prepare post-event inspection guidance without implying coverage decisions.`,calCta:"Follow local emergency guidance now. After the event, learn how Hancock supports clear property documentation.",platforms:["LinkedIn","Facebook","TikTok","YouTube"]});
+      this.prefill({calTitle:`${hazard} Response — ${alert._state||alert.state||alert.areaDesc||alert.areas||"Region"}`,calType:"Video",calPriority:"urgent",calDue:this.isoDate(due),calPublish:new Date(publish.getTime()-publish.getTimezoneOffset()*60000).toISOString().slice(0,16),calService:service,calRegion:alert._state||alert.state||"",calLocation:alert.areaDesc||alert.areas||"",calDuration:"60-second master with 15-second cut",calTone:"Safety-first, professional, conversational",calTalking:`Active ${hazard} signal in ${alert.areaDesc||alert.areas||alert._state||alert.state||"the region"}.\n- Lead with public safety while the threat is active.\n- Hancock angle: ${angle}\n- Explain what property owners should document only when conditions are safe.\n- Show how clear field documentation helps adjusters and supports a defensible file.`,calCta:"Follow local emergency guidance now. After the event, learn how Hancock supports clear property documentation.",platforms:["LinkedIn","Facebook","TikTok","YouTube"]});
     },
     fromRadar(index){
       const story=(window.HANCOCK_BOT_DATA?.stories||[])[index];if(!story)return;

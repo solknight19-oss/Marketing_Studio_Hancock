@@ -760,6 +760,20 @@ def init_db():
     create table if not exists chad_knowledge(id integer primary key autoincrement, evidence_id text unique not null, kind text not null, topic text not null, claim text not null, source_name text, source_url text, source_date text, confidence text not null, corroboration_count integer not null default 1, observed_at text not null);
     create table if not exists chad_updates(id integer primary key autoincrement, title text not null, details text not null, category text not null, status text not null, created_by integer not null, updated_by integer not null, created_at text not null, updated_at text not null);
     create table if not exists chad_update_comments(id integer primary key autoincrement, update_id integer not null, user_id integer not null, body text not null, created_at text not null);
+    create table if not exists team_events(
+        id integer primary key autoincrement,
+        title text not null,
+        start_date text not null,
+        end_date text,
+        location text,
+        category text,
+        description text,
+        source_url text,
+        created_by integer,
+        updated_by integer,
+        created_at text not null,
+        updated_at text not null
+    );
     create table if not exists content_calendar(
         id integer primary key autoincrement,
         title text not null,
@@ -825,6 +839,20 @@ def init_db():
         except Exception: pass
         cur.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',("Review today's Industry Radar",'Pick one live trend and turn it into a Hancock post or article.','todo',ids.get('cassie'),ids.get('admin'),now(),now()))
         cur.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',('Complete first article draft','Use the bot suggestions, add the Hancock angle, and move the draft to Ready for Review.','todo',ids.get('jennifer'),ids.get('admin'),now(),now()))
+    if cur.execute('select count(*) as n from team_events').fetchone()['n'] == 0:
+        admin_id=cur.execute("select id from users where username='admin'").fetchone()
+        owner_id=admin_id['id'] if admin_id else None
+        seed_events=[
+            ('NY Claims Assoc Golf Outing (Long Island)','2026-07-19','2026-07-19','Long Island, NY','Industry Event','Team event imported from the SharePoint Team Events calendar.',''),
+            ('KCA Conference (Florence, IN)','2026-07-22','2026-07-24','Florence, IN','Conference','Team event imported from the SharePoint Team Events calendar.',''),
+            ('Swing Fore Sight Annual Golf Tournament','2026-07-27','2026-07-27','','Golf Outing','Team event imported from the SharePoint Team Events calendar.',''),
+        ]
+        stamp=now()
+        cur.executemany(
+            """insert into team_events(title,start_date,end_date,location,category,description,source_url,created_by,updated_by,created_at,updated_at)
+               values(?,?,?,?,?,?,?,?,?,?,?)""",
+            [event+(owner_id,owner_id,stamp,stamp) for event in seed_events],
+        )
     bootstrap_password=os.environ.get('ADMIN_PASSWORD', '').strip()
     bootstrapped=cur.execute("select value from settings where key='owner_bootstrap_applied'").fetchone()
     if bootstrap_password and not bootstrapped:
@@ -1069,7 +1097,7 @@ def active_storm_alerts(feed=None):
     storm=next((item for item in feed.get('bots') or [] if item.get('bot')=='Storm Watch Bot'),{})
     return [
         alert for alert in (storm.get('recommendations') or [])
-        if future_timestamp(alert.get('expires'))
+        if future_timestamp(alert.get('expires')) or alert.get('source')=='National Hurricane Center'
     ]
 
 def month_day_date(year, value):
@@ -1156,8 +1184,34 @@ def collect_state():
            from content_calendar cc left join users u on u.id=cc.assigned_to
            left join users c on c.id=cc.created_by
            order by coalesce(cc.publish_at,cc.due_date,'9999-12-31'),cc.priority desc limit 200""")]
+    team_events=[dict(r) for r in con.execute(
+        """select te.*,c.name created_by_name,u.name updated_by_name
+           from team_events te left join users c on c.id=te.created_by left join users u on u.id=te.updated_by
+           order by te.start_date,te.title limit 300""")]
     activity=[dict(r) for r in con.execute('select a.*, u.name as user_name from activity a left join users u on u.id=a.user_id order by a.id desc limit 30')]
-    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'activity':activity,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers()}
+    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'teamEvents':team_events,'activity':activity,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers()}
+def upcoming_team_events(events, days=90, limit=8):
+    today=dt.date.today()
+    horizon=today+dt.timedelta(days=max(1,int(days or 90)))
+    upcoming=[]
+    for item in events or []:
+        try:
+            start=dt.date.fromisoformat(str(item.get('start_date') or '')[:10])
+        except Exception:
+            continue
+        try:
+            end=dt.date.fromisoformat(str(item.get('end_date') or item.get('start_date') or '')[:10])
+        except Exception:
+            end=start
+        if end < today or start > horizon:
+            continue
+        row=dict(item)
+        row['_start_date']=start
+        row['_end_date']=end
+        row['_days_until']=(start-today).days
+        upcoming.append(row)
+    upcoming.sort(key=lambda item:(item['_start_date'],str(item.get('title') or '')))
+    return upcoming[:max(1,min(int(limit or 8),20))]
 def bot_overview():
     feed=chad_feed()
     generated=feed.get('generatedAt') or ''
@@ -1849,6 +1903,12 @@ def chad_context(user):
         f"platforms {item.get('platforms') or 'not set'}"
         for item in state.get('calendar',[])[:16]
     ) or '- no forecasted content yet'
+    event_lines='\n'.join(
+        f"- {item['title']} on {item.get('start_date')}"
+        f"{(' to '+item.get('end_date')) if item.get('end_date') and item.get('end_date')!=item.get('start_date') else ''}; "
+        f"category {item.get('category') or 'Team Event'}; location {item.get('location') or 'not set'}"
+        for item in upcoming_team_events(state.get('teamEvents',[]),120,12)
+    ) or '- no upcoming team events are logged'
     trigger_lines='\n'.join(
         f"- {item['name']} [{item['phase']}] {item['recommendation']} Lead concept: {item['lead_concept']}. "
         f"Source: {item.get('source') or 'internal seasonal trigger'}"
@@ -1886,6 +1946,8 @@ Chad Updates requested by the team:
 {team_updates}
 Our Marketing Calendar:
 {calendar_lines}
+Team Events calendar:
+{event_lines}
 Seasonal Triggers:
 {trigger_lines}"""
 
@@ -1964,6 +2026,8 @@ Our Marketing Calendar is the team's production operating system. Refer to it by
 Lead users to Our Marketing Calendar at purposeful handoff points: during the daily briefing when assigned work is overdue, due today, or coming next; after a strong research or storm signal has been turned into a production brief; when a user asks what to produce, what is due, what is ready, or what the monthly theme is; and after preparing content that now needs an owner or publish date. Explain why you are taking them there and identify the single item or decision that needs attention. Do not navigate there merely because the word "calendar" appears, and do not repeatedly interrupt an unrelated conversation. Research first when evidence is needed, prepare the work, then use the calendar to create accountability.
 
 Seasonal Triggers help the team think ahead. Use time-of-year windows such as hurricane season, spring hail and wind, wildfire/smoke risk, winter freeze, and underwriting planning to forecast content before the market is already reacting. Treat a trigger as a planning signal, not a claim that a storm will hit. Pair seasonal timing with current official sources, live radar, and Ryan's playbook. When a trigger is in prep, active, or peak phase, suggest "Things to Know" content, calendar briefs, customer education, carrier-facing explainers, and safety-first posts. If current weather or official outlook data is needed, research or scan before making specific claims.
+
+Storm Watch priority for Hancock is hail, damaging wind, tornadoes, straight-line wind, derechos, and hurricane or tropical wind first because those are the strongest inspection-volume signals. Heavy rain, flooding, wildfire, smoke, and fire-weather signals still matter, but usually frame them as contents, water, smoke, inventory, mitigation timeline, and documentation opportunities. While a threat is active, stay safety-first and do not sell into danger. After the threat clears, shift quickly into practical roof, exterior, openings, structural indicators, contents, original-photo preservation, and defensible inspection documentation guidance.
 
 Your tools are intentionally bounded. You may inspect workspace status, navigate the Studio, create reviewable drafts and tasks, prepare a recommended draft, check specialist-bot status, and run a fresh bot scan when the user explicitly requests current scanning. You may not publish, send, delete, alter accounts, change permissions, or claim approval. Never pretend a tool ran. Use the returned result as the source of truth and tell the user when something failed.
 
@@ -2049,8 +2113,9 @@ def bot_scheduler():
         except Exception as exc:
             print('Scheduled bot cycle failed:',exc)
         time.sleep(300)
-def proactive_briefing(user, tasks, drafts, activity, calendar=None):
+def proactive_briefing(user, tasks, drafts, activity, calendar=None, team_events=None):
     calendar=calendar or []
+    team_events=team_events or []
     feed=chad_feed()
     specialists={item.get('bot'):item for item in feed.get('bots') or []}
     alerts=active_storm_alerts(feed)
@@ -2092,6 +2157,23 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
     def pick(items,salt=0):
         return items[(seed+salt)%len(items)] if items else None
     candidates=[]
+    upcoming_events=upcoming_team_events(team_events,90,4)
+    if upcoming_events:
+        event_item=upcoming_events[0]
+        day_phrase='today' if event_item['_days_until']==0 else (f"in {event_item['_days_until']} day{'s' if event_item['_days_until']!=1 else ''}" if event_item['_days_until']>0 else 'recently')
+        event_date=event_item.get('start_date') or ''
+        if event_item.get('end_date') and event_item.get('end_date')!=event_item.get('start_date'):
+            event_date=f"{event_date} to {event_item.get('end_date')}"
+        candidates.append({
+            'theme':'events',
+            'opening':'I checked the team events calendar as part of the operating picture.',
+            'headline':'An upcoming team event may be worth planning around',
+            'situation':f"{event_item['title']} is {day_phrase} ({event_date}){(' in '+event_item.get('location')) if event_item.get('location') else ''}.",
+            'proposal':'I can help turn this into prep notes, a content opportunity, outreach follow-up, or a simple team reminder.',
+            'action_label':'Open Team Events',
+            'action_prompt':'show me the upcoming team events and what we should do next',
+            'ui_action':{'type':'tab','target':'events'},
+        })
     signals=radar.get('recommendations') or []
     signal=pick(signals,11)
     if signal:
@@ -2286,6 +2368,8 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None):
     }
 def chad_ui_action(message):
     lower=message.lower()
+    if any(term in lower for term in ('team event','events calendar','conference','golf outing','industry event','upcoming event')):
+        return {'type':'tab','target':'events'}
     if any(term in lower for term in ('seasonal trigger','content trigger','upcoming month','future content','time of year','things to know','hurricane season','peak season')):
         return {'type':'tab','target':'calendar'}
     if any(term in lower for term in ('our marketing calendar','marketing calendar','content calendar','production calendar','posting schedule','what is due','due today','due this week','monthly theme','ready to post')):
@@ -2314,8 +2398,8 @@ def chad_ui_action(message):
     if any(term in lower for term in ('catch me up','next step','what next','what should i focus')):
         return {'type':'tab','target':'storm' if active_storm_alerts() else 'radar'}
     return None
-def bot_welcome(user, tasks, drafts, activity, calendar=None):
-    briefing=proactive_briefing(user,tasks,drafts,activity,calendar)
+def bot_welcome(user, tasks, drafts, activity, calendar=None, team_events=None):
+    briefing=proactive_briefing(user,tasks,drafts,activity,calendar,team_events)
     parts=[
         f"{user['name'].split()[0]}, {briefing['opening']}",
         briefing['situation'],
@@ -2331,15 +2415,22 @@ def prepare_recommended_draft(user):
     if alerts:
         states=[]
         events=[]
+        hazards=[]
+        service_lines=[]
+        angles=[]
         for alert in alerts:
             if alert.get('state') and alert['state'] not in states: states.append(alert['state'])
             if alert.get('event') and alert['event'] not in events: events.append(alert['event'])
+            if alert.get('hazard') and alert['hazard'] not in hazards: hazards.append(alert['hazard'])
+            if alert.get('service_line') and alert['service_line'] not in service_lines: service_lines.append(alert['service_line'])
+            if alert.get('content_angle') and alert['content_angle'] not in angles: angles.append(alert['content_angle'])
         state_text=', '.join(states[:6])
-        event_text=' and '.join(events[:2]) or 'Severe Weather'
+        event_text=' and '.join(hazards[:2] or events[:2]) or 'Severe Weather'
         title=f"Property Storm Readiness: Preparing for {event_text}"
-        line='Storm / CAT Damage'
+        line=service_lines[0] if service_lines else 'Storm / CAT Damage'
+        angle_text=' '.join(angles[:2]) or 'Focus on safety-first preparation and post-event documentation.'
         prompt=f"""Prepare a review-ready Hancock Claims Consultants blog post about active {event_text} alerts affecting {state_text}.
-Lead with public safety and property preparation. Do not sell services while the threat is active. Explain practical documentation steps before and after the event, original-photo preservation, clear communication, and the difference between inspection documentation and carrier coverage decisions. Include SEO title, meta description, short answer block, headings, FAQs, LinkedIn copy, and a review note. Do not claim Hancock observed damage at any property."""
+Prioritize Hancock's storm-volume lanes first: hail, damaging wind, tornadoes, straight-line wind, derechos, and hurricane or tropical wind. Use flood, heavy rain, fire, and smoke angles mainly for contents, water, inventory, mitigation timeline, and documentation guidance. Lead with public safety and property preparation. Do not sell services while the threat is active. Explain practical documentation steps before and after the event, original-photo preservation, clear communication, and the difference between inspection documentation and carrier coverage decisions. Current Hancock angle: {angle_text} Include SEO title, meta description, short answer block, headings, FAQs, LinkedIn copy, and a review note. Do not claim Hancock observed damage at any property."""
         fallback=f"""# {title}
 
 ## Before the Weather Arrives
@@ -2442,6 +2533,11 @@ Treat this as an observed market signal. Verify the source, compare it with oper
     return {'id':draft_id,'title':title,'created':True}
 def bot_reply(user, message, state):
     lower=message.lower(); tasks=state['tasks']; bot_data=state['botData']; activity=state['activity']
+    if any(w in lower for w in ['team event','events calendar','conference','golf outing','industry event','upcoming event']):
+        events=upcoming_team_events(state.get('teamEvents',[]),120,5)
+        if events:
+            return 'Upcoming Team Events: '+('; '.join(f"{item['title']} on {item.get('start_date')}{(' to '+item.get('end_date')) if item.get('end_date') and item.get('end_date')!=item.get('start_date') else ''}{(' in '+item.get('location')) if item.get('location') else ''}" for item in events))
+        return 'No upcoming Team Events are logged yet. Add the next event on the Events tab and I will include it in the workspace briefing.'
     if any(w in lower for w in ['seasonal','trigger','hurricane season','upcoming month','things to know','future content']):
         trigger=seasonal_triggers()[0]
         return f"{trigger['name']} is currently in {trigger['phase']} phase. {trigger['recommendation']} Start with: {trigger['lead_concept']}."
@@ -2461,13 +2557,13 @@ def bot_reply(user, message, state):
 CHAD_TOOLS=[
     {
         'name':'studio_navigate',
-        'description':"""Move the signed-in user's Studio interface to the most useful tab or shared workspace for the current request. Use this when seeing a specific tool will help the user continue the work. The calendar target opens Our Marketing Calendar. Explain the specific production item or decision that needs attention when navigating there. This changes only the visible location; it does not create, edit, publish, or delete data. Valid Studio tabs include radar, storm, calendar, answers, social, carrier, content, seo, topics, repurpose, reviews, library, and chad. Dashboard workspaces include dashboard, drafts, and tasks.""",
+        'description':"""Move the signed-in user's Studio interface to the most useful tab or shared workspace for the current request. Use this when seeing a specific tool will help the user continue the work. The events target opens Team Events. The calendar target opens Our Marketing Calendar. Explain the specific event, production item, or decision that needs attention when navigating there. This changes only the visible location; it does not create, edit, publish, or delete data. Valid Studio tabs include radar, storm, events, calendar, answers, social, carrier, content, seo, topics, repurpose, reviews, library, and chad. Dashboard workspaces include dashboard, drafts, and tasks.""",
         'input_schema':{
             'type':'object',
             'properties':{
                 'target':{
                     'type':'string',
-                    'enum':['radar','storm','calendar','answers','social','carrier','content','seo','topics','repurpose','reviews','library','chad','dashboard','drafts','tasks','updates'],
+                    'enum':['radar','storm','events','calendar','answers','social','carrier','content','seo','topics','repurpose','reviews','library','chad','dashboard','drafts','tasks','updates'],
                     'description':'The Studio tab or shared workspace to display.',
                 },
                 'reason':{'type':'string','description':'Brief reason this location supports the user request.'},
@@ -3252,6 +3348,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not user: return
         if path=='/api/draft': self.api_save_draft(user); return
         if path=='/api/task': self.api_save_task(user); return
+        if path=='/api/team-event': self.api_save_team_event(user); return
+        if path=='/api/team-event-delete': self.api_delete_team_event(user); return
         if path=='/api/calendar': self.api_save_calendar(user); return
         if path=='/api/calendar-status': self.api_calendar_status(user); return
         if path=='/api/chad-update': self.api_save_chad_update(user); return
@@ -3407,6 +3505,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                from content_calendar cc left join users a on a.id=cc.assigned_to
                left join users c on c.id=cc.created_by left join users u on u.id=cc.updated_by
                order by coalesce(cc.publish_at,cc.due_date,'9999-12-31'),cc.priority desc limit 300""")]
+        team_events=[dict(r) for r in con.execute(
+            """select te.*,c.name created_by_name,u.name updated_by_name
+               from team_events te left join users c on c.id=te.created_by left join users u on u.id=te.updated_by
+               order by te.start_date,te.title limit 300""")]
         con.close()
         comment_map={}
         for comment in comments:
@@ -3414,14 +3516,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             comment_map.setdefault(comment['update_id'],[]).append(comment)
         for update in updates:
             update['comments']=comment_map.get(update['id'],[])
-        for collection in (drafts,tasks,activity,updates,calendar):
+        for collection in (drafts,tasks,activity,updates,calendar,team_events):
             for item in collection:
                 for key in ('created_at','updated_at'):
                     if key in item: item[key+'_human']=human_time(item.get(key))
         briefing_user=dict(user)
         if briefing_key:
             briefing_user['briefing_key']=briefing_key
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar)})
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'teamEvents':team_events,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar,team_events),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar,team_events)})
     def api_codex_updates(self,user):
         if user['role']!='owner':
             self.send_json({'error':'Only Ryan can export the Codex update brief.'},403); return
@@ -3443,6 +3545,64 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:
             cur=con.execute('insert into tasks(title,details,status,assigned_to,created_by,created_at,updated_at) values(?,?,?,?,?,?,?)',(title,details,status,assigned,user['id'],now(),now())); task_id=cur.lastrowid; action='created task'
         con.commit(); con.close(); log_action(user['id'],action,title); self.send_json({'ok':True,'id':task_id})
+    def api_save_team_event(self,user):
+        data=self.read_body()
+        title=(data.get('title') or '').strip()[:180]
+        start_date=(data.get('start_date') or '').strip()[:10]
+        end_date=(data.get('end_date') or start_date).strip()[:10]
+        if not title:
+            self.send_json({'error':'Add an event title.'},400); return
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$',start_date):
+            self.send_json({'error':'Choose a valid start date.'},400); return
+        if not re.match(r'^\d{4}-\d{2}-\d{2}$',end_date):
+            end_date=start_date
+        if end_date < start_date:
+            end_date=start_date
+        values={
+            'title':title,
+            'start_date':start_date,
+            'end_date':end_date,
+            'location':str(data.get('location') or '')[:240],
+            'category':str(data.get('category') or 'Team Event')[:80],
+            'description':str(data.get('description') or '')[:4000],
+            'source_url':str(data.get('source_url') or '')[:1500],
+        }
+        event_id=str(data.get('id') or '').strip()
+        stamp=now(); con=db()
+        if event_id.isdigit():
+            existing=con.execute('select id,title from team_events where id=?',(int(event_id),)).fetchone()
+            if not existing:
+                con.close(); self.send_json({'error':'Event not found.'},404); return
+            con.execute(
+                """update team_events set title=?,start_date=?,end_date=?,location=?,category=?,description=?,source_url=?,updated_by=?,updated_at=?
+                   where id=?""",
+                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url'))+(user['id'],stamp,int(event_id)),
+            )
+            action='updated team event'
+        else:
+            cur=con.execute(
+                """insert into team_events(title,start_date,end_date,location,category,description,source_url,created_by,updated_by,created_at,updated_at)
+                   values(?,?,?,?,?,?,?,?,?,?,?)""",
+                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url'))+(user['id'],user['id'],stamp,stamp),
+            )
+            event_id=cur.lastrowid
+            action='created team event'
+        con.commit(); con.close()
+        log_action(user['id'],action,title)
+        self.send_json({'ok':True,'id':int(event_id)})
+    def api_delete_team_event(self,user):
+        data=self.read_body()
+        event_id=str(data.get('id') or '').strip()
+        if not event_id.isdigit():
+            self.send_json({'error':'Choose an event to delete.'},400); return
+        con=db()
+        event=con.execute('select id,title from team_events where id=?',(int(event_id),)).fetchone()
+        if not event:
+            con.close(); self.send_json({'error':'Event not found.'},404); return
+        con.execute('delete from team_events where id=?',(int(event_id),))
+        con.commit(); con.close()
+        log_action(user['id'],'deleted team event',event['title'])
+        self.send_json({'ok':True})
     def api_save_calendar(self,user):
         data=self.read_body()
         title=(data.get('title') or '').strip()[:180]
