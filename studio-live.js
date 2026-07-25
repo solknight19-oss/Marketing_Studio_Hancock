@@ -282,7 +282,8 @@
 
   const calendar={
     state:null,
-    view:"today",
+    view:"month",
+    month:new Date(new Date().getFullYear(),new Date().getMonth(),1),
     platforms:["LinkedIn","Facebook","Instagram","TikTok","YouTube","Email","Website"],
     update(next){
       this.state=next;
@@ -324,14 +325,31 @@
     },
     setView(view,button){
       this.view=view;
-      document.querySelectorAll("[data-cal-view]").forEach(el=>el.classList.toggle("active",el===button));
-      q("calendar").classList.toggle("calendarFull",view==="month"||view==="leadership");
+      document.querySelectorAll("[data-cal-view]").forEach(el=>el.classList.toggle("active",el.dataset.calView===view));
       this.render();
     },
-    useExecutionView(){
-      this.view="today";
-      q("calendar").classList.remove("calendarFull");
-      document.querySelectorAll("[data-cal-view]").forEach(el=>el.classList.toggle("active",el.dataset.calView==="today"));
+    open(){
+      q("calForm").classList.add("open");
+      q("calForm").scrollIntoView({behavior:"smooth",block:"start"});
+    },
+    back(){
+      this.clear();
+      q("calForm").classList.remove("open");
+    },
+    setMonth(year,month){
+      this.month=new Date(year,month,1);
+      if(this.view!=="month")this.setView("month");else this.render();
+    },
+    shiftYear(delta){this.setMonth(this.month.getFullYear()+delta,this.month.getMonth())},
+    shiftMonth(delta){this.setMonth(this.month.getFullYear(),this.month.getMonth()+delta)},
+    goToday(){const today=new Date();this.setMonth(today.getFullYear(),today.getMonth())},
+    dayAdd(iso){
+      this.clear();
+      q("calDue").value=iso;
+      q("calFormHeading").textContent="New Production Brief — due "+iso;
+      q("calSaveStatus").textContent="Picked the wrong date? Use Back to close without saving, then click the right day.";
+      this.open();
+      q("calTitle").focus();
     },
     render(){
       if(!q("calendarView")||!this.state)return;
@@ -345,9 +363,22 @@
       q("calReady").textContent=all.filter(i=>i.status==="ready_to_post").length;
       q("calPosted").textContent=all.filter(i=>i.status==="posted"&&String(i.completed_at||i.updated_at).slice(0,7)===month).length;
       this.renderGuidance(all,today,weekEndIso);
-      if(this.view==="month")this.renderMonth();
+      this.renderMini();
+      const monthMode=this.view==="month";
+      if(q("calGridWrap"))q("calGridWrap").style.display=monthMode?"":"none";
+      if(q("calGridToolbar"))q("calGridToolbar").style.display=monthMode?"":"none";
+      if(monthMode){this.renderGrid();this.renderMonthAgenda()}
       else if(this.view==="leadership")this.renderLeadership();
       else this.renderAgenda(this.view==="today"?today:null,this.view==="week"?weekEndIso:null);
+    },
+    renderMini(){
+      if(!q("calMiniYear"))return;
+      const year=this.month.getFullYear();
+      q("calMiniYear").textContent=year;
+      const names=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      q("calMonths").innerHTML=names.map((name,index)=>`<button class="eventsMonthBtn ${index===this.month.getMonth()&&this.view==="month"?"active":""}" onclick="HancockCalendar.setMonth(${year},${index})">${name}</button>`).join("");
+      const today=new Date();
+      q("calTodayNote").innerHTML=`Today is <b>${escapeHtml(today.toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",year:"numeric"}))}</b>`;
     },
     renderGuidance(all,today,weekEnd){
       const mine=all.filter(i=>i.assigned_to===this.state.user.id&&!["posted","archived"].includes(i.status));
@@ -373,20 +404,31 @@
     },
     rowHtml(item,today){
       const overdue=this.dateOnly(item.due_date)&&this.dateOnly(item.due_date)<today&&!["posted","archived"].includes(item.status);
-      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span><div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Open Brief</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}</div></div>`;
+      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span><div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Edit</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}</div></div>`;
     },
-    renderMonth(){
-      const now=new Date(),first=new Date(now.getFullYear(),now.getMonth(),1),start=new Date(first);
+    renderGrid(){
+      const first=new Date(this.month.getFullYear(),this.month.getMonth(),1),start=new Date(first);
       start.setDate(1-first.getDay());
+      const todayIso=this.isoDate(new Date());
       const items=this.filtered();
-      let html=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(day=>`<div class="calendarDow">${day}</div>`).join("");
+      q("calMonthTitle").textContent=this.month.toLocaleDateString(undefined,{month:"long",year:"numeric"});
+      const monthIso=this.isoDate(first).slice(0,7);
+      const monthItems=items.filter(item=>this.entryDate(item).slice(0,7)===monthIso);
+      q("calMonthSummary").textContent=`${monthItems.length} production item${monthItems.length===1?"":"s"} scheduled this month. Click a day to add one.`;
+      let html=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(day=>`<div class="eventsDow">${day}</div>`).join("");
       for(let i=0;i<42;i++){
         const date=new Date(start);date.setDate(start.getDate()+i);
-        const iso=this.isoDate(date),muted=date.getMonth()!==now.getMonth();
+        const iso=this.isoDate(date),muted=date.getMonth()!==this.month.getMonth();
         const dayItems=items.filter(item=>this.entryDate(item)===iso);
-        html+=`<div class="calendarDay ${muted?"mutedDay":""}"><div class="calendarDate">${date.getDate()}</div>${dayItems.map(item=>`<button class="calendarEvent status-${item.status} priority-${item.priority}" onclick="HancockCalendar.edit(${item.id})"><b>${escapeHtml(item.title)}</b><br>${escapeHtml(item.assigned_name||"Unassigned")}</button>`).join("")}</div>`;
+        html+=`<div class="eventsDay ${muted?"mutedDay":""}" onclick="HancockCalendar.dayAdd('${iso}')" title="Add a production item on ${iso}"><div class="eventsDate ${iso===todayIso?"today":""}">${date.getDate()}</div>${dayItems.map(item=>`<button class="calendarEvent status-${item.status} priority-${item.priority}" title="${escapeHtml(item.title)}" onclick="event.stopPropagation();HancockCalendar.edit(${item.id})"><b>${escapeHtml(item.title)}</b><br>${escapeHtml(item.assigned_name||"Unassigned")}</button>`).join("")}</div>`;
       }
-      q("calendarView").innerHTML=`<div class="calendarMonth">${html}</div>`;
+      q("calGrid").innerHTML=html;
+    },
+    renderMonthAgenda(){
+      const monthIso=this.isoDate(new Date(this.month.getFullYear(),this.month.getMonth(),1)).slice(0,7);
+      const today=this.isoDate(new Date());
+      const items=this.filtered().filter(item=>this.entryDate(item).slice(0,7)===monthIso).sort((a,b)=>this.entryDate(a).localeCompare(this.entryDate(b)));
+      q("calendarView").innerHTML=`<div class="calendarAgenda" style="margin-top:14px">${items.map(item=>this.rowHtml(item,today)).join("")||'<div class="panel empty"><h3>No production scheduled this month</h3><p>Click any day on the calendar to add work to that date, or ask Chad to forecast the next opportunity.</p></div>'}</div>`;
     },
     renderLeadership(){
       const items=this.filtered(),active=items.filter(i=>!["posted","archived"].includes(i.status)),posted=items.filter(i=>i.status==="posted");
@@ -399,31 +441,55 @@
       q("calStatus").value="draft";q("calPriority").value="medium";q("calAssigned").value="";q("calService").value="";
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=false);
       q("calFormHeading").textContent="Production Brief";q("calSaveStatus").textContent="";
+      if(q("calRemoveBtn"))q("calRemoveBtn").style.display="none";
     },
-    newEntry(){this.useExecutionView();this.clear();showTab("calendar");q("calTitle").focus()},
+    newEntry(){showTab("calendar");this.clear();q("calDue").value=this.isoDate(new Date());q("calFormHeading").textContent="New Production Brief";this.open();q("calTitle").focus()},
     edit(id){
       const item=(this.state.calendar||[]).find(row=>row.id===id);if(!item)return;
-      this.useExecutionView();
+      showTab("calendar");
+      const entry=this.localDate(this.entryDate(item));
+      if(entry)this.month=new Date(entry.getFullYear(),entry.getMonth(),1);
       const map={calId:item.id,calTitle:item.title,calStatus:item.status,calPriority:item.priority,calType:item.content_type,calAssigned:item.assigned_to||"",calDue:this.dateOnly(item.due_date),calPublish:String(item.publish_at||"").slice(0,16),calService:item.service_line||"",calRegion:item.region||"",calDuration:item.duration||"",calTone:item.tone||"",calLocation:item.location||"",calPeople:item.people||"",calTalking:item.talking_points||"",calCta:item.cta||"",calNotes:item.notes||"",calPublishedUrl:item.published_url||""};
       Object.entries(map).forEach(([id,value])=>{if(q(id))q(id).value=value});
       const chosen=String(item.platforms||"").split(",").map(x=>x.trim());
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=chosen.includes(input.value));
-      q("calFormHeading").textContent="Edit Production Brief";showTab("calendar");window.scrollTo({top:0,behavior:"smooth"});
+      q("calFormHeading").textContent="Edit Production Brief";
+      if(q("calRemoveBtn"))q("calRemoveBtn").style.display="";
+      q("calSaveStatus").textContent="";
+      this.render();
+      this.open();
     },
     payload(){
       return {id:q("calId").value,title:q("calTitle").value,status:q("calStatus").value,priority:q("calPriority").value,content_type:q("calType").value,assigned_to:q("calAssigned").value,due_date:q("calDue").value,publish_at:q("calPublish").value,service_line:q("calService").value,region:q("calRegion").value,platforms:Array.from(q("calPlatforms").querySelectorAll("input:checked")).map(input=>input.value).join(", "),duration:q("calDuration").value,tone:q("calTone").value,location:q("calLocation").value,people:q("calPeople").value,talking_points:q("calTalking").value,cta:q("calCta").value,notes:q("calNotes").value,published_url:q("calPublishedUrl").value,requested_date:new Date().toISOString().slice(0,10),source_type:q("calId").value?"Manual edit":"Manual"};
     },
     async save(){
-      try{await api("/api/calendar",this.payload());this.clear();q("calSaveStatus").textContent="Production brief saved to Our Marketing Calendar for the team and Chad.";await load();showTab("calendar")}catch(error){q("calSaveStatus").textContent=error.message}
+      try{
+        const due=this.localDate(q("calDue").value);
+        await api("/api/calendar",this.payload());
+        if(due)this.month=new Date(due.getFullYear(),due.getMonth(),1);
+        this.back();
+        await load();
+        showTab("calendar");
+      }catch(error){q("calSaveStatus").textContent=error.message}
+    },
+    async remove(){
+      const id=q("calId").value;
+      if(!id){q("calSaveStatus").textContent="Open a saved item first.";return}
+      try{
+        await api("/api/calendar-status",{id,status:"archived"});
+        this.back();
+        await load();
+      }catch(error){q("calSaveStatus").textContent=error.message}
     },
     async status(id,status){
       await api("/api/calendar-status",{id,status});await load();showTab("calendar");
     },
     prefill(data){
-      this.useExecutionView();this.clear();showTab("calendar");
+      showTab("calendar");this.clear();
       Object.entries(data).forEach(([id,value])=>{if(q(id))q(id).value=value});
       (data.platforms||[]).forEach(name=>{const input=Array.from(q("calPlatforms").querySelectorAll("input")).find(node=>node.value===name);if(input)input.checked=true});
       q("calFormHeading").textContent="Review Chad's Production Brief";q("calSaveStatus").textContent="Review the brief, assign the owner, and save it to Our Marketing Calendar.";
+      this.open();
     },
     async autoForecastStorm(alerts){
       if(!this.state||!alerts||!alerts.length)return;
