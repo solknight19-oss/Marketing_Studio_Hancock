@@ -594,7 +594,13 @@
     async loadHotChips(){
       const stamp=q("hotChipsStamp");if(!q("hotChips"))return;
       if(stamp)stamp.textContent="Scanning NOAA + Industry Radar for live hot topics…";
+      this.hotSelected=new Set();
       const chips=[];const seen=new Set();
+      const standing=(window.HANCOCK_PULSE_TOPICS&&window.HANCOCK_PULSE_TOPICS.topics)||[];
+      standing.forEach(t=>{
+        const kw=(t.keywords&&t.keywords[0])||t.label;
+        if(!seen.has("s|"+kw)){seen.add("s|"+kw);chips.push({label:t.label,kw,src:"standing",detail:"Standing Hancock topic"})}
+      });
       let noaaFailed=false;
       try{
         const codes=Object.keys(this.HOT_STATES);
@@ -627,11 +633,33 @@
       this.hotChips=chips;
       const noaaCount=chips.filter(c=>c.src==="noaa").length;
       if(stamp)stamp.textContent=(noaaFailed?"NOAA feed unreachable from this browser — showing Industry Radar topics only. ":(noaaCount?noaaCount+" live storm topic"+(noaaCount===1?"":"s")+" from active NOAA alerts. ":"No claim-relevant NOAA alerts right now — a quiet radar is a pre-loss content window. "))+"Updated "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+".";
-      q("hotChips").innerHTML=chips.map((c,i)=>`<button class="chip" title="${escapeHtml(c.detail||"")}" onclick="HancockSocial.openHot(${i})">${c.src==="noaa"?"⚡ ":"📈 "}${escapeHtml(c.label)}</button>`).join("")+`<button class="chip" title="Re-check NOAA and the Radar" onclick="HancockSocial.loadHotChips()">↻ Refresh</button>`;
+      this.renderHotChips();
     },
-    openHot(i){
-      const c=this.hotChips[i];if(!c)return;
-      const url="https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(c.kw)+"&sortBy=%22date_posted%22"+(c.src==="noaa"?"&datePosted=%22past-24h%22":"");
+    hotSelected:new Set(),
+    hotIcon(src){return src==="noaa"?"⚡ ":src==="radar"?"📈 ":""},
+    renderHotChips(){
+      const host=q("hotChips");if(!host)return;
+      host.innerHTML=this.hotChips.map((c,i)=>`<button class="chip${this.hotSelected.has(i)?" active":""}" title="${escapeHtml(c.detail||"")}" onclick="HancockSocial.toggleHot(${i})">${this.hotIcon(c.src)}${escapeHtml(c.label)}</button>`).join("");
+    },
+    toggleHot(i){
+      if(this.hotSelected.has(i))this.hotSelected.delete(i);else this.hotSelected.add(i);
+      this.renderHotChips();
+      const status=q("newScanStatus");
+      if(status){const n=this.hotSelected.size;status.textContent=n?n+" keyword"+(n===1?"":"s")+" picked — hit New Scan.":""}
+    },
+    newScan(){
+      const picked=[...this.hotSelected].map(i=>this.hotChips[i]).filter(Boolean);
+      const status=q("newScanStatus");
+      let kws=picked.map(c=>c.kw);
+      if(!kws.length){
+        const typed=q("pulseTopic")?q("pulseTopic").value.trim():"";
+        if(!typed){if(status)status.textContent="Pick a keyword chip first (or type a topic above).";return}
+        kws=[typed];
+      }
+      const query=kws.length>1?kws.map(k=>k.split(" ").length>1?'"'+k+'"':k).join(" OR "):kws[0];
+      const fresh=picked.some(c=>c.src==="noaa");
+      const url="https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(query)+"&sortBy=%22date_posted%22"+(fresh?"&datePosted=%22past-24h%22":"");
+      if(status)status.textContent="Scanning LinkedIn for: "+query+(fresh?" (last 24h)":"");
       window.open(url,"_blank");
     },
     activeSweep:"",
