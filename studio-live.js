@@ -98,6 +98,10 @@
         const pulsePosts=pulseData.sweeps.reduce((n,s)=>n+((s.posts||[]).length),0);
         if(pulsePosts)pieces.push(`Social Pulse: ${pulsePosts} drafted conversation${pulsePosts===1?"":"s"} waiting`);
       }
+      const playsData=window.HANCOCK_CONTENT_PLAYS;
+      if(playsData&&Array.isArray(playsData.plays)&&playsData.plays.length){
+        pieces.push(`Maya: ${playsData.plays.length} content play${playsData.plays.length===1?"":"s"} ready`);
+      }
       ticker.innerHTML='<div class="tickerTrack"><span class="tickerLabel">Live Intelligence</span>'+pieces.map(piece=>`<span class="tickerItem">${escapeHtml(piece)}</span>`).join("")+'</div>';
     }
     const pulse=q("chadPulseBar");
@@ -843,6 +847,26 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   };
   window.HancockSocial=social;
 
+  function renderContentPlays(){
+    const host=q("playsOut"),stamp=q("playsStamp");
+    if(!host)return;
+    const data=window.HANCOCK_CONTENT_PLAYS;
+    if(!data||!Array.isArray(data.plays)||!data.plays.length)return;
+    const gen=data.generated?new Date(data.generated):null;
+    const ageH=gen&&!isNaN(gen)?Math.floor((Date.now()-gen.getTime())/3600000):null;
+    const ageTxt=ageH==null?"":ageH<1?"under an hour ago":ageH<24?ageH+"h ago":Math.floor(ageH/24)+" day"+(Math.floor(ageH/24)===1?"":"s")+" ago";
+    if(stamp)stamp.textContent=`Maya's plays from ${data.generatedHuman||data.generated} (${ageTxt}) · refreshes weekday mornings at 7:45 · drafts only — you publish.`;
+    const stale=ageH!=null&&ageH>=24?`<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.45)"><b>⚠️ These plays are ${ageTxt.replace(" ago"," old")}.</b> They refresh weekday mornings at 7:45, or tell Claude "run Maya's plays" for fresh ones.</div>`:"";
+    host.innerHTML=stale+data.plays.map((p,i)=>`<div class="eventsAgendaItem" style="border-left-color:#8b5cf6"><span class="badge">${escapeHtml(p.platform||"Content")}</span><h3>${escapeHtml(p.title||"")}</h3>${p.signal?`<p class="muted">Why now: ${escapeHtml(p.signal)}</p>`:""}${p.angle?`<p><b>The play:</b> ${escapeHtml(p.angle)}</p>`:""}${p.draft?`<p style="white-space:pre-wrap">${escapeHtml(p.draft)}</p>`:""}<button class="mini" onclick="HancockPlays.copy(${i})">Copy draft</button></div>`).join("");
+  }
+  window.HancockPlays={
+    copy(i){
+      const p=((window.HANCOCK_CONTENT_PLAYS||{}).plays||[])[i];
+      if(p&&p.draft&&window.HancockSocial)HancockSocial.copyText(p.draft,"Copied. Edit and publish it yourself.");
+    },
+    refresh:renderContentPlays
+  };
+  renderContentPlays();
   const SPC_RISK_ORDER={TSTM:1,MRGL:2,SLGT:3,ENH:4,MDT:5,HIGH:6};
   const SPC_RISK_NAMES={TSTM:"General thunderstorms",MRGL:"Marginal risk",SLGT:"Slight risk",ENH:"Enhanced risk",MDT:"Moderate risk",HIGH:"High risk"};
   const SPC_STATE_POINTS={GA:[-83.4,32.6],FL:[-81.5,28.6],TX:[-99.3,31.5],OK:[-97.5,35.6],KY:[-85.3,37.5],TN:[-86.3,35.9],NC:[-79.4,35.6],SC:[-80.9,33.9],AL:[-86.8,32.8],LA:[-92.0,31.0],MS:[-89.7,32.7],AR:[-92.4,34.9],MO:[-92.5,38.4],IN:[-86.3,39.9],OH:[-82.8,40.3],IL:[-89.2,40.0],KS:[-98.4,38.5],NE:[-99.8,41.5],IA:[-93.5,42.0],CO:[-105.5,39.0]};

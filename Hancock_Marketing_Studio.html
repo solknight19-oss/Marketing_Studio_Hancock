@@ -137,6 +137,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
   </section>
   <section id="content" class="view">
     <div class="hero"><div><div class="eyebrow">Content Engine</div><h1>Plan it. Create it. Optimize it. One workspace.</h1><p>Topics & Keywords, Content, and SEO + AEO now run as one pipeline. Set the campaign context once below — it follows the work through all three stages.</p></div><div class="heroActions"><button class="btn gold" onclick="showStage('plan')">Start with a Plan</button><button class="btn secondary" onclick="showStage('create')">Jump to Create</button></div></div>
+    <div class="card" id="playsCard" style="margin:14px 0"><div class="eventsToolbar" style="margin-bottom:8px"><div><h2>Today's Content Plays <span class="muted" style="font-weight:400;font-size:.7em">Maya · from the morning intel</span></h2><p class="muted" id="playsStamp">No plays loaded yet. Tell Claude "run Maya's plays" and this fills in.</p></div></div><div id="playsOut"></div></div>
     <div class="pipeBar">
       <button class="pipeStep active" id="step-plan" onclick="showStage('plan')"><span class="pipeNum">1</span><span><b>Plan</b><small>Topics & keyword strategy</small></span></button>
       <div class="pipeLine"></div>
@@ -169,6 +170,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 <script src="data/latest_bot.js"></script>
 <script src="data/pulse_topics.js"></script>
 <script src="data/pulse_sweeps.js"></script>
+<script src="data/content_plays.js"></script>
 <script>
 const SERVICE_LINES = ["Storm / CAT Damage","Underwriting Inspection","Contents","Engineering","Commercial","Residential","4-Point Inspection","Ladder Assist","Loss Control","DI / UDI Inspections"];
 const TABS = [["radar","Industry Radar"],["storm","Storm Watch"],["events","Events"],["calendar","Our Marketing Calendar"],["social","Social Pulse"],["content","Content"],["reviews","Reviews"],["library","Content Library"],["share","Customize & Share"]];
