@@ -3291,7 +3291,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not user: self.redirect('/login'); return
             if user.get('password_reset_required'): self.redirect('/change-password'); return
             p=ROOT/'chad-graphics.html'; self.send_html(p.read_text(encoding='utf-8') if p.exists() else '<h1>Graphic maker not found</h1>',200 if p.exists() else 404); return
-        if path in ('/studio-live.css','/studio-live.js','/chad-widget.js','/data/latest_bot.js'):
+        if path in ('/studio-live.css','/studio-live.js','/chad-widget.js','/data/latest_bot.js','/data/pulse_topics.js','/data/pulse_sweeps.js'):
             user=self.current_user()
             if not user: self.send_html('<h1>Login required</h1>',401); return
             if user.get('password_reset_required'): self.send_html('<h1>Password change required</h1>',403); return
@@ -3300,6 +3300,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 '/studio-live.js':(ROOT/'studio-live.js','application/javascript; charset=utf-8'),
                 '/chad-widget.js':(ROOT/'chad-widget.js','application/javascript; charset=utf-8'),
                 '/data/latest_bot.js':(ROOT/'data'/'latest_bot.js','application/javascript; charset=utf-8'),
+                '/data/pulse_topics.js':(ROOT/'data'/'pulse_topics.js','application/javascript; charset=utf-8'),
+                '/data/pulse_sweeps.js':(ROOT/'data'/'pulse_sweeps.js','application/javascript; charset=utf-8'),
             }
             p,kind=files[path]
             if not p.exists(): self.send_html('<h1>Not found</h1>',404); return
