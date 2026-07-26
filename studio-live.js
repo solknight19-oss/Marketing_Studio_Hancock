@@ -536,6 +536,226 @@
   };
   window.HancockCalendar=calendar;
 
+  const social={
+    filter:"",
+    KEY:"hancock_social_targets",
+    BANK:[
+      "Hancock assists carrier partners on roughly 250,000 property inspections a year.",
+      "More than 200 carriers trust Hancock's inspection network.",
+      "93% documentation accuracy — the adjuster receives everything needed to write the estimate directly.",
+      "The inspection is only part of the service. The real product is accurate documentation, defensible findings, and clear communication.",
+      "Property lifecycle management: pre-loss condition, during-loss inspection, post-loss verification."
+    ],
+    SEED:[
+      {type:"Topic",name:"Hail damage claims",url:"",why:"Carrier teams talking hail volume — Hancock's core storm signal."},
+      {type:"Topic",name:"Property claims adjusters",url:"",why:"Meet adjusters where they talk. Be helpful first, identify Hancock openly."},
+      {type:"Topic",name:"Roof inspection standards",url:"",why:"Documentation, test squares, and repairability conversations."}
+    ],
+    targets(){
+      try{const raw=localStorage.getItem(this.KEY);if(raw)return JSON.parse(raw)}catch(e){}
+      const seeded=this.SEED.map((t,i)=>({id:"t"+(i+1),...t}));
+      this.persist(seeded);
+      return seeded;
+    },
+    persist(list){try{localStorage.setItem(this.KEY,JSON.stringify(list))}catch(e){}},
+    typeColor(type){return type==="Person"?"#1d6fb8":type==="Company"?"#177245":"#8b5cf6"},
+    searchUrl(t){
+      const kw=encodeURIComponent(t.name);
+      if(t.type==="Person")return"https://www.linkedin.com/search/results/people/?keywords="+kw;
+      if(t.type==="Company")return"https://www.linkedin.com/search/results/companies/?keywords="+kw;
+      return"https://www.linkedin.com/search/results/content/?keywords="+kw+"&sortBy=%22date_posted%22";
+    },
+    openUrl(t){return t.url||this.searchUrl(t)},
+    postsUrl(t){
+      if(t.url&&t.type==="Person")return t.url.replace(/\/+$/,"")+"/recent-activity/all/";
+      if(t.url&&t.type==="Company")return t.url.replace(/\/+$/,"")+"/posts/";
+      return"https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(t.name)+"&sortBy=%22date_posted%22";
+    },
+    findConversations(){
+      const topic=q("pulseTopic")?q("pulseTopic").value.trim():"";
+      window.open("https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(topic||"property inspection")+"&sortBy=%22date_posted%22","_blank");
+    },
+    setFilter(type,button){
+      this.filter=type;
+      document.querySelectorAll("[data-social-filter]").forEach(el=>el.classList.toggle("active",el===button));
+      this.renderList();
+    },
+    render(){
+      if(!q("socialList"))return;
+      this.renderBank();
+      this.renderList();
+      this.fillComposer();
+      this.renderSweeps();
+    },
+    activeSweep:"",
+    sweeps(){const d=window.HANCOCK_PULSE_SWEEPS;return d&&Array.isArray(d.sweeps)?d.sweeps:[]},
+    renderSweeps(){
+      const host=q("sweepOut");if(!host)return;
+      const data=window.HANCOCK_PULSE_SWEEPS||{};
+      const sweeps=this.sweeps();
+      const stamp=q("sweepStamp");
+      const chips=q("sweepChips");
+      if(!sweeps.length){
+        if(stamp)stamp.textContent='No sweep loaded yet. Tell Claude "sweep hurricane" (or any hot keyword) and this panel fills in.';
+        if(chips)chips.innerHTML="";
+        host.innerHTML='<div class="panel empty"><h3>No conversations queued</h3><p>Run a sweep — Claude scans LinkedIn through your logged-in Chrome, shortlists the conversations worth joining, and drafts a response for each. Active NOAA storm alerts auto-promote hot topics. Nothing posts without you.</p></div>';
+        return;
+      }
+      if(stamp)stamp.textContent=`Latest sweep: ${data.generatedHuman||data.generated} · ${sweeps.length} topic${sweeps.length===1?"":"s"} · drafts only — you post everything yourself.`;
+      if(!this.activeSweep||!sweeps.some(s=>s.topic===this.activeSweep))this.activeSweep=sweeps[0].topic;
+      if(chips)chips.innerHTML=sweeps.map(s=>`<button class="chip${s.topic===this.activeSweep?" active":""}" onclick="HancockSocial.showSweep('${escapeHtml(s.topic)}')">${escapeHtml(s.label||s.topic)}${s.auto?" ⚡":""}</button>`).join("");
+      const s=sweeps.find(x=>x.topic===this.activeSweep);
+      const posts=(s.posts||[]).map((p,i)=>`<div class="eventsAgendaItem" style="border-left-color:#1d6fb8"><span class="badge">${escapeHtml(p.degree||"LinkedIn")}</span><h3>${escapeHtml(p.author||"")}</h3><p class="muted">${escapeHtml(p.headline||"")}${p.age?" · "+escapeHtml(p.age):""}</p>${p.embed?`<iframe src="${escapeHtml(p.embed)}" style="width:100%;max-width:560px;height:420px;border:0;border-radius:10px;margin:8px 0;background:#fff" title="LinkedIn post by ${escapeHtml(p.author||"")}" loading="lazy"></iframe>`:p.quote?`<p style="font-style:italic">“${escapeHtml(p.quote)}”</p>`:""}<p>${escapeHtml(p.summary||"")}</p>${p.why?`<p><b>Why join:</b> ${escapeHtml(p.why)}</p>`:""}${p.draftComment?`<p><b>Drafted comment:</b> ${escapeHtml(p.draftComment)}</p>`:""}${p.url?`<button class="mini" onclick="window.open('${escapeHtml(p.url)}','_blank')">Open on LinkedIn</button>`:""}${p.draftComment?`<button class="mini" onclick="HancockSocial.copySweepComment('${escapeHtml(s.topic)}',${i})">Copy comment</button>`:""}</div>`).join("");
+      host.innerHTML=`${s.reason?`<p class="muted" style="margin:0 0 10px">${escapeHtml(s.reason)}</p>`:""}
+        <div class="eventsAgenda" style="margin-top:0">${posts||'<div class="panel empty"><h3>Nothing worth joining on this topic today</h3><p>The sweep found no conversations that clear Hancock\'s rules. That is a result, not a failure.</p></div>'}</div>
+        ${s.suggestedPost?`<div class="card" style="margin-top:14px"><h2>Suggested post — ${escapeHtml(s.suggestedPost.title||s.label||s.topic)}</h2><p style="white-space:pre-wrap">${escapeHtml(s.suggestedPost.body||"")}</p><button class="mini" onclick="HancockSocial.copySweepPost('${escapeHtml(s.topic)}')">Copy post</button><p class="muted" style="margin-top:8px">Draft only — review, edit, and post it yourself on LinkedIn.</p></div>`:""}
+        ${(s.skipped&&s.skipped.length)?`<p class="muted" style="margin-top:10px"><b>Screened out by Hancock's rules:</b> ${s.skipped.map(k=>escapeHtml((k.what||"")+" — "+(k.reason||""))).join(" · ")}</p>`:""}`;
+    },
+    showSweep(topic){this.activeSweep=topic;this.renderSweeps()},
+    copySweepComment(topic,i){const s=this.sweeps().find(x=>x.topic===topic);if(s&&s.posts&&s.posts[i])this.copyText(s.posts[i].draftComment,"Copied. Open the post and paste your comment.")},
+    copySweepPost(topic){const s=this.sweeps().find(x=>x.topic===topic);if(s&&s.suggestedPost)this.copyText(s.suggestedPost.body,"Copied. Paste it into a new LinkedIn post.")},
+    renderBank(){
+      q("socialBank").innerHTML=this.BANK.map((line,i)=>`<button class="mini" style="display:block;width:100%;text-align:left;margin:5px 0 0" onclick="HancockSocial.copyBank(${i})">${escapeHtml(line)}</button>`).join("");
+    },
+    copyBank(i){this.copyText(this.BANK[i],"Copied. Paste it on LinkedIn.")},
+    renderList(){
+      const list=this.targets().filter(t=>!this.filter||t.type===this.filter);
+      const all=this.targets();
+      q("socialSummary").textContent=`${all.length} target${all.length===1?"":"s"} on the list — ${all.filter(t=>t.type==="Person").length} people, ${all.filter(t=>t.type==="Company").length} companies, ${all.filter(t=>t.type==="Topic").length} topics.`;
+      q("socialList").innerHTML=list.map(t=>`<div class="eventsAgendaItem" style="border-left-color:${this.typeColor(t.type)}"><span class="badge">${escapeHtml(t.type)}</span><h3>${escapeHtml(t.name)}</h3>${t.why?`<p class="muted">${escapeHtml(t.why)}</p>`:""}<button class="mini" onclick="window.open('${escapeHtml(this.openUrl(t))}','_blank')">Open on LinkedIn</button><button class="mini" onclick="window.open('${escapeHtml(this.postsUrl(t))}','_blank')">Recent posts</button><button class="mini" onclick="HancockSocial.draftFor('${escapeHtml(t.id)}')">Draft comment</button><button class="mini" onclick="HancockSocial.edit('${escapeHtml(t.id)}')">Edit</button></div>`).join("")||'<div class="panel empty"><h3>No targets yet</h3><p>Add the adjusters, claims leaders, and companies Hancock should be talking to.</p></div>';
+    },
+    fillComposer(){
+      if(!q("composerTarget"))return;
+      const current=q("composerTarget").value;
+      q("composerTarget").innerHTML='<option value="">General audience</option>'+this.targets().map(t=>`<option value="${escapeHtml(t.id)}">${escapeHtml(t.type)}: ${escapeHtml(t.name)}</option>`).join("");
+      if(current)q("composerTarget").value=current;
+    },
+    newTarget(){
+      this.clearForm();
+      q("socialFormHeading").textContent="New Target";
+      q("socialForm").classList.add("open");
+      q("socialName").focus();
+    },
+    edit(id){
+      const t=this.targets().find(x=>String(x.id)===String(id));if(!t)return;
+      q("socialId").value=t.id;q("socialType").value=t.type;q("socialName").value=t.name;q("socialUrl").value=t.url||"";q("socialWhy").value=t.why||"";
+      q("socialFormHeading").textContent="Edit Target";
+      q("socialRemoveBtn").style.display="";
+      q("socialSaveStatus").textContent="";
+      q("socialForm").classList.add("open");
+      q("socialForm").scrollIntoView({behavior:"smooth",block:"start"});
+    },
+    back(){this.clearForm();q("socialForm").classList.remove("open")},
+    clearForm(){
+      ["socialId","socialName","socialUrl","socialWhy"].forEach(id=>{if(q(id))q(id).value=""});
+      q("socialType").value="Person";
+      q("socialFormHeading").textContent="New Target";
+      q("socialSaveStatus").textContent="";
+      q("socialRemoveBtn").style.display="none";
+    },
+    save(){
+      const name=q("socialName").value.trim();
+      if(!name){q("socialSaveStatus").textContent="Give the target a name first.";return}
+      let url=q("socialUrl").value.trim();
+      if(url&&!/^https?:\/\//i.test(url))url="https://"+url;
+      const list=this.targets();
+      const id=q("socialId").value;
+      const entry={id:id||"t"+Date.now(),type:q("socialType").value,name,url,why:q("socialWhy").value.trim()};
+      const index=list.findIndex(x=>String(x.id)===String(id));
+      if(index>=0)list[index]=entry;else list.push(entry);
+      this.persist(list);
+      this.back();
+      this.render();
+    },
+    remove(){
+      const id=q("socialId").value;if(!id)return;
+      this.persist(this.targets().filter(x=>String(x.id)!==String(id)));
+      this.back();
+      this.render();
+    },
+    draftFor(id){
+      q("composerTarget").value=id;
+      q("composerOut").value="";
+      q("composerContext").focus();
+      q("composerContext").scrollIntoView({behavior:"smooth",block:"center"});
+    },
+    offlineDraft(target,context,goal){
+      const who=target?target.name:"the reader";
+      const why=target&&target.why?" "+target.why:"";
+      if(goal==="Connection request note")return`Hi ${who.split(" ")[0]} — I work with carrier claims teams on property inspection and documentation at Hancock Claims Consultants. Your work caught my attention and I'd value the connection.${why?"":""} No pitch — just good to know the people doing this work well.`;
+      if(goal==="Direct message")return`Hi ${who.split(" ")[0]} — thanks for connecting. At Hancock we support carrier partners with property inspections — the focus is documentation the desk can rely on: clear photos, consistent reporting, defensible findings. If inspection capacity or file quality is ever on your team's plate, happy to compare notes. Either way, glad to be connected.`;
+      if(goal==="Congratulations / milestone")return`Congratulations! Milestones like this reflect a lot of unglamorous, consistent work — the kind that actually moves claims outcomes. Well earned.`;
+      return`Good point${context?" — especially on this":""}. In our field work at Hancock, the difference usually comes down to documentation quality: clear photos, consistent reporting, and findings that hold up when questions come later. The inspection is only part of the service — the file the adjuster receives is the real product.`;
+    },
+    async draft(){
+      const targetId=q("composerTarget").value;
+      const target=this.targets().find(x=>String(x.id)===String(targetId))||null;
+      const context=q("composerContext").value.trim();
+      const goal=q("composerGoal").value;
+      q("composerStatus").textContent="Drafting...";
+      try{
+        if(typeof callClaude!=="function")throw new Error("offline");
+        const prompt=`Draft a LinkedIn ${goal.toLowerCase()} from Hancock Claims Consultants' AVP of Business Development.
+Target: ${target?target.type+" — "+target.name+(target.why?" ("+target.why+")":""):"general industry audience"}.
+${context?"They posted / context: "+context:"No specific post — general engagement."}
+Rules: under 120 words. Plain, direct, helpful-first — answer the point before any positioning. Identify Hancock openly. NEVER name any insurance carrier. Never position Hancock against adjusters — Hancock assists adjusters and carrier teams. Only these figures may appear, and only if natural: 200+ carrier partners, roughly 250,000 inspections/year, 93% documentation accuracy (framed as: the adjuster receives everything needed to write the estimate directly). No hashtags, no emojis, no corporate filler. Return only the text to post.`;
+        const out=await callClaude(DOCTRINE,prompt,600);
+        q("composerOut").value=out.trim();
+        q("composerStatus").textContent="Live draft ready. Edit, copy, and post it yourself.";
+        q("composerStatus").className="status ok";
+      }catch(e){
+        q("composerOut").value=this.offlineDraft(target,context,goal);
+        q("composerStatus").textContent="Offline draft ready (paste the header API key for live AI). Edit, copy, and post it yourself.";
+        q("composerStatus").className="status";
+      }
+    },
+    copyDraft(){
+      const text=q("composerOut").value.trim();
+      if(!text){q("composerStatus").textContent="Draft something first.";return}
+      this.copyText(text,"Copied. Open the target and paste your comment.");
+    },
+    copyText(text,message){
+      const done=()=>{q("composerStatus").textContent=message;q("composerStatus").className="status ok"};
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done).catch(()=>this.copyFallback(text,done))}
+      else this.copyFallback(text,done);
+    },
+    copyFallback(text,done){
+      const area=document.createElement("textarea");area.value=text;document.body.appendChild(area);area.select();
+      try{document.execCommand("copy");done()}catch(e){q("composerStatus").textContent="Copy failed — select the text and copy manually."}
+      document.body.removeChild(area);
+    },
+    exportList(){
+      const blob=new Blob([JSON.stringify({targets:this.targets()},null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob),a=document.createElement("a");
+      a.href=url;a.download="hancock-linkedin-targets.json";a.click();URL.revokeObjectURL(url);
+    },
+    importClick(){q("socialImportFile").click()},
+    importList(input){
+      const file=input.files&&input.files[0];if(!file)return;
+      const reader=new FileReader();
+      reader.onload=()=>{
+        try{
+          const data=JSON.parse(reader.result);
+          const incoming=Array.isArray(data)?data:(data.targets||[]);
+          const list=this.targets();
+          let added=0;
+          incoming.forEach(t=>{
+            if(!t||!t.name)return;
+            if(list.some(x=>x.name===t.name&&x.type===t.type))return;
+            list.push({id:"t"+Date.now()+"_"+added,type:t.type||"Person",name:String(t.name),url:String(t.url||""),why:String(t.why||"")});
+            added++;
+          });
+          this.persist(list);
+          this.render();
+          q("socialSummary").textContent+=` Imported ${added} new target${added===1?"":"s"}.`;
+        }catch(e){alert("That file is not a valid target list export.")}
+        input.value="";
+      };
+      reader.readAsText(file);
+    }
+  };
+  window.HancockSocial=social;
+
   window.HancockLive={
     api,
     refresh:load,
@@ -544,4 +764,5 @@
   };
   load();
   setInterval(load,30000);
+  if(q("socialList"))social.render();
 })();

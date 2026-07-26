@@ -19,7 +19,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 .pipeBar{display:flex;align-items:center;gap:10px;margin:18px 0 14px;flex-wrap:wrap}.pipeStep{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:#fff;border-radius:14px;padding:10px 16px;color:var(--sub);text-align:left}.pipeStep b{display:block;font-size:14px;color:inherit;line-height:1.2}.pipeStep small{display:block;font-weight:600;font-size:11px;color:var(--faint)}.pipeStep.active{border-color:var(--navy);color:var(--navy);box-shadow:0 8px 22px rgba(21,36,60,.12)}.pipeNum{flex:0 0 26px;width:26px;height:26px;border-radius:99px;background:#eef5ff;color:var(--navy);font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center}.pipeStep.active .pipeNum{background:var(--navy);color:#fff}.pipeStep.done .pipeNum{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#112b50}.pipeLine{flex:1 0 24px;height:2px;background:linear-gradient(90deg,var(--border),#c9d7ea)}.stage{display:none}.stage.active{display:block}.pipeContext{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 14px;padding:4px 18px 18px;margin-bottom:16px}.pipeContext label{margin-top:13px}
 @media(max-width:900px){.layout,.hero{grid-template-columns:1fr}.heroActions{justify-content:flex-start}.top{padding-left:16px;padding-right:16px}.tabs{margin-left:12px;margin-right:12px}main{padding:20px 14px}.api{width:100%}.rightTools{justify-content:flex-start;width:100%}.pipeContext{grid-template-columns:1fr 1fr}.pipeLine{display:none}}
 </style>
-<link rel="stylesheet" href="studio-live.css">
+<link rel="stylesheet" href="studio-live.css?v=20260725">
 </head>
 <body>
 <header class="header">
@@ -98,7 +98,40 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
     </div>
   </section>
   <section id="social" class="view">
-    <div class="hero"><div><div class="eyebrow">Social Pulse</div><h1>What are people saying about the topic?</h1><p>The Claude artifact used a LunarCrush connector. This local version keeps the brief-and-draft workflow and can be connected in production.</p><div id="topicChips" class="chips"></div><input id="pulseTopic" value="roof inspection" style="margin-top:12px" placeholder="Type a topic"></div><div class="heroActions"><button class="btn gold" onclick="checkPulse()">Check the Pulse</button></div></div><div id="pulseOut" class="grid"><div class="panel empty"><h3>Ready to take the pulse</h3><p>Pick a topic and build comment drafts that answer first and identify Hancock openly.</p></div></div>
+    <div class="hero"><div><div class="eyebrow">Social Pulse</div><h1>Work LinkedIn every day — one list, one voice.</h1><p>Build the follow list, jump to any person, company, or conversation in one click, and draft comments in Hancock's voice. Nothing posts automatically — every follow, comment, and message is yours to send.</p><div id="topicChips" class="chips"></div><input id="pulseTopic" value="roof inspection" style="margin-top:12px" placeholder="Type a topic"></div><div class="heroActions"><button class="btn gold" onclick="HancockSocial.findConversations()">Find Conversations</button><button class="btn secondary" onclick="HancockSocial.newTarget()">Add Target</button></div></div>
+    <div class="card" id="sweepCard" style="margin-top:14px">
+      <div class="eventsToolbar" style="margin-bottom:8px"><div><h2>Hot Topic Sweeps</h2><p class="muted" id="sweepStamp">No sweep loaded yet.</p></div><div class="eventsNav" id="sweepChips"></div></div>
+      <div id="sweepOut"></div>
+    </div>
+    <div class="eventsShell">
+      <aside class="eventsSide">
+        <div class="eventsLegend">
+          <h3>Target Types</h3>
+          <div class="eventsLegendItem"><span class="eventsDot conference"></span> People</div>
+          <div class="eventsLegendItem"><span class="eventsDot golf"></span> Companies</div>
+          <div class="eventsLegendItem"><span class="eventsDot team"></span> Topics</div>
+          <p class="muted" style="margin-top:10px">Open a target, hit Follow on LinkedIn, and join the conversation with a drafted comment.</p>
+        </div>
+        <div class="eventsLegend">
+          <h3>Brand Message Bank</h3>
+          <div id="socialBank"></div>
+          <p class="muted" style="margin-top:10px">Click a line to copy it. Approved figures only.</p>
+        </div>
+        <div class="eventsLegend">
+          <h3>Share Your List</h3>
+          <button class="mini" onclick="HancockSocial.exportList()">Export list</button>
+          <button class="mini" onclick="HancockSocial.importClick()">Import list</button>
+          <input type="file" id="socialImportFile" accept=".json" style="display:none" onchange="HancockSocial.importList(this)">
+          <p class="muted" style="margin-top:10px">The list lives in this browser. Export it to share with Cassie and Jennifer.</p>
+        </div>
+      </aside>
+      <div>
+        <div class="card eventsForm" id="socialForm"><div class="calFormTop"><button class="mini" onclick="HancockSocial.back()">← Back to list</button></div><h2 id="socialFormHeading">New Target</h2><input type="hidden" id="socialId"><div class="eventsFormGrid"><div><label>Type</label><select id="socialType"><option>Person</option><option>Company</option><option>Topic</option></select></div><div><label>Name</label><input id="socialName" placeholder="Adjuster, claims team, or topic"></div><div class="wide"><label>LinkedIn URL <span class="muted">(profile or company page — leave blank for a topic)</span></label><input id="socialUrl" type="url" placeholder="https://www.linkedin.com/in/..."></div><div class="wide"><label>Why they matter / Hancock angle</label><textarea id="socialWhy" style="min-height:70px" placeholder="What we can help them with, and why we want the relationship"></textarea></div></div><button class="btn" onclick="HancockSocial.save()">Save Target</button><button class="btn secondary" onclick="HancockSocial.back()">Back — don't save</button><button class="mini" id="socialRemoveBtn" style="display:none" onclick="HancockSocial.remove()">Remove target</button><div id="socialSaveStatus" class="status"></div></div>
+        <div class="eventsToolbar"><div><h2>Engagement List</h2><p class="muted" id="socialSummary"></p></div><div class="eventsNav"><button class="chip active" data-social-filter="" onclick="HancockSocial.setFilter('',this)">All</button><button class="chip" data-social-filter="Person" onclick="HancockSocial.setFilter('Person',this)">People</button><button class="chip" data-social-filter="Company" onclick="HancockSocial.setFilter('Company',this)">Companies</button><button class="chip" data-social-filter="Topic" onclick="HancockSocial.setFilter('Topic',this)">Topics</button></div></div>
+        <div id="socialList" class="eventsAgenda" style="margin-top:0"></div>
+        <div class="card" style="margin-top:14px"><h2>Comment &amp; Message Composer</h2><p class="muted">Paste what they posted, draft a reply in Hancock's voice, copy it, then post it yourself on LinkedIn. Live AI when the header key is set; a solid offline draft when it isn't.</p><label>Target</label><select id="composerTarget"></select><label>What they posted / the conversation</label><textarea id="composerContext" style="min-height:90px" placeholder="Paste the post text or describe the thread"></textarea><label>Goal</label><select id="composerGoal"><option>Helpful comment</option><option>Connection request note</option><option>Direct message</option><option>Congratulations / milestone</option></select><button class="btn" onclick="HancockSocial.draft()">Draft in Hancock's Voice</button><button class="btn secondary" onclick="HancockSocial.copyDraft()">Copy Draft</button><div id="composerStatus" class="status"></div><textarea id="composerOut" style="min-height:150px" placeholder="Draft appears here — edit before you post"></textarea></div>
+      </div>
+    </div>
   </section>
   <section id="content" class="view">
     <div class="hero"><div><div class="eyebrow">Content Engine</div><h1>Plan it. Create it. Optimize it. One workspace.</h1><p>Topics & Keywords, Content, and SEO + AEO now run as one pipeline. Set the campaign context once below — it follows the work through all three stages.</p></div><div class="heroActions"><button class="btn gold" onclick="showStage('plan')">Start with a Plan</button><button class="btn secondary" onclick="showStage('create')">Jump to Create</button></div></div>
@@ -132,6 +165,8 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 </main>
 <div class="footer">Cleaned local build from Claude artifact 3713a3f1 · updated July 7, 2026 · unified Content Engine (Plan → Create → Optimize) · export-first until CMS/social access exists</div>
 <script src="data/latest_bot.js"></script>
+<script src="data/pulse_topics.js"></script>
+<script src="data/pulse_sweeps.js"></script>
 <script>
 const SERVICE_LINES = ["Storm / CAT Damage","Underwriting Inspection","Contents","Engineering","Commercial","Residential","4-Point Inspection","Ladder Assist","Loss Control","DI / UDI Inspections"];
 const TABS = [["radar","Industry Radar"],["storm","Storm Watch"],["events","Events"],["calendar","Our Marketing Calendar"],["social","Social Pulse"],["content","Content"],["reviews","Reviews"],["library","Content Library"],["share","Customize & Share"]];
@@ -196,6 +231,6 @@ if(TABS.some(function(tab){return tab[0]===initialTab})){showTab(initialTab)}
 </script>
 <script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);window.CHAD_CONFIG={apiBase:"",briefingKey:window.CHAD_BRIEFING_KEY,holdBriefingNavigation:true};</script>
 <script src="chad-widget.js"></script>
-<script src="studio-live.js"></script>
+<script src="studio-live.js?v=20260726"></script>
 </body>
 </html>
