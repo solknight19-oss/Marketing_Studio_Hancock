@@ -43,6 +43,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
   </section>
   <section id="storm" class="view">
     <div class="hero"><div><div class="eyebrow">Storm Watch</div><h1>Severe weather → useful content, in one click.</h1><p>Pull live NOAA / National Weather Service alerts for watched states, filtered to the perils that drive property claims: hail, damaging wind, tornadoes, derechos, hurricanes and tropical storms, and severe thunderstorms. Flooding, air quality, heat, fog, marine, and winter alerts are screened out.</p><div id="stateChips" class="chips"></div></div><div class="heroActions"><button class="btn gold" onclick="checkSkies()">Check the Skies</button><button class="btn secondary" onclick="stormPlan()">Draft Storm Plan</button></div></div>
+    <div class="card" id="spcCard" style="margin:14px 0"><h2 style="margin-top:0">Severe Weather Outlook — next 3 days <span class="muted" style="font-weight:400;font-size:.7em">NWS Storm Prediction Center</span></h2><p class="muted" id="spcStamp">Loading the convective outlook…</p><div id="spcOut"></div></div>
     <div id="stormOut" class="grid"><div class="panel empty"><h3>Ready to check the skies</h3><p>Live NOAA severe-weather pulls work when the browser can reach weather.gov. Only claim-relevant perils appear: hail, wind, tornado, derecho, hurricane, severe thunderstorm. If the feed is unreachable, the Studio still gives the content workflow.</p></div></div>
   </section>
   <section id="events" class="view">

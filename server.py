@@ -1128,6 +1128,38 @@ def trigger_window_for_year(trigger, today):
     prep_start=start-dt.timedelta(days=int(trigger.get('prep_days') or 30))
     return start,end,peak_start,peak_end,prep_start
 
+def pulse_sweep_data():
+    """Read the Social Pulse agent-sweep payload (data/pulse_sweeps.js) for Chad."""
+    path=ROOT/'data'/'pulse_sweeps.js'
+    try:
+        raw=path.read_text(encoding='utf-8')
+        body=raw.split('=',1)[1].strip().rstrip(';')
+        data=json.loads(body)
+    except Exception:
+        return None
+    sweeps=data.get('sweeps') or []
+    if not sweeps: return None
+    post_count=sum(len(s.get('posts') or []) for s in sweeps)
+    suggested=[(s.get('suggestedPost') or {}).get('title') for s in sweeps]
+    suggested=[t for t in suggested if t]
+    age_hours=None
+    stamp=str(data.get('generated') or '')
+    for parse in (lambda v:dt.datetime.fromisoformat(v),lambda v:dt.datetime.strptime(v,'%Y-%m-%dT%H:%M:%S%z')):
+        try:
+            gen=parse(stamp)
+            now=dt.datetime.now(gen.tzinfo) if gen.tzinfo else dt.datetime.now()
+            age_hours=max(0,int((now-gen).total_seconds()//3600))
+            break
+        except Exception:
+            continue
+    return {
+        'generatedHuman':data.get('generatedHuman') or '',
+        'ageHours':age_hours,
+        'topics':[s.get('label') or s.get('topic') or '' for s in sweeps],
+        'postCount':post_count,
+        'suggestedTitles':suggested,
+    }
+
 def seasonal_triggers(today=None):
     today=today or dt.date.today()
     items=[]
@@ -2246,6 +2278,26 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None, team_events
         ('The communication standard','Nobody should ever wonder where the technician is. Proactive calls, texts, updates, and documented attempts prevent many service complaints before they start.','Create a leadership post connecting communication discipline to carrier trust.'),
         ('Underwriting and prevention','The cheapest claim is the one that never happens. Underwriting inspections can identify condition, hazard, and system risks before loss severity grows.','Develop an educational series around prevention and property lifecycle intelligence.'),
     ]
+    pulse=pulse_sweep_data()
+    if pulse and (pulse['postCount'] or pulse['suggestedTitles']):
+        fresh=pulse['ageHours'] is not None and pulse['ageHours']<24
+        age_phrase='from this morning’s sweep' if fresh else 'getting stale — ask Claude for a fresh sweep'
+        topic_text=', '.join([t for t in pulse['topics'] if t][:3])
+        situation_bits=[]
+        if pulse['postCount']:
+            situation_bits.append(f"{pulse['postCount']} LinkedIn conversation{'s' if pulse['postCount']!=1 else ''} worth joining, each with a comment already drafted in Hancock's voice")
+        if pulse['suggestedTitles']:
+            situation_bits.append(f"a ready-to-post piece — “{pulse['suggestedTitles'][0]}”")
+        candidates.append({
+            'theme':'social',
+            'opening':'The agents swept LinkedIn and the engagement queue is loaded.',
+            'headline':'Social Pulse has drafted content waiting on approval',
+            'situation':f"The sweep ({age_phrase}) covered {topic_text} and found {' and '.join(situation_bits)}. Nothing posts without a human.",
+            'proposal':'Fastest content win on the board: open Social Pulse, review the drafts, and get Hancock into the live conversations today.',
+            'action_label':'Open Social Pulse',
+            'action_prompt':'walk me through the Social Pulse engagement queue and what we should post today',
+            'ui_action':{'type':'tab','target':'social'},
+        })
     doctrine=pick(doctrine_topics,71)
     candidates.append({
         'theme':'doctrine',
@@ -2387,7 +2439,7 @@ def chad_ui_action(message):
         ('repurpose',('repurpose','turn this into','other formats')),
         ('reviews',('review response','customer review','reputation')),
         ('library',('content library','saved content','saved asset')),
-        ('social',('social pulse','social media','linkedin')),
+        ('social',('social pulse','social media','linkedin','engagement queue','pulse sweep','drafted comment','new scan','hot topic')),
         ('carrier',('carrier connect','carrier outreach','sales outreach')),
         ('answers',('hancock answers','public question','frequently asked')),
         ('content',('content','post','article','blog','write','draft')),
@@ -2408,6 +2460,16 @@ def bot_welcome(user, tasks, drafts, activity, calendar=None, team_events=None):
     ]
     if briefing['work']: parts.append(briefing['work'])
     parts.append(briefing['proposal'])
+    if briefing.get('theme')!='social':
+        pulse=pulse_sweep_data()
+        if pulse and (pulse['postCount'] or pulse['suggestedTitles']):
+            bits=[]
+            if pulse['postCount']:
+                bits.append(f"{pulse['postCount']} drafted LinkedIn conversation{'s' if pulse['postCount']!=1 else ''}")
+            if pulse['suggestedTitles']:
+                bits.append(f"a suggested post (“{pulse['suggestedTitles'][0]}”)")
+            fresh=pulse['ageHours'] is not None and pulse['ageHours']<24
+            parts.append(f"Also: Social Pulse is holding {' and '.join(bits)}{' from the latest sweep' if fresh else ' — the sweep is getting stale, worth refreshing'}.")
     return ' '.join(parts)
 def prepare_recommended_draft(user):
     state=collect_state()

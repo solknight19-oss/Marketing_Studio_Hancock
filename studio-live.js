@@ -93,6 +93,11 @@
         dueToday?`${dueToday} production item${dueToday===1?"":"s"} due today`:`${openCalendar} forecasted calendar item${openCalendar===1?"":"s"}`,
         `Latest scan: ${botStamp}`
       ];
+      const pulseData=window.HANCOCK_PULSE_SWEEPS;
+      if(pulseData&&Array.isArray(pulseData.sweeps)&&pulseData.sweeps.length){
+        const pulsePosts=pulseData.sweeps.reduce((n,s)=>n+((s.posts||[]).length),0);
+        if(pulsePosts)pieces.push(`Social Pulse: ${pulsePosts} drafted conversation${pulsePosts===1?"":"s"} waiting`);
+      }
       ticker.innerHTML='<div class="tickerTrack"><span class="tickerLabel">Live Intelligence</span>'+pieces.map(piece=>`<span class="tickerItem">${escapeHtml(piece)}</span>`).join("")+'</div>';
     }
     const pulse=q("chadPulseBar");
@@ -547,6 +552,7 @@
       "Property lifecycle management: pre-loss condition, during-loss inspection, post-loss verification."
     ],
     SEED:[
+      {type:"Person",name:"Michael Reynolds (WeatherValet)",url:"https://www.linkedin.com/in/michael-reynolds-awsc/",why:"Certified meteorologist team lead — posts storm outlooks hours before warnings exist. Earliest storm signal on the feed."},
       {type:"Topic",name:"Hail damage claims",url:"",why:"Carrier teams talking hail volume — Hancock's core storm signal."},
       {type:"Topic",name:"Property claims adjusters",url:"",why:"Meet adjusters where they talk. Be helpful first, identify Hancock openly."},
       {type:"Topic",name:"Roof inspection standards",url:"",why:"Documentation, test squares, and repairability conversations."}
@@ -596,6 +602,7 @@
       if(stamp)stamp.textContent="Scanning NOAA + Industry Radar for live hot topics…";
       this.hotSelected=new Set();
       const chips=[];const seen=new Set();
+      chips.push({label:"Meteorologist Watch",kw:"meteorologist severe storms",src:"met",detail:"What meteorologists posted in the last 24h — the earliest storm signal on LinkedIn"});
       const standing=(window.HANCOCK_PULSE_TOPICS&&window.HANCOCK_PULSE_TOPICS.topics)||[];
       standing.forEach(t=>{
         const kw=(t.keywords&&t.keywords[0])||t.label;
@@ -636,7 +643,7 @@
       this.renderHotChips();
     },
     hotSelected:new Set(),
-    hotIcon(src){return src==="noaa"?"⚡ ":src==="radar"?"📈 ":""},
+    hotIcon(src){return src==="noaa"?"⚡ ":src==="radar"?"📈 ":src==="met"?"⛈️ ":""},
     renderHotChips(){
       const host=q("hotChips");if(!host)return;
       host.innerHTML=this.hotChips.map((c,i)=>`<button class="chip${this.hotSelected.has(i)?" active":""}" title="${escapeHtml(c.detail||"")}" onclick="HancockSocial.toggleHot(${i})">${this.hotIcon(c.src)}${escapeHtml(c.label)}</button>`).join("");
@@ -657,7 +664,7 @@
         kws=[typed];
       }
       const query=kws.length>1?kws.map(k=>k.split(" ").length>1?'"'+k+'"':k).join(" OR "):kws[0];
-      const fresh=picked.some(c=>c.src==="noaa");
+      const fresh=picked.some(c=>c.src==="noaa"||c.src==="met");
       const url="https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(query)+"&sortBy=%22date_posted%22"+(fresh?"&datePosted=%22past-24h%22":"");
       if(status)status.textContent="Scanning LinkedIn for: "+query+(fresh?" (last 24h)":"");
       window.open(url,"_blank");
@@ -836,12 +843,63 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   };
   window.HancockSocial=social;
 
+  const SPC_RISK_ORDER={TSTM:1,MRGL:2,SLGT:3,ENH:4,MDT:5,HIGH:6};
+  const SPC_RISK_NAMES={TSTM:"General thunderstorms",MRGL:"Marginal risk",SLGT:"Slight risk",ENH:"Enhanced risk",MDT:"Moderate risk",HIGH:"High risk"};
+  const SPC_STATE_POINTS={GA:[-83.4,32.6],FL:[-81.5,28.6],TX:[-99.3,31.5],OK:[-97.5,35.6],KY:[-85.3,37.5],TN:[-86.3,35.9],NC:[-79.4,35.6],SC:[-80.9,33.9],AL:[-86.8,32.8],LA:[-92.0,31.0],MS:[-89.7,32.7],AR:[-92.4,34.9],MO:[-92.5,38.4],IN:[-86.3,39.9],OH:[-82.8,40.3],IL:[-89.2,40.0],KS:[-98.4,38.5],NE:[-99.8,41.5],IA:[-93.5,42.0],CO:[-105.5,39.0]};
+  function spcPointInRing(pt,ring){
+    let inside=false;
+    for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+      const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
+      if(((yi>pt[1])!==(yj>pt[1]))&&(pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi))inside=!inside;
+    }
+    return inside;
+  }
+  function spcPointInPolygon(pt,poly){
+    if(!poly.length||!spcPointInRing(pt,poly[0]))return false;
+    for(let i=1;i<poly.length;i++){if(spcPointInRing(pt,poly[i]))return false}
+    return true;
+  }
+  async function loadSpcOutlook(){
+    const stamp=q("spcStamp"),out=q("spcOut");
+    if(!out)return;
+    const files=[["Today","day1otlk_cat.lyr.geojson"],["Tomorrow","day2otlk_cat.lyr.geojson"],["Day 3","day3otlk_cat.lyr.geojson"]];
+    try{
+      const days=await Promise.all(files.map(([,f])=>fetch("https://www.spc.noaa.gov/products/outlook/"+f).then(r=>{if(!r.ok)throw new Error(f+" "+r.status);return r.json()})));
+      const rows=days.map((gj,idx)=>{
+        const stateRisk={};
+        (gj.features||[]).forEach(f=>{
+          const label=(f.properties||{}).LABEL;const rank=SPC_RISK_ORDER[label]||0;
+          if(!rank||!f.geometry)return;
+          const g=f.geometry;
+          const polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+          Object.entries(SPC_STATE_POINTS).forEach(([st,pt])=>{
+            if(polys.some(p=>spcPointInPolygon(pt,p))){
+              if(!stateRisk[st]||SPC_RISK_ORDER[stateRisk[st]]<rank)stateRisk[st]=label;
+            }
+          });
+        });
+        const severe=Object.entries(stateRisk).filter(([,l])=>SPC_RISK_ORDER[l]>=2).sort((a,b)=>SPC_RISK_ORDER[b[1]]-SPC_RISK_ORDER[a[1]]);
+        const top=severe.length?SPC_RISK_NAMES[severe[0][1]]:null;
+        return {day:files[idx][0],severe,top};
+      });
+      out.innerHTML=rows.map(r=>{
+        if(!r.severe.length)return `<p style="margin:6px 0"><b>${r.day}:</b> <span class="muted">no severe-storm risk in watched states — pre-loss content window.</span></p>`;
+        const states=r.severe.map(([st,l])=>st+(SPC_RISK_ORDER[l]>=3?" ("+SPC_RISK_NAMES[l].split(" ")[0]+")":"")).join(", ");
+        return `<p style="margin:6px 0"><b>${r.day}:</b> ${escapeHtml(r.top)} — ${escapeHtml(states)}. Content lead time: get readiness material out before the storm.</p>`;
+      }).join("");
+      if(stamp)stamp.textContent="Live from the Storm Prediction Center · updated "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+" · state list is approximate (state-center test) — click through to spc.noaa.gov before acting on boundaries.";
+    }catch(e){
+      if(stamp)stamp.textContent="SPC outlook unreachable right now — reported as unreachable, not as quiet. The live NOAA alerts below are unaffected.";
+      out.innerHTML="";
+    }
+  }
   window.HancockLive={
     api,
     refresh:load,
     runBots,
     openChad:()=>window.ChadWidget&&window.ChadWidget.open()
   };
+  loadSpcOutlook();
   load();
   setInterval(load,30000);
   if(q("socialList"))social.render();
