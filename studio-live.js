@@ -586,6 +586,53 @@
       this.renderList();
       this.fillComposer();
       this.renderSweeps();
+      if(!this._hotLoaded){this._hotLoaded=true;this.loadHotChips()}
+    },
+    hotChips:[],
+    HOT_STATES:{MO:"Missouri",GA:"Georgia",FL:"Florida",TX:"Texas",OK:"Oklahoma",KY:"Kentucky",TN:"Tennessee",NC:"North Carolina",SC:"South Carolina",AL:"Alabama",LA:"Louisiana",MS:"Mississippi",AR:"Arkansas",IN:"Indiana",OH:"Ohio",IL:"Illinois",KS:"Kansas",NE:"Nebraska",IA:"Iowa",CO:"Colorado"},
+    HOT_PERILS:[[/hurricane|tropical/i,"Hurricane"],[/tornado/i,"Tornado"],[/hail/i,"Hail"],[/derecho|high wind|extreme wind|wind/i,"Wind"],[/severe thunderstorm/i,"Storm"]],
+    async loadHotChips(){
+      const stamp=q("hotChipsStamp");if(!q("hotChips"))return;
+      if(stamp)stamp.textContent="Scanning NOAA + Industry Radar for live hot topics…";
+      const chips=[];const seen=new Set();
+      let noaaFailed=false;
+      try{
+        const codes=Object.keys(this.HOT_STATES);
+        const results=await Promise.allSettled(codes.map(st=>fetch("https://api.weather.gov/alerts/active?area="+st,{headers:{Accept:"application/geo+json"}}).then(r=>{if(!r.ok)throw new Error(st);return r.json()})));
+        if(results.every(r=>r.status==="rejected"))noaaFailed=true;
+        results.forEach((res,i)=>{
+          if(res.status!=="fulfilled"||!res.value)return;
+          (res.value.features||[]).forEach(f=>{
+            const ev=((f.properties||{}).event)||"";
+            for(const [rx,peril] of this.HOT_PERILS){
+              if(rx.test(ev)){
+                const key=codes[i]+"|"+peril;
+                if(!seen.has(key)&&chips.length<12){seen.add(key);chips.push({label:this.HOT_STATES[codes[i]]+" "+peril+" Damage",kw:this.HOT_STATES[codes[i]]+" "+peril.toLowerCase()+" damage",src:"noaa",detail:ev})}
+                break;
+              }
+            }
+          });
+        });
+      }catch(e){noaaFailed=true}
+      const bot=window.HANCOCK_BOT_DATA;
+      if(bot&&Array.isArray(bot.stories)){
+        bot.stories.forEach(s=>{
+          const ks=(s.keywords||[]).filter(Boolean);
+          if(!ks.length)return;
+          const kw=ks.slice(0,3).join(" ");
+          const label=ks.slice(0,2).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
+          if(!seen.has("r|"+kw)&&chips.length<16){seen.add("r|"+kw);chips.push({label,kw,src:"radar",detail:s.title||""})}
+        });
+      }
+      this.hotChips=chips;
+      const noaaCount=chips.filter(c=>c.src==="noaa").length;
+      if(stamp)stamp.textContent=(noaaFailed?"NOAA feed unreachable from this browser — showing Industry Radar topics only. ":(noaaCount?noaaCount+" live storm topic"+(noaaCount===1?"":"s")+" from active NOAA alerts. ":"No claim-relevant NOAA alerts right now — a quiet radar is a pre-loss content window. "))+"Updated "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+".";
+      q("hotChips").innerHTML=chips.map((c,i)=>`<button class="chip" title="${escapeHtml(c.detail||"")}" onclick="HancockSocial.openHot(${i})">${c.src==="noaa"?"⚡ ":"📈 "}${escapeHtml(c.label)}</button>`).join("")+`<button class="chip" title="Re-check NOAA and the Radar" onclick="HancockSocial.loadHotChips()">↻ Refresh</button>`;
+    },
+    openHot(i){
+      const c=this.hotChips[i];if(!c)return;
+      const url="https://www.linkedin.com/search/results/content/?keywords="+encodeURIComponent(c.kw)+"&sortBy=%22date_posted%22"+(c.src==="noaa"?"&datePosted=%22past-24h%22":"");
+      window.open(url,"_blank");
     },
     activeSweep:"",
     sweeps(){const d=window.HANCOCK_PULSE_SWEEPS;return d&&Array.isArray(d.sweeps)?d.sweeps:[]},
