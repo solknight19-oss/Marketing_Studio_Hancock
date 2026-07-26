@@ -1160,6 +1160,30 @@ def pulse_sweep_data():
         'suggestedTitles':suggested,
     }
 
+NHC_CACHE={'at':0.0,'data':None}
+def nhc_current_storms():
+    """Server-side relay for NHC CurrentStorms.json (not CORS-open for browsers). 15-min cache."""
+    now=time.time()
+    if NHC_CACHE['data'] is not None and now-NHC_CACHE['at']<900:
+        return NHC_CACHE['data']
+    try:
+        req=urllib.request.Request('https://www.nhc.noaa.gov/CurrentStorms.json',headers={'User-Agent':'HancockMarketingStudio'})
+        with urllib.request.urlopen(req,timeout=10) as r:
+            data=json.loads(r.read().decode('utf-8'))
+        storms=[{
+            'name':s.get('name'),
+            'classification':s.get('classification'),
+            'intensity':s.get('intensity'),
+            'basin':s.get('basin') or s.get('binNumber'),
+            'lastUpdate':s.get('lastUpdate'),
+        } for s in (data.get('activeStorms') or [])]
+        payload={'ok':True,'fetchedAt':dt.datetime.now().isoformat(),'storms':storms}
+    except Exception as e:
+        payload={'ok':False,'error':str(e)[:200],'storms':[]}
+    NHC_CACHE['at']=now
+    NHC_CACHE['data']=payload
+    return payload
+
 def seasonal_triggers(today=None):
     today=today or dt.date.today()
     items=[]
@@ -3353,7 +3377,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not user: self.redirect('/login'); return
             if user.get('password_reset_required'): self.redirect('/change-password'); return
             p=ROOT/'chad-graphics.html'; self.send_html(p.read_text(encoding='utf-8') if p.exists() else '<h1>Graphic maker not found</h1>',200 if p.exists() else 404); return
-        if path in ('/studio-live.css','/studio-live.js','/chad-widget.js','/data/latest_bot.js','/data/pulse_topics.js','/data/pulse_sweeps.js','/data/content_plays.js'):
+        if path in ('/studio-live.css','/studio-live.js','/chad-widget.js','/data/latest_bot.js','/data/pulse_topics.js','/data/pulse_sweeps.js','/data/content_plays.js','/data/weekly_longform.js'):
             user=self.current_user()
             if not user: self.send_html('<h1>Login required</h1>',401); return
             if user.get('password_reset_required'): self.send_html('<h1>Password change required</h1>',403); return
@@ -3365,10 +3389,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 '/data/pulse_topics.js':(ROOT/'data'/'pulse_topics.js','application/javascript; charset=utf-8'),
                 '/data/pulse_sweeps.js':(ROOT/'data'/'pulse_sweeps.js','application/javascript; charset=utf-8'),
                 '/data/content_plays.js':(ROOT/'data'/'content_plays.js','application/javascript; charset=utf-8'),
+                '/data/weekly_longform.js':(ROOT/'data'/'weekly_longform.js','application/javascript; charset=utf-8'),
             }
             p,kind=files[path]
             if not p.exists(): self.send_html('<h1>Not found</h1>',404); return
             self.send_bytes(p.read_bytes(),kind); return
+        if path=='/api/nhc':
+            user=self.current_user()
+            if not user: self.send_json({'ok':False,'error':'Login required','storms':[]},401); return
+            self.send_json(nhc_current_storms()); return
         if path=='/api/state':
             user=self.require_user();
             if user:

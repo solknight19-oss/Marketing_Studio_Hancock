@@ -102,6 +102,10 @@
       if(playsData&&Array.isArray(playsData.plays)&&playsData.plays.length){
         pieces.push(`Maya: ${playsData.plays.length} content play${playsData.plays.length===1?"":"s"} ready`);
       }
+      const longformData=window.HANCOCK_WEEKLY_LONGFORM;
+      if(longformData&&longformData.article&&longformData.article.title){
+        pieces.push(`Leo: "${longformData.article.title}" drafted`);
+      }
       ticker.innerHTML='<div class="tickerTrack"><span class="tickerLabel">Live Intelligence</span>'+pieces.map(piece=>`<span class="tickerItem">${escapeHtml(piece)}</span>`).join("")+'</div>';
     }
     const pulse=q("chadPulseBar");
@@ -857,7 +861,8 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     const ageTxt=ageH==null?"":ageH<1?"under an hour ago":ageH<24?ageH+"h ago":Math.floor(ageH/24)+" day"+(Math.floor(ageH/24)===1?"":"s")+" ago";
     if(stamp)stamp.textContent=`Maya's plays from ${data.generatedHuman||data.generated} (${ageTxt}) · refreshes weekday mornings at 7:45 · drafts only — you publish.`;
     const stale=ageH!=null&&ageH>=24?`<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.45)"><b>⚠️ These plays are ${ageTxt.replace(" ago"," old")}.</b> They refresh weekday mornings at 7:45, or tell Claude "run Maya's plays" for fresh ones.</div>`:"";
-    host.innerHTML=stale+data.plays.map((p,i)=>`<div class="eventsAgendaItem" style="border-left-color:#8b5cf6"><span class="badge">${escapeHtml(p.platform||"Content")}</span><h3>${escapeHtml(p.title||"")}</h3>${p.signal?`<p class="muted">Why now: ${escapeHtml(p.signal)}</p>`:""}${p.angle?`<p><b>The play:</b> ${escapeHtml(p.angle)}</p>`:""}${p.draft?`<p style="white-space:pre-wrap">${escapeHtml(p.draft)}</p>`:""}<button class="mini" onclick="HancockPlays.copy(${i})">Copy draft</button></div>`).join("");
+    const read=(Array.isArray(data.marketRead)&&data.marketRead.length)?`<div style="margin:0 0 12px;padding:10px 12px;border:1px solid rgba(139,92,246,.35);border-radius:10px"><p style="margin:0 0 6px"><b>Maya's market read</b> <span class="muted">— her own research, every point sourced</span></p>${data.marketRead.map(m=>`<p class="muted" style="margin:4px 0">• ${escapeHtml(m.point||"")} ${m.url?`<a href="${escapeHtml(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.source||"source")}</a>`:`(${escapeHtml(m.source||"")})`}</p>`).join("")}</div>`:"";
+    host.innerHTML=stale+read+data.plays.map((p,i)=>`<div class="eventsAgendaItem" style="border-left-color:#8b5cf6"><span class="badge">${escapeHtml(p.platform||"Content")}</span><h3>${escapeHtml(p.title||"")}</h3>${p.signal?`<p class="muted">Why now: ${escapeHtml(p.signal)}</p>`:""}${p.angle?`<p><b>The play:</b> ${escapeHtml(p.angle)}</p>`:""}${p.draft?`<p style="white-space:pre-wrap">${escapeHtml(p.draft)}</p>`:""}<button class="mini" onclick="HancockPlays.copy(${i})">Copy draft</button></div>`).join("");
   }
   window.HancockPlays={
     copy(i){
@@ -867,6 +872,40 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     refresh:renderContentPlays
   };
   renderContentPlays();
+  function renderLongform(){
+    const host=q("longformOut"),stamp=q("longformStamp");
+    if(!host)return;
+    const d=window.HANCOCK_WEEKLY_LONGFORM;
+    if(!d||!d.article||!d.article.body)return;
+    const a=d.article;
+    const gen=d.generated?new Date(d.generated):null;
+    const ageD=gen&&!isNaN(gen)?Math.floor((Date.now()-gen.getTime())/86400000):null;
+    if(stamp)stamp.textContent=`Leo's article from ${d.generatedHuman||d.generated}${ageD!=null&&ageD>=7?" — over a week old, a fresh one lands Monday 8:15am":""} · draft — you publish.`;
+    host.innerHTML=`<div class="eventsAgendaItem" style="border-left-color:#177245"><span class="badge">Long-form</span><h3>${escapeHtml(a.title||"")}</h3>${a.subtitle?`<p class="muted">${escapeHtml(a.subtitle)}</p>`:""}${a.signal?`<p class="muted">Why now: ${escapeHtml(a.signal)}</p>`:""}<p style="white-space:pre-wrap">${escapeHtml(a.body)}</p><button class="mini" onclick="HancockLongform.copy()">Copy article</button></div>`;
+  }
+  window.HancockLongform={
+    copy(){
+      const a=(window.HANCOCK_WEEKLY_LONGFORM||{}).article;
+      if(a&&a.body&&window.HancockSocial)HancockSocial.copyText((a.title?a.title+"\n\n":"")+a.body,"Copied. Edit and publish it yourself.");
+    },
+    refresh:renderLongform
+  };
+  renderLongform();
+  async function loadNhc(){
+    const el=q("nhcLine");if(!el)return;
+    try{
+      const r=await fetch("/api/nhc");
+      if(!r.ok)throw new Error("HTTP "+r.status);
+      const d=await r.json();
+      if(!d.ok)throw new Error(d.error||"NHC fetch failed");
+      el.innerHTML=d.storms.length
+        ?`<b>Tropical (NHC):</b> ${d.storms.map(s=>escapeHtml([s.classification,s.name].filter(Boolean).join(" "))).join(", ")} — active now.`
+        :`<b>Tropical (NHC):</b> no active named systems — quiet basin confirmed by a second source.`;
+    }catch(e){
+      el.textContent="Tropical (NHC): relay unreachable — reported as unreachable, not as quiet.";
+    }
+  }
+  loadNhc();
   const SPC_RISK_ORDER={TSTM:1,MRGL:2,SLGT:3,ENH:4,MDT:5,HIGH:6};
   const SPC_RISK_NAMES={TSTM:"General thunderstorms",MRGL:"Marginal risk",SLGT:"Slight risk",ENH:"Enhanced risk",MDT:"Moderate risk",HIGH:"High risk"};
   const SPC_STATE_POINTS={GA:[-83.4,32.6],FL:[-81.5,28.6],TX:[-99.3,31.5],OK:[-97.5,35.6],KY:[-85.3,37.5],TN:[-86.3,35.9],NC:[-79.4,35.6],SC:[-80.9,33.9],AL:[-86.8,32.8],LA:[-92.0,31.0],MS:[-89.7,32.7],AR:[-92.4,34.9],MO:[-92.5,38.4],IN:[-86.3,39.9],OH:[-82.8,40.3],IL:[-89.2,40.0],KS:[-98.4,38.5],NE:[-99.8,41.5],IA:[-93.5,42.0],CO:[-105.5,39.0]};

@@ -43,7 +43,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
   </section>
   <section id="storm" class="view">
     <div class="hero"><div><div class="eyebrow">Storm Watch</div><h1>Severe weather → useful content, in one click.</h1><p>Pull live NOAA / National Weather Service alerts for watched states, filtered to the perils that drive property claims: hail, damaging wind, tornadoes, derechos, hurricanes and tropical storms, and severe thunderstorms. Flooding, air quality, heat, fog, marine, and winter alerts are screened out.</p><div id="stateChips" class="chips"></div></div><div class="heroActions"><button class="btn gold" onclick="checkSkies()">Check the Skies</button><button class="btn secondary" onclick="stormPlan()">Draft Storm Plan</button></div></div>
-    <div class="card" id="spcCard" style="margin:14px 0"><h2 style="margin-top:0">Severe Weather Outlook — next 3 days <span class="muted" style="font-weight:400;font-size:.7em">NWS Storm Prediction Center</span></h2><p class="muted" id="spcStamp">Loading the convective outlook…</p><div id="spcOut"></div></div>
+    <div class="card" id="spcCard" style="margin:14px 0"><h2 style="margin-top:0">Severe Weather Outlook — next 3 days <span class="muted" style="font-weight:400;font-size:.7em">NWS Storm Prediction Center</span></h2><p class="muted" id="spcStamp">Loading the convective outlook…</p><div id="spcOut"></div><p class="muted" id="nhcLine" style="margin:8px 0 0">Checking NHC tropical…</p></div>
     <div id="stormOut" class="grid"><div class="panel empty"><h3>Ready to check the skies</h3><p>Live NOAA severe-weather pulls work when the browser can reach weather.gov. Only claim-relevant perils appear: hail, wind, tornado, derecho, hurricane, severe thunderstorm. If the feed is unreachable, the Studio still gives the content workflow.</p></div></div>
   </section>
   <section id="events" class="view">
@@ -138,6 +138,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
   <section id="content" class="view">
     <div class="hero"><div><div class="eyebrow">Content Engine</div><h1>Plan it. Create it. Optimize it. One workspace.</h1><p>Topics & Keywords, Content, and SEO + AEO now run as one pipeline. Set the campaign context once below — it follows the work through all three stages.</p></div><div class="heroActions"><button class="btn gold" onclick="showStage('plan')">Start with a Plan</button><button class="btn secondary" onclick="showStage('create')">Jump to Create</button></div></div>
     <div class="card" id="playsCard" style="margin:14px 0"><div class="eventsToolbar" style="margin-bottom:8px"><div><h2>Today's Content Plays <span class="muted" style="font-weight:400;font-size:.7em">Maya · from the morning intel</span></h2><p class="muted" id="playsStamp">No plays loaded yet. Tell Claude "run Maya's plays" and this fills in.</p></div></div><div id="playsOut"></div></div>
+    <div class="card" id="longformCard" style="margin:14px 0"><div class="eventsToolbar" style="margin-bottom:8px"><div><h2>This Week's Long-Form <span class="muted" style="font-weight:400;font-size:.7em">Leo · Mondays</span></h2><p class="muted" id="longformStamp">No article yet. Tell Claude "run Leo's article" and this fills in.</p></div></div><div id="longformOut"></div></div>
     <div class="pipeBar">
       <button class="pipeStep active" id="step-plan" onclick="showStage('plan')"><span class="pipeNum">1</span><span><b>Plan</b><small>Topics & keyword strategy</small></span></button>
       <div class="pipeLine"></div>
@@ -171,6 +172,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 <script src="data/pulse_topics.js"></script>
 <script src="data/pulse_sweeps.js"></script>
 <script src="data/content_plays.js"></script>
+<script src="data/weekly_longform.js"></script>
 <script>
 const SERVICE_LINES = ["Storm / CAT Damage","Underwriting Inspection","Contents","Engineering","Commercial","Residential","4-Point Inspection","Ladder Assist","Loss Control","DI / UDI Inspections"];
 const TABS = [["radar","Industry Radar"],["storm","Storm Watch"],["events","Events"],["calendar","Our Marketing Calendar"],["social","Social Pulse"],["content","Content"],["reviews","Reviews"],["library","Content Library"],["share","Customize & Share"]];
