@@ -6,9 +6,13 @@ Runs the live scan layer for the approved Hancock Marketing Studio without
 rewriting the Studio design.
 
 Outputs:
-  data/latest_bot.json  - readable archive
-  data/latest_bot.js    - loaded by Hancock_Marketing_Studio.html
+  data/latest_bot.json  - readable archive, read by Chad's briefings
   data/bot_YYYY-MM-DD.json
+
+NOTE: this bot no longer writes data/latest_bot.js. That file (loaded by
+Hancock_Marketing_Studio.html's Industry Radar tab) is owned by the Scout
+/refresh-radar workflow and git-deployed. Writing it here caused the two
+systems to silently overwrite each other's content. See CLAUDE.md.
 
 Optional AI drafting:
   Set ANTHROPIC_API_KEY in the environment, or place it in anthropic_key.txt.
@@ -352,9 +356,9 @@ def write_outputs(payload):
         json.dump(payload, f, ensure_ascii=False, indent=2)
     with open(os.path.join(DATA_DIR, f"bot_{today}.json"), "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    js = "window.HANCOCK_BOT_DATA = " + json.dumps(payload, ensure_ascii=False) + ";\n"
-    with open(LATEST_JS, "w", encoding="utf-8") as f:
-        f.write(js)
+    # latest_bot.js (the Studio's Industry Radar tab) is now owned by the
+    # Scout /refresh-radar workflow and git-deployed -- this bot no longer
+    # writes it, so the two stop overwriting each other. See CLAUDE.md.
 
 
 def main():
