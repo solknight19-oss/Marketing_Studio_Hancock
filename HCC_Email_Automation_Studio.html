@@ -590,7 +590,7 @@ let DESK_FILTER="all";
 const STATE={key:''};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const TODAY=new Date().toISOString().slice(0,10);
+const TODAY=(d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date());
 function goPath(path){
   if(location.protocol==='file:'){alert('This link works when the Studio is opened through the live Hancock app.');return;}
   location.href=path;
