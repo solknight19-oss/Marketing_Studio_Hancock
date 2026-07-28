@@ -220,7 +220,7 @@
       q("eventsAgenda").innerHTML=items.map(item=>{
         const start=this.dateOnly(item.start_date),end=this.dateOnly(item.end_date||item.start_date);
         const span=end&&end!==start?`${start} to ${end}`:start;
-        return `<div class="eventsAgendaItem ${this.categoryClass(item)}"><span class="badge">${escapeHtml(item.category||"Team Event")}</span><h3>${escapeHtml(item.title)}</h3><p class="muted">${escapeHtml(span)}${item.location?" · "+escapeHtml(item.location):""}</p>${item.description?`<p>${escapeHtml(item.description)}</p>`:""}<button class="mini" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">Edit</button></div>`;
+        return `<div class="eventsAgendaItem ${this.categoryClass(item)}"><span class="badge">${escapeHtml(item.category||"Team Event")}</span><h3>${escapeHtml(item.title)}</h3><p class="muted">${escapeHtml(span)}${item.location?" · "+escapeHtml(item.location):""}</p>${item.description?`<p>${escapeHtml(item.description)}</p>`:""}<button class="mini" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">Edit</button><button class="mini danger" onclick="HancockEvents.removeById('${escapeHtml(item.id)}')">Delete</button></div>`;
       }).join("")||'<div class="panel empty"><h3>No events this month</h3><p>Add the next industry conference, outing, or team date.</p></div>';
     },
     setMonth(year,month){
@@ -245,6 +245,11 @@
       q("eventCategory").value="Team Event";
       q("eventFormHeading").textContent="Event Details";
       q("eventSaveStatus").textContent="";
+      if(q("eventRemoveBtn"))q("eventRemoveBtn").style.display="none";
+    },
+    back(){
+      this.clear();
+      q("eventsForm").classList.remove("open");
     },
     newEvent(){
       this.clear();
@@ -262,6 +267,7 @@
       Object.entries(map).forEach(([key,value])=>{if(q(key))q(key).value=value});
       q("eventFormHeading").textContent="Edit Event";
       q("eventSaveStatus").textContent="";
+      if(q("eventRemoveBtn"))q("eventRemoveBtn").style.display="";
       q("eventsForm").scrollIntoView({behavior:"smooth",block:"start"});
     },
     payload(){
@@ -271,7 +277,7 @@
       try{
         await api("/api/team-event",this.payload());
         q("eventSaveStatus").textContent="Event saved to Team Events. Chad has the updated event context.";
-        this.clear();
+        this.back();
         await load();
         showTab("events");
       }catch(error){
@@ -281,13 +287,27 @@
     async remove(){
       const id=q("eventId").value;
       if(!id){q("eventSaveStatus").textContent="Choose an event first.";return}
+      const item=this.eventItems().find(event=>String(event.id)===String(id));
+      if(!confirm(`Delete "${item?item.title:"this event"}" from Team Events? This cannot be undone.`))return;
       try{
         await api("/api/team-event-delete",{id});
-        this.clear();
+        this.back();
         await load();
         showTab("events");
       }catch(error){
         q("eventSaveStatus").textContent=error.message;
+      }
+    },
+    async removeById(id){
+      const item=this.eventItems().find(event=>String(event.id)===String(id));
+      if(!item)return;
+      if(!confirm(`Delete "${item.title}" from Team Events? This cannot be undone.`))return;
+      try{
+        await api("/api/team-event-delete",{id});
+        await load();
+        this.render();
+      }catch(error){
+        alert(error.message);
       }
     }
   };
@@ -417,7 +437,7 @@
     },
     rowHtml(item,today){
       const overdue=this.dateOnly(item.due_date)&&this.dateOnly(item.due_date)<today&&!["posted","archived"].includes(item.status);
-      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span><div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Edit</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}</div></div>`;
+      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span><div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Edit</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}<button class="mini danger" onclick="HancockCalendar.deleteEntry(${item.id})">Delete</button></div></div>`;
     },
     renderGrid(){
       const first=new Date(this.month.getFullYear(),this.month.getMonth(),1),start=new Date(first);
@@ -455,6 +475,7 @@
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=false);
       q("calFormHeading").textContent="Production Brief";q("calSaveStatus").textContent="";
       if(q("calRemoveBtn"))q("calRemoveBtn").style.display="none";
+      if(q("calDeleteBtn"))q("calDeleteBtn").style.display="none";
     },
     newEntry(){showTab("calendar");this.clear();q("calDue").value=this.isoDate(new Date());q("calFormHeading").textContent="New Production Brief";this.open();q("calTitle").focus()},
     edit(id){
@@ -468,6 +489,7 @@
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=chosen.includes(input.value));
       q("calFormHeading").textContent="Edit Production Brief";
       if(q("calRemoveBtn"))q("calRemoveBtn").style.display="";
+      if(q("calDeleteBtn"))q("calDeleteBtn").style.display="";
       q("calSaveStatus").textContent="";
       this.render();
       this.open();
@@ -496,6 +518,20 @@
     },
     async status(id,status){
       await api("/api/calendar-status",{id,status});await load();showTab("calendar");
+    },
+    async deleteEntry(id){
+      const entryId=id||q("calId").value;
+      if(!entryId){q("calSaveStatus").textContent="Open a saved item first.";return}
+      const item=(this.state&&this.state.calendar||[]).find(row=>String(row.id)===String(entryId));
+      if(!confirm(`Permanently delete "${item?item.title:"this production item"}" from Our Marketing Calendar? This cannot be undone.`))return;
+      try{
+        await api("/api/calendar-delete",{id:entryId});
+        this.back();
+        await load();
+        showTab("calendar");
+      }catch(error){
+        if(q("calSaveStatus"))q("calSaveStatus").textContent=error.message;else alert(error.message);
+      }
     },
     prefill(data){
       showTab("calendar");this.clear();
@@ -1022,6 +1058,64 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       stormDraft(t.name,t.regions||"",t.service_line||"Storm / CAT Damage",(t.action||"")+" "+(t.outlook||""));
     }
   };
+  window.HancockRadarWire={
+    data:null,
+    loading:false,
+    async load(force){
+      const body=q("liveWireBody"),stamp=q("liveWireStamp");
+      if(!body||this.loading)return;
+      this.loading=true;
+      if(force){this.data=null;body.innerHTML='<p class="muted">Pulling fresh headlines…</p>'}
+      try{
+        this.data=await api("/api/radar-feeds");
+      }catch(e){
+        this.data={ok:false,error:e.message,items:[]};
+      }
+      this.loading=false;
+      this.render();
+    },
+    render(){
+      const body=q("liveWireBody"),stamp=q("liveWireStamp");
+      if(!body)return;
+      const d=this.data;
+      if(!d){body.innerHTML='<p class="muted">Loading…</p>';return}
+      if(!d.ok||!(d.items||[]).length){
+        if(stamp)stamp.textContent="Feed unreachable right now — reported as unreachable, not as quiet.";
+        body.innerHTML='<p class="muted">The Claims Journal / Insurance Journal wire could not be reached from the server'+((d.broken&&d.broken.length)?' ('+escapeHtml(d.broken.join("; "))+')':'')+'. The Scout sweep below still works. Hit Refresh feed to retry.</p>';
+        return;
+      }
+      const focus=(typeof serviceFocus==="function")?serviceFocus():null;
+      let items=d.items;
+      let note="";
+      if(focus){
+        const matched=items.filter(it=>serviceMatches([it.title,it.summary,(it.categories||[]).join(" ")].join(" ")));
+        if(matched.length){items=matched;note=`${matched.length} headline${matched.length===1?"":"s"} matching ${focus.label}`}
+        else{note=`No current headline matches ${focus.label} — showing the full wire`}
+      }
+      if(stamp){
+        const when=d.fetchedAt?new Date(d.fetchedAt):null;
+        stamp.textContent=(note?note+" · ":"")+"Live from "+(d.sources||[]).join(" + ")+(when&&!isNaN(when)?" · pulled "+when.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"")+((d.broken&&d.broken.length)?" · PARTIAL: "+d.broken.join("; "):"");
+      }
+      body.innerHTML=items.slice(0,12).map((it,i)=>{
+        const idx=d.items.indexOf(it);
+        return `<div class="wireItem"><div><h4><span class="wireSource">${escapeHtml(it.source||"")}</span>${escapeHtml(it.title||"")}</h4><p class="muted" style="margin:2px 0">${escapeHtml((it.summary||"").slice(0,220))}${(it.summary||"").length>220?"…":""}</p><p class="muted" style="margin:2px 0">${escapeHtml(it.date||"")}</p></div><div class="wireBtns"><button class="mini" onclick="HancockRadarWire.draft(${idx})">Draft from this</button><button class="mini" onclick="window.open('${escapeHtml(it.url||"")}','_blank')">Read article</button></div></div>`;
+      }).join("");
+    },
+    draft(i){
+      const it=(this.data&&this.data.items||[])[i];
+      if(!it)return;
+      const focus=(typeof serviceFocus==="function")?serviceFocus():null;
+      const kws=focus?focus.keywords.slice(0,4).join(", "):"";
+      if(q("keywords"))q("keywords").value=kws||q("keywords").value;
+      if(focus&&focus.line&&q("contentLine"))q("contentLine").value=focus.line;
+      if(q("angle")){
+        q("angle").value=`The trade press is covering: "${it.title}" (${it.source}). Hancock's take connects this to the efficiencies we add for carrier accounts — fewer handoffs, files complete enough to act on without a re-touch, one partner across the property lifecycle. Verify the article's specifics before publishing; never repeat a figure the source doesn't state.`;
+        q("angle").dispatchEvent(new Event("input"));
+      }
+      showTab("content");
+      if(typeof showStage==="function")showStage("create");
+    }
+  };
   window.HancockLive={
     api,
     refresh:load,
@@ -1029,6 +1123,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     openChad:()=>window.ChadWidget&&window.ChadWidget.open()
   };
   load().then(function(){HancockStormBoard.scan()});
+  if(q("liveWireBody"))HancockRadarWire.load();
   setInterval(load,30000);
   if(q("socialList"))social.render();
 })();

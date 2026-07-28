@@ -71,6 +71,13 @@ QUERIES = [
     "property claims customer communication trends",
 ]
 
+# Trade-press feeds read directly (marketing team requirement 2026-07-28):
+# the Industry Radar's intel must come from the publications carrier people actually read.
+DIRECT_FEEDS = [
+    ("Claims Journal", "https://www.claimsjournal.com/rss/news/national/"),
+    ("Insurance Journal", "https://www.insurancejournal.com/rss/news/national/"),
+]
+
 STOP = set("""the a an and or of for to in on at by with from as is are be this that
 it its their they we our you your has have will can not but if so than then now new
 amid into over under out up down more most less least about after before during
@@ -242,9 +249,32 @@ def anthropic(system, prompt, key, max_tokens=900):
         return ""
 
 
+def fetch_direct_feed(url):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=20) as response:
+        return response.read()
+
+
 def build_stories():
     seen = set()
     raw = []
+    print("Reading the trade press directly (Claims Journal, Insurance Journal)...")
+    for source_name, feed_url in DIRECT_FEEDS:
+        try:
+            found = parse_items(fetch_direct_feed(feed_url))[:PER_QUERY * 2]
+            for item in found:
+                item["source"] = source_name
+            print(f"  - {source_name:48s} {len(found)}")
+        except Exception as exc:
+            print(f"  ! {source_name:48s} skipped ({exc})")
+            found = []
+        for item in found:
+            key = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:70]
+            if key in seen:
+                continue
+            seen.add(key)
+            raw.append(item)
+        time.sleep(0.25)
     print("Scanning industry sources through Google News RSS...")
     for query in QUERIES:
         try:

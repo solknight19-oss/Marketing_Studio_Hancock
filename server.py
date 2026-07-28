@@ -20,6 +20,7 @@ import time
 import urllib.parse
 import urllib.request
 import urllib.error
+import email.utils
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from pathlib import Path
@@ -1160,6 +1161,24 @@ def pulse_sweep_data():
         'suggestedTitles':suggested,
     }
 
+def radar_story_data():
+    """Read the Scout-vetted Industry Radar payload (data/latest_bot.js) so Chad can prompt on the
+    market data the Radar tab is actually showing. This file is hard-rule-checked before deploy."""
+    path=ROOT/'data'/'latest_bot.js'
+    try:
+        raw=path.read_text(encoding='utf-8')
+        body=raw.split('=',1)[1].strip().rstrip(';')
+        data=json.loads(body)
+    except Exception:
+        return None
+    stories=[s for s in (data.get('stories') or []) if s.get('title')]
+    if not stories: return None
+    return {
+        'generatedHuman':data.get('generatedHuman') or '',
+        'stories':stories,
+        'hot':[s for s in stories if (s.get('tag') or '').lower()=='hot'],
+    }
+
 NHC_CACHE={'at':0.0,'data':None}
 def nhc_current_storms():
     """Server-side relay for NHC CurrentStorms.json (not CORS-open for browsers). 15-min cache."""
@@ -1182,6 +1201,54 @@ def nhc_current_storms():
         payload={'ok':False,'error':str(e)[:200],'storms':[]}
     NHC_CACHE['at']=now
     NHC_CACHE['data']=payload
+    return payload
+
+RADAR_FEEDS=[
+    ('Claims Journal','https://www.claimsjournal.com/rss/news/national/'),
+    ('Insurance Journal','https://www.insurancejournal.com/rss/news/national/'),
+]
+RADAR_FEED_CACHE={'at':0.0,'data':None}
+def radar_feed_items():
+    """Server-side relay for the trade-press feeds the Industry Radar reads live.
+    Browsers cannot fetch these cross-origin, so the Studio calls /api/radar-feeds. 15-min cache."""
+    now=time.time()
+    if RADAR_FEED_CACHE['data'] is not None and now-RADAR_FEED_CACHE['at']<900:
+        return RADAR_FEED_CACHE['data']
+    items=[]
+    broken=[]
+    for source,url in RADAR_FEEDS:
+        try:
+            req=urllib.request.Request(url,headers={'User-Agent':'HancockMarketingStudio'})
+            with urllib.request.urlopen(req,timeout=12) as r:
+                raw=r.read().decode('utf-8','replace')
+            for block in re.findall(r'<item>(.*?)</item>',raw,re.S)[:15]:
+                def field(name):
+                    m=re.search(r'<'+name+r'>(.*?)</'+name+r'>',block,re.S)
+                    if not m: return ''
+                    value=m.group(1).strip()
+                    value=re.sub(r'^<!\[CDATA\[(.*)\]\]>$',r'\1',value,flags=re.S)
+                    return html.unescape(re.sub(r'<[^>]+>','',value)).strip()
+                title=field('title')
+                link=field('link')
+                if not title or not link: continue
+                pub=field('pubDate')
+                pub_iso=''
+                try:
+                    pub_iso=email.utils.parsedate_to_datetime(pub).isoformat()
+                except Exception:
+                    pass
+                summary=field('description')[:400]
+                cats=[re.sub(r'^<!\[CDATA\[(.*)\]\]>$',r'\1',c,flags=re.S).strip().lower()
+                      for c in re.findall(r'<category>(.*?)</category>',block,re.S)]
+                items.append({'source':source,'title':title,'url':link,'date':pub,'dateIso':pub_iso,
+                              'summary':summary,'categories':cats[:8]})
+        except Exception as e:
+            broken.append(f'{source}: {str(e)[:120]}')
+    items.sort(key=lambda x:x.get('dateIso') or '',reverse=True)
+    payload={'ok':bool(items),'fetchedAt':dt.datetime.now().isoformat(),
+             'sources':[s for s,_ in RADAR_FEEDS],'items':items,'broken':broken}
+    RADAR_FEED_CACHE['at']=now
+    RADAR_FEED_CACHE['data']=payload
     return payload
 
 def seasonal_triggers(today=None):
@@ -2245,6 +2312,21 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None, team_events
             'action_prompt':'show me the market signal and help me shape the Hancock angle',
             'ui_action':{'type':'tab','target':'radar'},
         })
+    radar_data=radar_story_data()
+    if radar_data:
+        story=pick(radar_data['hot'] or radar_data['stories'],17)
+        if story:
+            keywords=', '.join((story.get('keywords') or [])[:4])
+            candidates.append({
+                'theme':'radar_market',
+                'opening':'The Industry Radar pulled market data worth acting on.',
+                'headline':story.get('title') or 'A live market signal on the Radar',
+                'situation':f"From {story.get('source') or 'the trade press'}{(' ('+story.get('date')+')') if story.get('date') else ''}: {(story.get('summary') or '')[:280]}",
+                'proposal':f"The Hancock angle: {(story.get('angle') or 'connect it to documentation, communication, and file defensibility.')[:280]}{(' Working keywords: '+keywords+'.') if keywords else ''} Want me to walk you through it, or turn it straight into a draft?",
+                'action_label':'Open Industry Radar',
+                'action_prompt':'walk me through the strongest market signal on the Industry Radar and help me turn it into content',
+                'ui_action':{'type':'tab','target':'radar'},
+            })
     opportunity=pick(content_bot.get('recommendations') or [],23)
     if opportunity:
         candidates.append({
@@ -2494,6 +2576,11 @@ def bot_welcome(user, tasks, drafts, activity, calendar=None, team_events=None):
                 bits.append(f"a suggested post (“{pulse['suggestedTitles'][0]}”)")
             fresh=pulse['ageHours'] is not None and pulse['ageHours']<24
             parts.append(f"Also: Social Pulse is holding {' and '.join(bits)}{' from the latest sweep' if fresh else ' — the sweep is getting stale, worth refreshing'}.")
+    if briefing.get('theme') not in ('radar_market','market'):
+        radar_data=radar_story_data()
+        if radar_data:
+            top=(radar_data['hot'] or radar_data['stories'])[0]
+            parts.append(f"On the market side, the Industry Radar is tracking “{top.get('title')}” ({top.get('source') or 'trade press'}) — ask me about it and I will connect it to a content play.")
     return ' '.join(parts)
 def prepare_recommended_draft(user):
     state=collect_state()
@@ -3398,6 +3485,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.current_user()
             if not user: self.send_json({'ok':False,'error':'Login required','storms':[]},401); return
             self.send_json(nhc_current_storms()); return
+        if path=='/api/radar-feeds':
+            user=self.current_user()
+            if not user: self.send_json({'ok':False,'error':'Login required','items':[]},401); return
+            self.send_json(radar_feed_items()); return
         if path=='/api/state':
             user=self.require_user();
             if user:
@@ -3448,6 +3539,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/team-event-delete': self.api_delete_team_event(user); return
         if path=='/api/calendar': self.api_save_calendar(user); return
         if path=='/api/calendar-status': self.api_calendar_status(user); return
+        if path=='/api/calendar-delete': self.api_calendar_delete(user); return
         if path=='/api/chad-update': self.api_save_chad_update(user); return
         if path=='/api/chad-update-comment': self.api_chad_update_comment(user); return
         if path=='/api/chad-update-task': self.api_chad_update_task(user); return
@@ -3796,6 +3888,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         )
         con.commit(); con.close()
         log_action(user['id'],'moved calendar item to '+status,entry['title'])
+        self.send_json({'ok':True})
+    def api_calendar_delete(self,user):
+        data=self.read_body()
+        entry_id=str(data.get('id') or '').strip()
+        if not entry_id.isdigit():
+            self.send_json({'error':'Choose a calendar item to delete.'},400); return
+        con=db()
+        entry=con.execute('select id,title from content_calendar where id=?',(int(entry_id),)).fetchone()
+        if not entry:
+            con.close(); self.send_json({'error':'Calendar entry not found.'},404); return
+        con.execute('delete from content_calendar where id=?',(int(entry_id),))
+        con.commit(); con.close()
+        log_action(user['id'],'deleted calendar production item',entry['title'])
         self.send_json({'ok':True})
     def api_save_chad_update(self,user):
         data=self.read_body()
