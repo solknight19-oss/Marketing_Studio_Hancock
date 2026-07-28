@@ -891,21 +891,6 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     refresh:renderLongform
   };
   renderLongform();
-  async function loadNhc(){
-    const el=q("nhcLine");if(!el)return;
-    try{
-      const r=await fetch("/api/nhc");
-      if(!r.ok)throw new Error("HTTP "+r.status);
-      const d=await r.json();
-      if(!d.ok)throw new Error(d.error||"NHC fetch failed");
-      el.innerHTML=d.storms.length
-        ?`<b>Tropical (NHC):</b> ${d.storms.map(s=>escapeHtml([s.classification,s.name].filter(Boolean).join(" "))).join(", ")} — active now.`
-        :`<b>Tropical (NHC):</b> no active named systems — quiet basin confirmed by a second source.`;
-    }catch(e){
-      el.textContent="Tropical (NHC): relay unreachable — reported as unreachable, not as quiet.";
-    }
-  }
-  loadNhc();
   const SPC_RISK_ORDER={TSTM:1,MRGL:2,SLGT:3,ENH:4,MDT:5,HIGH:6};
   const SPC_RISK_NAMES={TSTM:"General thunderstorms",MRGL:"Marginal risk",SLGT:"Slight risk",ENH:"Enhanced risk",MDT:"Moderate risk",HIGH:"High risk"};
   const SPC_STATE_POINTS={GA:[-83.4,32.6],FL:[-81.5,28.6],TX:[-99.3,31.5],OK:[-97.5,35.6],KY:[-85.3,37.5],TN:[-86.3,35.9],NC:[-79.4,35.6],SC:[-80.9,33.9],AL:[-86.8,32.8],LA:[-92.0,31.0],MS:[-89.7,32.7],AR:[-92.4,34.9],MO:[-92.5,38.4],IN:[-86.3,39.9],OH:[-82.8,40.3],IL:[-89.2,40.0],KS:[-98.4,38.5],NE:[-99.8,41.5],IA:[-93.5,42.0],CO:[-105.5,39.0]};
@@ -922,48 +907,128 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     for(let i=1;i<poly.length;i++){if(spcPointInRing(pt,poly[i]))return false}
     return true;
   }
-  async function loadSpcOutlook(){
-    const stamp=q("spcStamp"),out=q("spcOut");
-    if(!out)return;
-    const files=[["Today","day1otlk_cat.lyr.geojson"],["Tomorrow","day2otlk_cat.lyr.geojson"],["Day 3","day3otlk_cat.lyr.geojson"]];
-    try{
-      const days=await Promise.all(files.map(([,f])=>fetch("https://www.spc.noaa.gov/products/outlook/"+f).then(r=>{if(!r.ok)throw new Error(f+" "+r.status);return r.json()})));
-      const rows=days.map((gj,idx)=>{
-        const stateRisk={};
-        (gj.features||[]).forEach(f=>{
-          const label=(f.properties||{}).LABEL;const rank=SPC_RISK_ORDER[label]||0;
-          if(!rank||!f.geometry)return;
-          const g=f.geometry;
-          const polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
-          Object.entries(SPC_STATE_POINTS).forEach(([st,pt])=>{
-            if(polys.some(p=>spcPointInPolygon(pt,p))){
-              if(!stateRisk[st]||SPC_RISK_ORDER[stateRisk[st]]<rank)stateRisk[st]=label;
-            }
-          });
-        });
-        const severe=Object.entries(stateRisk).filter(([,l])=>SPC_RISK_ORDER[l]>=2).sort((a,b)=>SPC_RISK_ORDER[b[1]]-SPC_RISK_ORDER[a[1]]);
-        const top=severe.length?SPC_RISK_NAMES[severe[0][1]]:null;
-        return {day:files[idx][0],severe,top};
+  function spcStatesHit(features,rankOf){
+    const stateRisk={};
+    (features||[]).forEach(f=>{
+      const rank=rankOf(f.properties||{});
+      if(!rank.score||!f.geometry)return;
+      const g=f.geometry;
+      const polys=g.type==="Polygon"?[g.coordinates]:g.type==="MultiPolygon"?g.coordinates:[];
+      Object.entries(SPC_STATE_POINTS).forEach(([st,pt])=>{
+        if(polys.some(p=>spcPointInPolygon(pt,p))){
+          if(!stateRisk[st]||stateRisk[st].score<rank.score)stateRisk[st]=rank;
+        }
       });
-      out.innerHTML=rows.map(r=>{
-        if(!r.severe.length)return `<p style="margin:6px 0"><b>${r.day}:</b> <span class="muted">no severe-storm risk in watched states — pre-loss content window.</span></p>`;
-        const states=r.severe.map(([st,l])=>st+(SPC_RISK_ORDER[l]>=3?" ("+SPC_RISK_NAMES[l].split(" ")[0]+")":"")).join(", ");
-        return `<p style="margin:6px 0"><b>${r.day}:</b> ${escapeHtml(r.top)} — ${escapeHtml(states)}. Content lead time: get readiness material out before the storm.</p>`;
-      }).join("");
-      if(stamp)stamp.textContent="Live from the Storm Prediction Center · updated "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+" · state list is approximate (state-center test) — click through to spc.noaa.gov before acting on boundaries.";
-    }catch(e){
-      if(stamp)stamp.textContent="SPC outlook unreachable right now — reported as unreachable, not as quiet. The live NOAA alerts below are unaffected.";
-      out.innerHTML="";
-    }
+    });
+    return stateRisk;
   }
+  async function hzSpcDays13(){
+    const files=[["Today","day1otlk_cat.lyr.geojson"],["Tomorrow","day2otlk_cat.lyr.geojson"],["Day 3","day3otlk_cat.lyr.geojson"]];
+    const days=await Promise.all(files.map(([,f])=>fetch("https://www.spc.noaa.gov/products/outlook/"+f).then(r=>{if(!r.ok)throw new Error(f+" "+r.status);return r.json()})));
+    return days.map((gj,idx)=>{
+      const hit=spcStatesHit(gj.features,p=>({score:SPC_RISK_ORDER[p.LABEL]||0,label:p.LABEL}));
+      const severe=Object.entries(hit).filter(([,r])=>r.score>=2).sort((a,b)=>b[1].score-a[1].score);
+      return {day:files[idx][0],severe,top:severe.length?SPC_RISK_NAMES[severe[0][1].label]:null};
+    });
+  }
+  async function hzSpcDays48(){
+    const nums=[4,5,6,7,8];
+    const days=await Promise.all(nums.map(n=>fetch("https://www.spc.noaa.gov/products/exper/day4-8/day"+n+"prob.lyr.geojson").then(r=>{if(!r.ok)throw new Error("day"+n+" "+r.status);return r.json()})));
+    return days.map((gj,idx)=>{
+      const valid=((gj.features||[])[0]||{}).properties||{};
+      let dayName="Day "+nums[idx];
+      if(valid.VALID_ISO){const d=new Date(valid.VALID_ISO);if(!isNaN(d))dayName=d.toLocaleDateString([],{weekday:"short",month:"numeric",day:"numeric"})}
+      const hit=spcStatesHit(gj.features,p=>({score:p.DN>0?p.DN:0,label:p.LABEL||(p.DN+"%")}));
+      const hits=Object.entries(hit).sort((a,b)=>b[1].score-a[1].score);
+      return {day:dayName,hits};
+    });
+  }
+  window.HancockStormBoard={
+    scanning:false,
+    async scan(){
+      if(this.scanning)return;this.scanning=true;
+      const stamp=q("hzStamp"),up=q("hzUpBody"),pot=q("hzPotBody"),wk=q("hzWeekBody"),sea=q("hzSeasonBody");
+      const broken=[];
+      if(stamp)stamp.textContent="Scanning NWS alerts, SPC outlooks, and NHC tropical…";
+      // Upcoming: live alerts + SPC Days 1-3
+      let alerts=[],spc13=null;
+      try{if(typeof checkSkies==="function"){await checkSkies();alerts=window.HANCOCK_STORM_ALERTS||[]}}catch(e){broken.push("NWS alerts")}
+      try{spc13=await hzSpcDays13()}catch(e){broken.push("SPC Days 1–3")}
+      if(up){
+        const alertLine=alerts.length
+          ?`<p style="margin:0 0 6px"><b>${alerts.length} active claim-relevant alert${alerts.length===1?"":"s"}</b> — ${alerts.slice(0,3).map(a=>escapeHtml((a.event||"Alert")+" ("+(a._state||"")+")")).join(", ")}${alerts.length>3?", …":""}. Full cards below.</p>`
+          :`<p class="muted" style="margin:0 0 6px">No active hail, wind, tornado, hurricane, or severe-thunderstorm alerts in watched states.</p>`;
+        const spcHtml=spc13
+          ?spc13.map(r=>r.severe.length
+            ?`<p style="margin:6px 0"><b>${r.day}:</b> ${escapeHtml(r.top)} — ${escapeHtml(r.severe.map(([st,x])=>st+(x.score>=3?" ("+SPC_RISK_NAMES[x.label].split(" ")[0]+")":"")).join(", "))}</p>`
+            :`<p style="margin:6px 0"><b>${r.day}:</b> <span class="muted">no severe risk in watched states</span></p>`).join("")
+          :'<p class="muted" style="margin:6px 0">SPC Days 1–3 unreachable — reported as unreachable, not as quiet.</p>';
+        up.innerHTML=alertLine+spcHtml;
+      }
+      // Potential: SPC Days 4-8 + NHC tropical
+      let spc48=null,nhc=null;
+      try{spc48=await hzSpcDays48()}catch(e){broken.push("SPC Days 4–8")}
+      try{const r=await fetch("/api/nhc");if(!r.ok)throw new Error("HTTP "+r.status);const d=await r.json();if(!d.ok)throw new Error(d.error||"NHC failed");nhc=d.storms||[]}catch(e){broken.push("NHC tropical relay")}
+      if(pot){
+        let html="";
+        if(spc48){
+          const risky=spc48.filter(r=>r.hits.length);
+          html+=risky.length
+            ?risky.map(r=>`<p style="margin:6px 0"><b>${escapeHtml(r.day)}:</b> severe-weather signal — ${escapeHtml(r.hits.map(([st,x])=>st+" ("+x.label+")").join(", "))}</p>`).join("")
+            :'<p class="muted" style="margin:6px 0">SPC Days 4–8: no probability areas over watched states — predictability too low or quiet pattern.</p>';
+        }else{html+='<p class="muted" style="margin:6px 0">SPC Days 4–8 unreachable — reported as unreachable, not as quiet.</p>'}
+        if(nhc!==null){
+          html+=nhc.length
+            ?`<p style="margin:6px 0"><b>Tropical (NHC):</b> ${nhc.map(s=>escapeHtml([s.classification,s.name].filter(Boolean).join(" "))).join(", ")} — active now. Watch track guidance before market-specific content.</p>`
+            :'<p class="muted" style="margin:6px 0"><b>Tropical (NHC):</b> no active named systems — quiet basin confirmed by a second source.</p>';
+        }else{html+='<p class="muted" style="margin:6px 0">Tropical (NHC): relay unreachable — reported as unreachable, not as quiet.</p>'}
+        pot.innerHTML=html;
+      }
+      // This Week: synthesis of everything through Day 8
+      if(wk){
+        const perState={};
+        (spc13||[]).forEach(r=>r.severe.forEach(([st,x])=>{if(!perState[st]||perState[st].score<x.score+10)perState[st]={score:x.score+10,when:r.day,what:SPC_RISK_NAMES[x.label]}}));
+        (spc48||[]).forEach(r=>r.hits.forEach(([st,x])=>{if(!perState[st])perState[st]={score:x.score/10,when:r.day,what:"extended signal "+x.label}}));
+        const ranked=Object.entries(perState).sort((a,b)=>b[1].score-a[1].score);
+        const feedsOk=spc13!==null||spc48!==null;
+        if(!feedsOk){wk.innerHTML='<p class="muted">Both SPC feeds unreachable — no week read available. Not reported as quiet.</p>'}
+        else if(!ranked.length&&!alerts.length&&!(nhc&&nhc.length)){
+          wk.innerHTML='<p><b>Quiet week in the watched states through Day 8.</b></p><p class="muted">This is the pre-loss window: roof condition baselines, underwriting inspections, readiness checklists, and photo documentation standards. That content ranks before the storm, not after.</p>';
+        }else{
+          let html=ranked.length?`<p style="margin:0 0 6px"><b>Storm-signal states this week:</b> ${escapeHtml(ranked.slice(0,8).map(([st,x])=>st+" ("+x.when+" — "+x.what+")").join("; "))}.</p>`:"";
+          if(alerts.length)html+=`<p style="margin:6px 0">Active alerts are running now — post-storm documentation content is in play where they verify.</p>`;
+          if(nhc&&nhc.length)html+=`<p style="margin:6px 0">Tropical activity is live — hurricane-readiness content has a working news hook this week.</p>`;
+          html+=`<p class="muted" style="margin:6px 0">Publish readiness content for signal states before impact; switch to documentation guidance after.</p>`;
+          wk.innerHTML=html;
+        }
+      }
+      // This Season: server-side seasonal operating windows
+      if(sea){
+        const trig=(state&&state.seasonalTriggers)||null;
+        if(!trig){sea.innerHTML='<p class="muted">Seasonal feed needs the signed-in workspace connection — unavailable right now, reported as unavailable.</p>'}
+        else{
+          const act=trig.filter(t=>t.phase&&t.phase!=="upcoming").sort((a,b)=>(b.urgency||0)-(a.urgency||0));
+          window.HANCOCK_SEASONAL=act;
+          sea.innerHTML=act.length
+            ?act.slice(0,3).map((t,i)=>`<p style="margin:${i?"8px":"0"} 0 2px"><b>${escapeHtml(t.name)}</b> <span class="badge ${t.phase==="peak"?"hot":"live"}" style="margin:0 0 0 4px">${escapeHtml(t.phase)}</span></p><p class="muted" style="margin:0 0 4px">${escapeHtml(t.action||"")} ${escapeHtml((t.outlook||"").slice(0,180))}</p><button class="mini" onclick="HancockStormBoard.draftSeason(${i})">Draft seasonal post</button>`).join("")
+            :'<p class="muted">No seasonal operating window is active or in prep right now.</p>';
+        }
+      }
+      if(stamp)stamp.textContent="Scanned "+new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})+" · NWS + SPC + NHC + seasonal triggers · state lists are approximate (state-center test) — verify boundaries at spc.noaa.gov before acting."+(broken.length?" · FEED ISSUES: "+broken.join(", ")+" did not load.":"");
+      this.scanning=false;
+    },
+    draftSeason(i){
+      const t=(window.HANCOCK_SEASONAL||[])[i];if(!t)return;
+      stormDraft(t.name,t.regions||"",t.service_line||"Storm / CAT Damage",(t.action||"")+" "+(t.outlook||""));
+    }
+  };
   window.HancockLive={
     api,
     refresh:load,
     runBots,
     openChad:()=>window.ChadWidget&&window.ChadWidget.open()
   };
-  loadSpcOutlook();
-  load();
+  load().then(function(){HancockStormBoard.scan()});
   setInterval(load,30000);
   if(q("socialList"))social.render();
 })();
