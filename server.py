@@ -1660,6 +1660,17 @@ def dave_priority_key(value):
 def dave_time_label(value):
     return human_time(value) if value else ''
 
+def live_carrier_batch():
+    """Carrier batch CSV for the login-gated Email Automation desk.
+    This repo is public, so the data lives ONLY in a Render secret file
+    (or env var) — it must never be committed here."""
+    p=Path('/etc/secrets/carrier_batch.csv')
+    try:
+        if p.exists(): return p.read_text(encoding='utf-8').strip()
+    except Exception:
+        pass
+    return os.environ.get('CARRIER_BATCH_CSV','').strip()
+
 def email_automation_status():
     studio_file=ROOT/'HCC_Email_Automation_Studio.html'
     today=dt.date.today()
@@ -3526,7 +3537,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.current_user()
             if not user: self.redirect('/login?next=/email-automation'); return
             if user.get('password_reset_required'): self.redirect('/change-password'); return
-            p=ROOT/'HCC_Email_Automation_Studio.html'; self.send_html(p.read_text(encoding='utf-8') if p.exists() else '<h1>Email Automation Studio not found</h1>', 200 if p.exists() else 404); return
+            p=ROOT/'HCC_Email_Automation_Studio.html'
+            if not p.exists(): self.send_html('<h1>Email Automation Studio not found</h1>',404); return
+            page=p.read_text(encoding='utf-8')
+            batch=live_carrier_batch()
+            if batch:
+                inject='<script>window.HCC_LIVE_BATCH='+json.dumps(batch)+';try{initLiveBatch()}catch(e){console.error(e)}</script>'
+                page=page.replace('</body>', inject+'\n</body>', 1)
+            self.send_html(page); return
         if path=='/graphics':
             user=self.current_user()
             if not user: self.redirect('/login'); return

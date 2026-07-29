@@ -986,6 +986,35 @@ function exportActivationPlan(){
 
 /* ===================== INIT ===================== */
 renderDesk();renderSequences();renderTemplates();initCheckInputs();renderCrossSell();renderMetrics();renderRules();renderActivation();
+
+/* ===================== LIVE BATCH (Pete's desk) =====================
+   Data arrives only via server-side injection on /email-automation
+   (Render secret file). Nothing here runs on the static/offline copy. */
+function initLiveBatch(){
+  if(!window.HCC_LIVE_BATCH || document.getElementById('peteDesk')) return;
+  $('bCsv').value=window.HCC_LIVE_BATCH;
+  const batchCard=document.querySelector('#checkBatch .card');
+  if(batchCard){
+    const hint=document.createElement('div');
+    hint.className='mergehint';
+    hint.style.marginBottom='8px';
+    hint.textContent='Live carrier list loaded from the server (private data — held out of the public repo). Review, then Run list.';
+    batchCard.insertBefore(hint,batchCard.children[1]);
+  }
+  try{
+    setCheckMode('batch');runBatch();
+    const fired=BATCH_RESULTS.filter(r=>r.triggers!=='none'&&!r.triggers.startsWith('SUPPRESSED'));
+    const supp=BATCH_RESULTS.filter(r=>r.triggers.startsWith('SUPPRESSED'));
+    const desk=document.createElement('div');
+    desk.className='card';desk.id='peteDesk';desk.style.marginBottom='12px';
+    desk.innerHTML='<h2>Pete &mdash; Carrier Desk</h2>'
+      +'<p class="sub"><b>'+BATCH_RESULTS.length+' accounts</b> on the live list &middot; <b>'+fired.length+' trigger today</b> &middot; '+supp.length+' suppressed (contract negotiation stays quiet)</p>'
+      +(supp.length?'<p class="sub">Held: '+supp.map(r=>esc(r.carrier)).join(', ')+'</p>':'')
+      +'<p class="sub">Prepare-and-export only. Every send requires AVP approval before it leaves the building.</p>';
+    const check=document.getElementById('check');
+    check.insertBefore(desk,check.firstChild);
+  }catch(e){console.error('live batch init',e);}
+}
 </script>
 </body>
 </html>
