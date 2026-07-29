@@ -1096,9 +1096,9 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
         const when=d.fetchedAt?new Date(d.fetchedAt):null;
         stamp.textContent=(note?note+" · ":"")+"Live from "+(d.sources||[]).join(" + ")+(when&&!isNaN(when)?" · pulled "+when.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"")+((d.broken&&d.broken.length)?" · PARTIAL: "+d.broken.join("; "):"");
       }
-      body.innerHTML=items.slice(0,12).map((it,i)=>{
+      body.innerHTML=items.slice(0,20).map((it,i)=>{
         const idx=d.items.indexOf(it);
-        return `<div class="wireItem"><div><h4><span class="wireSource">${escapeHtml(it.source||"")}</span>${escapeHtml(it.title||"")}</h4><p class="muted" style="margin:2px 0">${escapeHtml((it.summary||"").slice(0,220))}${(it.summary||"").length>220?"…":""}</p><p class="muted" style="margin:2px 0">${escapeHtml(it.date||"")}</p></div><div class="wireBtns"><button class="mini" onclick="HancockRadarWire.draft(${idx})">Draft from this</button><button class="mini" onclick="window.open('${escapeHtml(it.url||"")}','_blank')">Read article</button></div></div>`;
+        return `<details class="wireItem"><summary><span class="wireSource">${escapeHtml(it.source||"")}</span><span class="wireTitle">${escapeHtml(it.title||"")}</span><span class="wireCaret" aria-hidden="true">▾</span></summary><div class="wireBody"><p class="muted" style="margin:6px 0 2px">${escapeHtml(it.summary||"")}</p><p class="muted" style="margin:2px 0 8px">${escapeHtml(it.date||"")}</p><div class="wireBtns"><button class="mini" onclick="HancockRadarWire.draft(${idx})">Draft from this</button><button class="mini" onclick="window.open('${escapeHtml(it.url||"")}','_blank')">Read full article</button></div></div></details>`;
       }).join("");
     },
     draft(i){

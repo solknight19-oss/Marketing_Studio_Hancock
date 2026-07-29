@@ -19,7 +19,7 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 .pipeBar{display:flex;align-items:center;gap:10px;margin:18px 0 14px;flex-wrap:wrap}.pipeStep{display:flex;align-items:center;gap:10px;border:1px solid var(--border);background:#fff;border-radius:14px;padding:10px 16px;color:var(--sub);text-align:left}.pipeStep b{display:block;font-size:14px;color:inherit;line-height:1.2}.pipeStep small{display:block;font-weight:600;font-size:11px;color:var(--faint)}.pipeStep.active{border-color:var(--navy);color:var(--navy);box-shadow:0 8px 22px rgba(21,36,60,.12)}.pipeNum{flex:0 0 26px;width:26px;height:26px;border-radius:99px;background:#eef5ff;color:var(--navy);font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center}.pipeStep.active .pipeNum{background:var(--navy);color:#fff}.pipeStep.done .pipeNum{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#112b50}.pipeLine{flex:1 0 24px;height:2px;background:linear-gradient(90deg,var(--border),#c9d7ea)}.stage{display:none}.stage.active{display:block}.pipeContext{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 14px;padding:4px 18px 18px;margin-bottom:16px}.pipeContext label{margin-top:13px}
 @media(max-width:900px){.layout,.hero{grid-template-columns:1fr}.heroActions{justify-content:flex-start}.top{padding-left:16px;padding-right:16px}.tabs{margin-left:12px;margin-right:12px}main{padding:20px 14px}.api{width:100%}.rightTools{justify-content:flex-start;width:100%}.pipeContext{grid-template-columns:1fr 1fr}.pipeLine{display:none}}
 </style>
-<link rel="stylesheet" href="studio-live.css?v=20260728b">
+<link rel="stylesheet" href="studio-live.css?v=20260728d">
 </head>
 <body>
 <header class="header">
@@ -352,6 +352,6 @@ if(TABS.some(function(tab){return tab[0]===initialTab})){showTab(initialTab)}
 </script>
 <script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);window.CHAD_CONFIG={apiBase:"",briefingKey:window.CHAD_BRIEFING_KEY,holdBriefingNavigation:true};</script>
 <script src="chad-widget.js"></script>
-<script src="studio-live.js?v=20260728c"></script>
+<script src="studio-live.js?v=20260728d"></script>
 </body>
 </html>
