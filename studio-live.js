@@ -1116,6 +1116,33 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       if(typeof showStage==="function")showStage("create");
     }
   };
+  window.HancockKeywordData={
+    hosts:{plan:"kwDataPlan",optimize:"kwDataOptimize"},
+    async pull(which){
+      const host=q(this.hosts[which]);if(!host)return;
+      const raw=which==="optimize"
+        ?(q("seoKw")&&q("seoKw").value.trim())||(q("keywords")&&q("keywords").value)||""
+        :(q("keywords")&&q("keywords").value)||"";
+      const keywords=raw.split(",").map(k=>k.trim()).filter(Boolean);
+      if(!keywords.length){host.innerHTML='<p class="muted" style="margin-top:10px">Add campaign keywords first — pick a service tab or type them above.</p>';return}
+      host.innerHTML='<p class="muted" style="margin-top:10px">Pulling live keyword data…</p>';
+      let d;
+      try{d=await api("/api/keyword-data",{keywords,seed:keywords[0]})}
+      catch(e){host.innerHTML='<p class="muted" style="margin-top:10px">Keyword data pull failed: '+escapeHtml(e.message)+'</p>';return}
+      if(d.error==="not_connected"){
+        host.innerHTML='<div class="notice warn" style="margin-top:10px"><b>DataForSEO is not connected yet.</b><br>'+escapeHtml(d.message||"")+'</div>';
+        return;
+      }
+      if(!d.ok){host.innerHTML='<p class="muted" style="margin-top:10px">'+escapeHtml(d.message||"Keyword data unavailable — reported as unavailable, not guessed.")+'</p>';return}
+      const fmt=n=>n==null?"—":Number(n).toLocaleString();
+      const rows=(d.volumes||[]).map(v=>`<tr><td>${escapeHtml(v.keyword||"")}</td><td>${fmt(v.searchVolume)}</td><td>${escapeHtml(String(v.competition==null?"—":v.competition))}</td><td>${v.cpc==null?"—":"$"+Number(v.cpc).toFixed(2)}</td></tr>`).join("");
+      const sugg=(d.suggestions||[]).filter(s=>s.keyword).map(s=>`<button class="chip" title="${fmt(s.searchVolume)} searches/mo" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}</button>`).join("");
+      host.innerHTML=`<div style="margin-top:10px"><p style="margin:0 0 6px"><b>Live keyword data</b> <span class="muted">— ${escapeHtml(d.source||"DataForSEO")}, US, monthly searches. Real numbers, not model guesses.</span></p>
+        ${rows?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px 8px 4px 0">Keyword</th><th style="text-align:left;padding:4px 8px 4px 0">Searches/mo</th><th style="text-align:left;padding:4px 8px 4px 0">Competition</th><th style="text-align:left;padding:4px 8px 4px 0">CPC</th></tr>${rows}</table></div>`:""}
+        ${sugg?`<p style="margin:10px 0 4px"><b>Related keywords people actually search</b> <span class="muted">— click to add</span></p><div class="chips">${sugg}</div>`:""}
+        ${(d.broken&&d.broken.length)?`<p class="muted" style="margin-top:8px">Partial pull: ${escapeHtml(d.broken.join("; "))}</p>`:""}</div>`;
+    }
+  };
   window.HancockLive={
     api,
     refresh:load,

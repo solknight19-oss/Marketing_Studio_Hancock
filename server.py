@@ -1203,6 +1203,73 @@ def nhc_current_storms():
     NHC_CACHE['data']=payload
     return payload
 
+DATAFORSEO_AUTH=(os.environ.get('DATAFORSEO_AUTH') or local_secret(ROOT/'dataforseo_key.txt', ROOT.parent/'Hancock_CoPilot'/'dataforseo_key.txt')).strip()
+DATAFORSEO_CACHE={}
+def dataforseo_request(path,payload):
+    # Accepts either "login:password" or an already-base64-encoded token
+    # (so the same value works in the key file and the Render env var).
+    if ':' in DATAFORSEO_AUTH:
+        token=base64.b64encode(DATAFORSEO_AUTH.encode('utf-8')).decode('ascii')
+    else:
+        token=DATAFORSEO_AUTH
+    req=urllib.request.Request(
+        'https://api.dataforseo.com'+path,
+        data=json.dumps(payload).encode('utf-8'),
+        headers={'Content-Type':'application/json','Authorization':'Basic '+token},
+    )
+    with urllib.request.urlopen(req,timeout=25) as r:
+        return json.loads(r.read().decode('utf-8'))
+def keyword_data(keywords,seed=''):
+    """Live SEO keyword data through DataForSEO (search volume + suggestions).
+    Returns not_connected until the account credentials exist — never fabricates numbers."""
+    if not DATAFORSEO_AUTH:
+        return {'ok':False,'error':'not_connected',
+                'message':'DataForSEO is not connected yet. Run "Connect DataForSEO.command" after creating the account, or set the DATAFORSEO_AUTH environment variable on Render.'}
+    keywords=[str(k).strip().lower() for k in (keywords or []) if str(k).strip()][:20]
+    if not keywords:
+        return {'ok':False,'error':'no_keywords','message':'Send at least one keyword.'}
+    cache_key=hashlib.sha256(('|'.join(sorted(keywords))+'||'+seed).encode('utf-8')).hexdigest()
+    hit=DATAFORSEO_CACHE.get(cache_key)
+    if hit and time.time()-hit['at']<86400:
+        return hit['data']
+    result={'ok':True,'fetchedAt':dt.datetime.now().isoformat(),'source':'DataForSEO','volumes':[],'suggestions':[],'broken':[]}
+    try:
+        data=dataforseo_request('/v3/keywords_data/google_ads/search_volume/live',
+            [{'keywords':keywords,'location_code':2840,'language_code':'en'}])
+        for task in data.get('tasks') or []:
+            for item in task.get('result') or []:
+                result['volumes'].append({
+                    'keyword':item.get('keyword'),
+                    'searchVolume':item.get('search_volume'),
+                    'competition':item.get('competition'),
+                    'cpc':item.get('cpc'),
+                })
+    except Exception as e:
+        result['broken'].append('search volume: '+str(e)[:120])
+    seed=(seed or keywords[0]).strip().lower()
+    try:
+        data=dataforseo_request('/v3/dataforseo_labs/google/keyword_suggestions/live',
+            [{'keyword':seed,'location_code':2840,'language_code':'en','limit':10}])
+        for task in data.get('tasks') or []:
+            for block in task.get('result') or []:
+                for item in block.get('items') or []:
+                    info=item.get('keyword_info') or {}
+                    result['suggestions'].append({
+                        'keyword':item.get('keyword'),
+                        'searchVolume':info.get('search_volume'),
+                        'competition':info.get('competition_level'),
+                    })
+    except Exception as e:
+        result['broken'].append('suggestions: '+str(e)[:120])
+    if not result['volumes'] and not result['suggestions']:
+        result['ok']=False
+        result['error']='request_failed'
+        result['message']='DataForSEO could not be reached or returned nothing: '+('; '.join(result['broken']) or 'unknown')
+    DATAFORSEO_CACHE[cache_key]={'at':time.time(),'data':result}
+    if len(DATAFORSEO_CACHE)>200:
+        DATAFORSEO_CACHE.pop(next(iter(DATAFORSEO_CACHE)))
+    return result
+
 RADAR_FEEDS=[
     ('Claims Journal','https://www.claimsjournal.com/rss/news/national/'),
     ('Insurance Journal','https://www.insurancejournal.com/rss/news/national/'),
@@ -3540,6 +3607,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path=='/api/calendar': self.api_save_calendar(user); return
         if path=='/api/calendar-status': self.api_calendar_status(user); return
         if path=='/api/calendar-delete': self.api_calendar_delete(user); return
+        if path=='/api/keyword-data': self.api_keyword_data(user); return
         if path=='/api/chad-update': self.api_save_chad_update(user); return
         if path=='/api/chad-update-comment': self.api_chad_update_comment(user); return
         if path=='/api/chad-update-task': self.api_chad_update_task(user); return
@@ -3902,6 +3970,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         con.commit(); con.close()
         log_action(user['id'],'deleted calendar production item',entry['title'])
         self.send_json({'ok':True})
+    def api_keyword_data(self,user):
+        data=self.read_body()
+        keywords=data.get('keywords') or []
+        if isinstance(keywords,str):
+            keywords=[k.strip() for k in keywords.split(',')]
+        result=keyword_data(keywords,str(data.get('seed') or ''))
+        if result.get('ok'):
+            log_action(user['id'],'pulled live keyword data',', '.join([str(k) for k in keywords][:5]))
+        self.send_json(result,200 if result.get('ok') or result.get('error')=='not_connected' else 502)
     def api_save_chad_update(self,user):
         data=self.read_body()
         title=(data.get('title') or 'Untitled Chad update').strip()[:160]
