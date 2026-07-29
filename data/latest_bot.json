@@ -1,196 +1,182 @@
 {
-  "generatedAt": "2026-07-11T18:39:38",
-  "generatedHuman": "Saturday, July 11, 2026 at 06:39 PM",
-  "source": "Google News RSS + Hancock Marketing Bot",
+  "generatedAt": "2026-07-27T11:46:24",
+  "generatedHuman": "Monday, July 27, 2026 at 11:46 AM",
+  "source": "Scout live sweep",
   "stories": [
     {
-      "title": "Why Maintenance Matters For Your Commercial Property Insurance Rates",
-      "tag": "Trending",
-      "summary": "Why Maintenance Matters For Your Commercial Property Insurance Rates  newsblaze.com",
-      "angle": "Frame this around lifecycle property intelligence for carrier and commercial risk teams.",
+      "title": "Overnight wind cluster rakes Illinois, Indiana and Kentucky with 100+ damage reports",
+      "tag": "Hot",
+      "summary": "SPC storm reports for July 26 log more than 100 severe wind reports and 8 hail reports, concentrated in Illinois, Indiana and Kentucky, with zero tornadoes. Measured and estimated gusts reached 70 mph at Vincennes, IN and Earlington, KY; Uniontown, KY reported roughly 50% of Union County without power, and Nebraska saw trees snapped 12 to 18 inches in diameter near Clarkson.",
+      "angle": "A wide wind swath means a surge of roof and siding files across three states at once. Fast, documented eyes-on-roof inspections give adjusters decision-ready wind findings while the damage is fresh and dated.",
       "keywords": [
-        "maintenance",
-        "matters",
-        "commercial",
-        "property",
-        "rates"
+        "wind damage",
+        "illinois",
+        "indiana",
+        "kentucky",
+        "spc reports",
+        "power outages"
       ],
-      "source": "newsblaze.com",
-      "url": "https://news.google.com/rss/articles/CBMinwFBVV95cUxQdnVpTmdNT3gzckZjblROMU16YjVsdkFTUXNiRjFzbWRoblVkS0J6UVZkNUxNaW9TWW93R2JlWlJ1b1B1dWJHNzJGMGotRTVnQ2VZdU5xWEh0eW9KNEpMc1N0S2w2b3QxWGdPc3VwLVREa212WmFkNF9aTDJaaGNNeEpzV21sa1Itb1ZoVVdoc2g5M05Pa2dXWGJ5ZXBhZzA?oc=5",
-      "date": "Jul 03, 2026",
-      "line": "Commercial"
-    },
-    {
-      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
-      "tag": "Trending",
-      "summary": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News",
-      "angle": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
-      "keywords": [
-        "hail",
-        "regularly",
-        "hitting",
-        "roof",
-        "coverage"
-      ],
-      "source": "CBS News",
-      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5",
-      "date": "Jun 22, 2026",
+      "source": "NOAA Storm Prediction Center",
+      "url": "https://www.spc.noaa.gov/climo/reports/260726_rpts.html",
+      "date": "Jul 26, 2026",
       "line": "Storm / CAT Damage"
     },
     {
-      "title": "Lenders Must Pay 2% Annual Interest on Insurance Funds They Hold After Property Damage",
-      "tag": "Rising",
-      "summary": "Lenders Must Pay 2% Annual Interest on Insurance Funds They Hold After Property Damage  inkl",
-      "angle": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
+      "title": "Severe weather rolls on: Wisconsin under warnings this morning, Great Lakes at risk Monday",
+      "tag": "Hot",
+      "summary": "As of mid-morning July 27, NWS severe thunderstorm warnings covered multiple Wisconsin counties with 60 mph gusts and quarter-to-half-dollar hail, under a severe thunderstorm watch running to 3:00 PM CDT. Forecasters kept a damaging-wind and hail threat over the upper Midwest and Great Lakes into Monday.",
+      "angle": "Back-to-back severe days stack new claims on top of yesterday's files. Carriers that line up inspection capacity now keep cycle times flat while volume spikes.",
       "keywords": [
-        "lenders",
-        "must",
-        "pay",
-        "annual",
-        "interest"
+        "wisconsin",
+        "severe thunderstorm",
+        "hail",
+        "wind",
+        "nws warnings",
+        "great lakes"
       ],
-      "source": "inkl",
-      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxOSXA4SF80Q20xTXdaQURQM05XcUVWRkF6Q05aRWV0aURia1dGa0NTZ3I0TlpOMzhDV1NTS3hUT3FONWhhTmtKU3RGeVgtdndKdGlZMk5xWXJ2eDY5V2JqNElTa1ZjSEgyb056WFF2NlNncTBEck1xeGY3UUxSSmJBanp6N1JOTHhfT05EekJGQ0ZiSmx3U0t4WVlvZWg4bHZISlM1YmhJWU1PY3N5bXVCNQ?oc=5",
-      "date": "Jul 05, 2026",
-      "line": "Carrier / Market"
+      "source": "National Weather Service",
+      "url": "https://www.weather.gov/alerts",
+      "date": "Jul 27, 2026",
+      "line": "Storm / CAT Damage"
     },
     {
-      "title": "The Markel Specialty Property insurance - B2B cover built for hard-to-place risks",
-      "tag": "Rising",
-      "summary": "The Markel Specialty Property insurance - B2B cover built for hard-to-place risks  ad-hoc-news.de",
-      "angle": "Tie the signal to pre-loss risk identification. The cheapest claim is the one that never happens.",
+      "title": "Atlantic stays silent: NHC expects no tropical development for the next seven days",
+      "tag": "Trend",
+      "summary": "The National Hurricane Center's 8:00 AM EDT July 27 outlook shows no active systems and states tropical cyclone formation is not expected in the Atlantic, Caribbean or Gulf during the next 7 days.",
+      "angle": "A quiet tropical window is when carriers clear reinspection backlogs and lock in CAT-response capacity with inspection partners before the back half of the season.",
       "keywords": [
-        "markel",
-        "specialty",
-        "property",
-        "cover",
-        "built"
+        "atlantic",
+        "tropical outlook",
+        "nhc",
+        "hurricane season",
+        "cat planning"
       ],
-      "source": "ad-hoc-news.de",
-      "url": "https://news.google.com/rss/articles/CBMiugFBVV95cUxQUG9UamtvN2ZaSE84Tk95cDBYdVJhWEVMd1pDN2NsU2YtWFJlZUVXT3NkVGRnWE5ILXdidWlOcDlORE5CSXhoUU9YODJsSjRpNzgweFd1djRNRVpMQmRIVmVaN2YzYUlyYVI4SkNra2RjbktsV0RnYzRCY3hXQ2l4RVRVRnRyRXc0dTJyZVZ0WG1WVWYzNE5DMTgzV3VjNG1JN21NYWdXY1Z4aW1wcDdQaENVMGludzU3Y0E?oc=5",
-      "date": "Jul 04, 2026",
-      "line": "Underwriting Inspection"
+      "source": "NOAA National Hurricane Center",
+      "url": "https://www.nhc.noaa.gov/gtwo.php?basin=atlc&fdays=7",
+      "date": "Jul 27, 2026",
+      "line": "Storm / CAT Damage"
     },
     {
-      "title": "Colorado Division of Insurance reminds wildfire-affected residents of homeowners insurance protections",
-      "tag": "Rising",
-      "summary": "Colorado Division of Insurance reminds wildfire-affected residents of homeowners insurance protections  Kiowa County Press",
-      "angle": "Focus on clear documentation, communication with the insured, and consistent reporting for residential property decisions.",
+      "title": "Aerial-imagery limits spread: Tennessee bulletin echoes Kentucky's, and analysts call it a national theme",
+      "tag": "Trend",
+      "summary": "Tennessee's Bulletin 25-03 warns that blurry, outdated or imprecise remote imagery cannot reasonably justify a property-claim denial, tying misuse to unfair claims practices, while Kentucky's Bulletin 2026-01 requires clarity, a written summary, and imagery date-stamped within 12 months. Legal analysts at Troutman Pepper Locke describe aerial-imagery limits as an emerging multi-state regulatory theme, with North Carolina also issuing guidance.",
+      "angle": "Regulators are saying imagery flags an issue but a validated inspection proves it. That validation step is exactly the documented, on-site work Hancock delivers for carriers and their adjusters.",
       "keywords": [
-        "colorado",
-        "division",
-        "reminds",
-        "wildfire-affected",
-        "residents"
+        "aerial imagery",
+        "doi bulletin",
+        "tennessee",
+        "kentucky",
+        "claim denials",
+        "regulation"
       ],
-      "source": "Kiowa County Press",
-      "url": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQNnVBd1FHb25RMy1WbnFfdnBmQjdKdW9ndGJoRHZscFdzSXlPUzBVaUNzM01OU1RfVTRNWE9BQUFQVGNweGxEWkVEQkJ0SVVrMUtQQU1wNDhfbG5ZREtMMDNyVWNCajlCMGFtNko0ZFNGTGg3c3FEVmYzakt1UXVKR19md1B2M3hyeUs3d0hkemctQmlKNnd0YXBIZk5pdTZBNDlwRi1SX2ticDhIZHdxSVQ0TkZsWGVsejFORTJR?oc=5",
-      "date": "Jul 07, 2026",
-      "line": "Residential / 4-Point"
+      "source": "McWherter Scott & Bobbitt / Carrier Management",
+      "url": "https://www.msb.law/2026/03/tennessee-and-kentucky-are-sending-a-similar-message-to-insurers-remote-imagery-has-limits/",
+      "date": "Mar 24, 2026",
+      "line": "Industry / Regulation"
+    },
+    {
+      "title": "J.D. Power 2026: homeowners claims average 40 days from FNOL to final payment",
+      "tag": "Trend",
+      "summary": "The J.D. Power 2026 U.S. Property Claims Satisfaction Study puts the average homeowners claim at 40 days from first notice of loss to final payment, per an Insurance Journal Research whitepaper, which argues insurers can cut 16 days from the cycle without adding staff. The whitepaper itself is undated on the page.",
+      "angle": "Most cycle-time leakage is chasing missing information. An inspection file the adjuster can write an estimate from directly removes the chase and shortens every downstream step.",
+      "keywords": [
+        "cycle time",
+        "jd power",
+        "claims satisfaction",
+        "fnol",
+        "documentation"
+      ],
+      "source": "Insurance Journal Research",
+      "url": "https://www.insurancejournal.com/research/research/compressing-the-claims-clock-how-insurers-can-accelerate-the-property-claim-cycle/",
+      "date": "2026",
+      "line": "Industry / Regulation"
+    },
+    {
+      "title": "North Carolina fraud crackdown: duplicate hail claims charged, roof-tampering sting caught on video",
+      "tag": "Trend",
+      "summary": "North Carolina DOI investigators charged a Raleigh couple with filing a $30,000 duplicate wind-and-hail claim for damage already settled with another insurer, per Claims Journal. Separately, a sting operation run with a regional carrier's special investigations unit filmed a roofing-company manager bending and ripping shingles to manufacture a $30,000 storm claim.",
+      "angle": "Fraud pressure raises the value of dated, photo-documented condition records. An independent inspection file that shows what the roof actually looked like, when, is the carrier's cleanest defense.",
+      "keywords": [
+        "fraud",
+        "north carolina",
+        "hail claims",
+        "sting",
+        "siu",
+        "shingle tampering"
+      ],
+      "source": "Claims Journal / WRAL",
+      "url": "https://www.claimsjournal.com/news/national/2026/06/09/338050.htm",
+      "date": "Jun 9, 2026",
+      "line": "Underwriting / Pre-loss"
+    },
+    {
+      "title": "Florida's SB 808 roof-inspection bill is dead \u2014 despite reports it takes effect July 1",
+      "tag": "Trend",
+      "summary": "Florida Senate records show SB 808, which would have expanded the list of authorized roof inspectors and barred nonrenewal based solely on roof age, died in committee on March 13, 2026 \u2014 yet multiple consumer articles still describe it as taking effect July 1, 2026. Existing law stands: past 15 years of roof age, insurers may require an inspection, and cannot deny solely on age if an authorized inspector certifies 5 more years of useful life.",
+      "angle": "Confusion about who may inspect and what the law requires lands on the adjuster's desk. Clear, code-literate inspection documentation helps carriers answer policyholders with the rule as it actually is.",
+      "keywords": [
+        "florida",
+        "sb 808",
+        "roof age",
+        "inspection law",
+        "nonrenewal"
+      ],
+      "source": "The Florida Senate",
+      "url": "https://www.flsenate.gov/Session/Bill/2026/808",
+      "date": "Mar 13, 2026",
+      "line": "Underwriting / Pre-loss"
+    },
+    {
+      "title": "Roofing contractors pivot from storm-chasing to lifecycle relationships as margins tighten",
+      "tag": "Trend",
+      "summary": "An industry outlook citing ServiceTitan's 2026 market report says 75% of roofing and exterior contractors expect revenue growth this year even as margins compress, with the strongest operators building maintenance plans and standing commercial relationships rather than depending on storm-triggered demand.",
+      "angle": "The contractor side of the industry is drifting toward lifecycle service \u2014 the same direction Hancock positions with carriers: property lifecycle management, not one-off claim inspections.",
+      "keywords": [
+        "roofing",
+        "contractors",
+        "lifecycle",
+        "maintenance",
+        "servicetitan",
+        "margins"
+      ],
+      "source": "Lightning Path Partners (citing ServiceTitan)",
+      "url": "https://lightningpathpartners.com/blog/roofing-industry-outlook",
+      "date": "2026",
+      "line": "Roofing"
     }
   ],
   "clusters": [
     {
-      "category": "Trending Keywords",
-      "keywords": [
-        "maintenance matters",
-        "matters commercial",
-        "commercial property",
-        "property rates",
-        "hail regularly",
-        "regularly hitting",
-        "hitting roof",
-        "roof coverage"
-      ]
-    },
-    {
-      "category": "Carrier / Market",
-      "keywords": [
-        "lenders",
-        "must",
-        "pay",
-        "annual",
-        "interest",
-        "funds"
-      ]
-    },
-    {
-      "category": "Commercial",
-      "keywords": [
-        "maintenance",
-        "matters",
-        "commercial",
-        "property",
-        "rates",
-        "newsblaze"
-      ]
-    },
-    {
-      "category": "Residential / 4-Point",
-      "keywords": [
-        "colorado",
-        "division",
-        "reminds",
-        "wildfire-affected",
-        "residents",
-        "homeowners"
-      ]
-    },
-    {
       "category": "Storm / CAT Damage",
       "keywords": [
+        "wind damage",
         "hail",
-        "regularly",
-        "hitting",
-        "roof",
-        "coverage",
-        "quietly"
+        "spc reports",
+        "wisconsin",
+        "tropical outlook",
+        "cat planning"
       ]
     },
     {
-      "category": "Underwriting Inspection",
+      "category": "Regulation & Fraud",
       "keywords": [
-        "markel",
-        "specialty",
-        "property",
-        "cover",
-        "built",
-        "hard-to-place"
+        "aerial imagery",
+        "doi bulletin",
+        "fraud",
+        "sting",
+        "florida",
+        "roof age"
       ]
-    }
-  ],
-  "library": [
-    {
-      "title": "Why Maintenance Matters For Your Commercial Property Insurance Rates",
-      "type": "Bot Stub",
-      "body": "# Why Maintenance Matters For Your Commercial Property Insurance Rates\n\nWhy Maintenance Matters For Your Commercial Property Insurance Rates  newsblaze.com\n\n## Hancock angle\nFrame this around lifecycle property intelligence for carrier and commercial risk teams.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
-      "date": "Jul 11, 2026 06:39 PM",
-      "source": "newsblaze.com",
-      "url": "https://news.google.com/rss/articles/CBMinwFBVV95cUxQdnVpTmdNT3gzckZjblROMU16YjVsdkFTUXNiRjFzbWRoblVkS0J6UVZkNUxNaW9TWW93R2JlWlJ1b1B1dWJHNzJGMGotRTVnQ2VZdU5xWEh0eW9KNEpMc1N0S2w2b3QxWGdPc3VwLVREa212WmFkNF9aTDJaaGNNeEpzV21sa1Itb1ZoVVdoc2g5M05Pa2dXWGJ5ZXBhZzA?oc=5"
     },
     {
-      "title": "Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks",
-      "type": "Bot Stub",
-      "body": "# Hail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks\n\nHail claims now regularly hitting $40K to $60K as roof coverage quietly shrinks  CBS News\n\n## Hancock angle\nConnect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
-      "date": "Jul 11, 2026 06:39 PM",
-      "source": "CBS News",
-      "url": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxQd1g5eEtPa09BdGxBNDBoempyRExSU2d4SElpa2VSLUZPRFJ4ZVZYUVVzMWlSeVRHZlIwaFhNcDRNMHd2WGFBbGI2azdCMWtqUHA3c0VWYVlMRHd3d1NzM3VTQ256Nm1IRTRwSUYtMjFKa2ZuT1RCOExkdHpGV0tWalVLV25zYnZNN3I0?oc=5"
-    },
-    {
-      "title": "Lenders Must Pay 2% Annual Interest on Insurance Funds They Hold After Property Damage",
-      "type": "Bot Stub",
-      "body": "# Lenders Must Pay 2% Annual Interest on Insurance Funds They Hold After Property Damage\n\nLenders Must Pay 2% Annual Interest on Insurance Funds They Hold After Property Damage  inkl\n\n## Hancock angle\nRelate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
-      "date": "Jul 11, 2026 06:39 PM",
-      "source": "inkl",
-      "url": "https://news.google.com/rss/articles/CBMisAFBVV95cUxOSXA4SF80Q20xTXdaQURQM05XcUVWRkF6Q05aRWV0aURia1dGa0NTZ3I0TlpOMzhDV1NTS3hUT3FONWhhTmtKU3RGeVgtdndKdGlZMk5xWXJ2eDY5V2JqNElTa1ZjSEgyb056WFF2NlNncTBEck1xeGY3UUxSSmJBanp6N1JOTHhfT05EekJGQ0ZiSmx3U0t4WVlvZWg4bHZISlM1YmhJWU1PY3N5bXVCNQ?oc=5"
-    },
-    {
-      "title": "The Markel Specialty Property insurance - B2B cover built for hard-to-place risks",
-      "type": "Bot Stub",
-      "body": "# The Markel Specialty Property insurance - B2B cover built for hard-to-place risks\n\nThe Markel Specialty Property insurance - B2B cover built for hard-to-place risks  ad-hoc-news.de\n\n## Hancock angle\nTie the signal to pre-loss risk identification. The cheapest claim is the one that never happens.\n\n## Draft direction\nBuild this into a useful carrier-facing post around communication, documentation, consistency, and file defensibility.\n\n*Bot stub. Add an Anthropic key for full auto-drafting.*",
-      "date": "Jul 11, 2026 06:39 PM",
-      "source": "ad-hoc-news.de",
-      "url": "https://news.google.com/rss/articles/CBMiugFBVV95cUxQUG9UamtvN2ZaSE84Tk95cDBYdVJhWEVMd1pDN2NsU2YtWFJlZUVXT3NkVGRnWE5ILXdidWlOcDlORE5CSXhoUU9YODJsSjRpNzgweFd1djRNRVpMQmRIVmVaN2YzYUlyYVI4SkNra2RjbktsV0RnYzRCY3hXQ2l4RVRVRnRyRXc0dTJyZVZ0WG1WVWYzNE5DMTgzV3VjNG1JN21NYWdXY1Z4aW1wcDdQaENVMGludzU3Y0E?oc=5"
+      "category": "Claims & Roofing Trends",
+      "keywords": [
+        "cycle time",
+        "documentation",
+        "fnol",
+        "lifecycle",
+        "contractors"
+      ]
     }
   ]
 }
