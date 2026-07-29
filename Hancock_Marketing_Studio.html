@@ -187,40 +187,41 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 <script src="data/content_plays.js"></script>
 <script src="data/weekly_longform.js"></script>
 <script>
-const SERVICE_LINES = ["Storm / CAT Damage","Underwriting Inspection","Contents","Engineering","Commercial","Residential","4-Point Inspection","Ladder Assist","Loss Control","DI / UDI Inspections"];
+// Official Hancock service list, dictated by Ryan 2026-07-28.
+const SERVICE_LINES = ["Ladder Assist","Direct Inspection","Direct Inspection with Estimate","Contents","Tree Removal & Restoration","Tarps","Leak Detection","Underwriting Inspections (4-Point Inspection)","Engineering Services","Appraisals"];
 // Service focus tabs. Every keyword is real insurance-industry search language — on point, no filler.
 const SERVICE_TABS=[
   {id:"ladder",label:"Ladder Assist",line:"Ladder Assist",
    keywords:["ladder assist services","steep roof inspection","roof inspection for adjusters","two-story roof access","hail damage roof inspection","test square documentation","shingle damage assessment","roof measurement report","adjuster roof safety","soft metal damage indicators"],
    match:["ladder assist","roof inspection","steep roof","roof claim","shingle","roofing"]},
+  {id:"direct",label:"Direct Inspection",line:"Direct Inspection",
+   keywords:["direct inspection services","property claim field inspection","on-site damage inspection","insurance inspection services","exterior elevation documentation","interior damage documentation","claim photo documentation standards","inspection turnaround time"],
+   match:["direct inspection","field inspection","site inspection","property inspection","claims inspection"]},
+  {id:"estimate",label:"DI + Estimate",line:"Direct Inspection with Estimate",
+   keywords:["inspection with estimate","claim scope and estimate","property damage estimate services","repair estimate documentation","damage scope report","estimate-ready claim file","Xactimate estimate support"],
+   match:["estimate","xactimate","scope of loss","scoping"]},
   {id:"contents",label:"Contents",line:"Contents",
    keywords:["contents inventory services","contents valuation claim","total loss contents inventory","contents pack-out documentation","room-by-room inventory","personal property claim documentation","actual cash value contents","salvage assessment","high-value contents appraisal","contents claim cycle time"],
    match:["contents","personal property","inventory","pack-out","pack out","salvage","belongings"]},
-  {id:"storm",label:"Storm / CAT",line:"Storm / CAT Damage",
-   keywords:["hail damage claims","wind damage inspection","CAT claims response","storm damage documentation","catastrophe adjuster support","derecho damage claims","hurricane claims inspection","tornado damage assessment","emergency tarping documentation","storm claim surge capacity"],
-   match:["hail","storm","hurricane","tornado","wind damage","catastrophe","derecho","tropical","severe weather","wildfire"]},
-  {id:"underwriting",label:"Underwriting",line:"Underwriting Inspection",
-   keywords:["underwriting inspection services","roof condition report underwriting","insurance-to-value inspection","property risk assessment","renewal roof inspection","aerial imagery verification","roof age verification","condition and hazard survey","pre-bind property inspection","underwriting eligibility inspection"],
-   match:["underwriting","insurance-to-value","renewal","aerial imagery","risk assessment","nonrenewal","non-renewal","eligibility"]},
-  {id:"engineering",label:"Engineering",line:"Engineering",
+  {id:"tree",label:"Tree Removal",line:"Tree Removal & Restoration",
+   keywords:["tree removal insurance claim","tree on roof damage claim","emergency tree removal services","storm debris removal","fallen tree property damage","tree damage documentation","restoration after tree damage"],
+   match:["tree","debris","fallen","limb"]},
+  {id:"tarps",label:"Tarps",line:"Tarps",
+   keywords:["emergency roof tarping","roof tarp installation","temporary roof protection","tarping after storm damage","prevent secondary water damage","mitigation tarping services","board-up services"],
+   match:["tarp","temporary repair","board-up","mitigation"]},
+  {id:"leak",label:"Leak Detection",line:"Leak Detection",
+   keywords:["leak detection services","roof leak detection","water intrusion inspection","moisture mapping","leak source identification","water damage claim inspection","plumbing leak detection"],
+   match:["leak","water intrusion","moisture","water damage"]},
+  {id:"underwriting",label:"Underwriting / 4-Point",line:"Underwriting Inspections (4-Point Inspection)",
+   keywords:["underwriting inspection services","4-point inspection","four point inspection insurance","roof condition report underwriting","insurance-to-value inspection","roof age verification","home insurance eligibility inspection","pre-bind property inspection","condition and hazard survey","aerial imagery verification"],
+   match:["underwriting","4-point","four-point","four point","insurance-to-value","renewal","aerial imagery","nonrenewal","non-renewal","eligibility","electrical","plumbing","hvac"]},
+  {id:"engineering",label:"Engineering",line:"Engineering Services",
    keywords:["structural damage engineering assessment","cause and origin investigation","engineering report property claims","foundation movement claims","wind versus wear analysis","structural integrity evaluation","building envelope assessment","expert report claim litigation"],
    match:["engineer","structural","cause and origin","foundation","forensic"]},
-  {id:"commercial",label:"Commercial",line:"Commercial",
-   keywords:["commercial property inspection","commercial roof inspection","large loss documentation","commercial claims scoping","flat roof damage assessment","TPO EPDM roof damage","commercial hail claims","business property damage assessment"],
-   match:["commercial","business interruption","large loss","industrial"]},
-  {id:"residential",label:"Residential",line:"Residential",
-   keywords:["residential property inspection","homeowner claims inspection","residential roof claims","siding damage documentation","interior damage documentation","water intrusion inspection","homeowners insurance inspection","residential claims cycle time"],
-   match:["homeowner","residential","home insurance","homeowners","dwelling"]},
-  {id:"fourpoint",label:"4-Point",line:"4-Point Inspection",
-   keywords:["4-point inspection","four point inspection insurance","roof electrical plumbing HVAC inspection","home insurance eligibility inspection","older home insurance inspection","4-point inspection report","insurance inspection requirements by state"],
-   match:["4-point","four-point","four point","electrical","plumbing","hvac"]},
-  {id:"losscontrol",label:"Loss Control",line:"Loss Control",
-   keywords:["loss control survey","loss control inspection services","commercial risk survey","hazard identification inspection","premises liability survey","loss prevention recommendations","risk improvement report"],
-   match:["loss control","risk survey","loss prevention","premises liability","hazard"]},
-  {id:"diudi",label:"DI / UDI",line:"DI / UDI Inspections",
-   keywords:["property condition verification","occupancy verification inspection","exterior observation report","underwriting data verification","drive-by property inspection alternative","field-verified property data"],
-   match:["occupancy","verification","property data","drive-by"]},
-  {id:"weather",label:"Weather",line:"Storm / CAT Damage",intel:true,
+  {id:"appraisals",label:"Appraisals",line:"Appraisals",
+   keywords:["insurance appraisal process","appraisal clause property claim","property damage appraisal","appraisal umpire process","independent appraiser insurance claims","claim dispute appraisal","appraisal award documentation"],
+   match:["appraisal","appraiser","umpire"]},
+  {id:"weather",label:"Weather",line:"",intel:true,
    keywords:["severe weather outlook","SPC convective outlook","hail swath map","damaging wind event","hurricane season forecast","tropical storm track","tornado outbreak","storm season preparedness","NOAA weather alerts","post-storm inspection demand"],
    match:["weather","hail","storm","hurricane","tornado","wind","flood","wildfire","noaa","forecast","tropical","heat"]},
   {id:"insight",label:"Insurance Intelligence",line:"",intel:true,
@@ -319,7 +320,7 @@ function classifyStormAlert(a){const ANGLES={tornado:"Safety-first while the war
 async function checkSkies(){const states=activeStates();$("stormOut").innerHTML='<div class="panel empty"><h3>Checking active alerts...</h3><p>Pulling current National Weather Service alerts for '+states.join(", ")+'.</p></div>';try{const promises=states.map(function(st){return fetch("https://api.weather.gov/alerts/active?area="+encodeURIComponent(st),{headers:{Accept:"application/geo+json"}}).then(function(r){if(!r.ok)throw new Error(st+" "+r.status);return r.json()}).then(function(d){return (d.features||[]).map(function(f){const p=f.properties||{};p._state=st;p._hancock=classifyStormAlert(p);return p})})});const all=(await Promise.all(promises)).flat().filter(function(a){return a._hancock&&a._hancock.priority>0}).sort(function(a,b){return (b._hancock.priority||0)-(a._hancock.priority||0)}).slice(0,12);window.HANCOCK_STORM_ALERTS=all;if(!all.length){$("stormOut").innerHTML='<div class="panel empty"><h3>No severe weather alerts in watched states</h3><p>No active hail, wind, tornado, derecho, hurricane, or severe thunderstorm alerts right now. This is still a good moment for pre-loss education: roof condition baselines, underwriting inspections, wind and hail readiness, and photo documentation standards.</p></div>';return}$("stormOut").innerHTML=all.map(function(a,i){const h=a._hancock||{};const badge=h.group==="water_contents"||h.group==="fire_contents"?"warn":"hot";return `<div class="card"><span class="badge ${badge}">${escapeHtml(h.hazard||a.severity||"Alert")}</span><h3>${escapeHtml(a.event||"Weather Alert")}</h3><p><b>${escapeHtml(a._state||"")}</b> ${escapeHtml(a.areaDesc||"")}</p><p><b>${escapeHtml(h.service||"Storm / CAT Damage")}:</b> ${escapeHtml(h.angle||"")}</p><p>${escapeHtml((a.headline||a.description||"").slice(0,260))}</p><button class="mini" onclick="stormDraftFromAlert(${i})">Draft safety post</button></div>`}).join("")}catch(e){$("stormOut").innerHTML='<div class="panel empty"><h3>Weather pull unavailable</h3><p>The Studio could not reach weather.gov from this browser. Use the Storm Plan button for the content workflow.</p></div>'}}
 function stormPlan(){stormDraft("Severe weather readiness",activeStates().join(", "))}
 function stormDraftFromAlert(index){const a=(window.HANCOCK_STORM_ALERTS||[])[index];if(!a)return;const h=a._hancock||{};stormDraft(h.hazard||a.event||"Storm alert",a._state||"",h.service||"Storm / CAT Damage",h.angle||"")}
-function stormDraft(event,state,line,angle){$("contentLine").value=line||"Storm / CAT Damage";$("keywords").value=event+", storm damage documentation, property claims";$("angle").value=angle||("When "+event+" affects "+state+", Hancock content should lead with public safety while the threat is active, then shift to practical guidance on documenting damage clearly, communicating with the carrier, and preserving a defensible claim file.");$("angle").dispatchEvent(new Event("input"));showTab("content");showStage("create")}
+function stormDraft(event,state,line,angle){$("contentLine").value=SERVICE_LINES.indexOf(line)>=0?line:"Ladder Assist";$("keywords").value=event+", storm damage documentation, property claims";$("angle").value=angle||("When "+event+" affects "+state+", Hancock content should lead with public safety while the threat is active, then shift to practical guidance on documenting damage clearly, communicating with the carrier, and preserving a defensible claim file.");$("angle").dispatchEvent(new Event("input"));showTab("content");showStage("create")}
 function checkPulse(){const topic=$("pulseTopic").value||"roof inspection";const out=`# Social Pulse: ${topic}\n\n## What the conversation usually needs\nPeople are looking for plain answers, not a sales pitch. Hancock should answer the technical point first, then connect the issue to defensible documentation.\n\n## Comment Draft\nThat question usually comes down to documentation quality. The field file should show the condition clearly, explain what was observed, and give the carrier enough support to make the next decision without hunting for missing context. Hancock's role is to help make that file consistent and defensible.\n\n## Content Angle\nTurn this into a short post about why communication and photo clarity matter as much as the inspection itself.`;$("pulseOut").innerHTML=`<div class="card out">${textToHtml(out)}<button class="mini" onclick="useTrend('${escapeHtml(topic)}')">Use as keyword</button></div>`;addLibrary("Social Pulse: "+topic,"Social Pulse",out)}
 async function generateContent(){setStatus("contentStatus","Generating...");const focus=serviceFocus();const bank=focus?focus.keywords.join(", "):"";const isVideo=$("contentType").value.indexOf("Video")>=0;
 const seoReqs=isVideo

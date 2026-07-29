@@ -158,7 +158,8 @@ PASSWORD_ENV_VARS = {
 }
 TEAM_TEMP_PASSWORD_HASH = '310000$8f3d4f73b39d46baa64066ab3558cdf7$bbm0QoiA9xXnsehdTj6QLVPEFbJ+uzH9+byJmJHjScU='
 TEAM_TEMP_PASSWORD_VERSION = 'testing19-2026-06-24'
-SERVICE_LINES = ['Storm / CAT Damage','Underwriting Inspection','Contents','Engineering','Commercial','Residential','4-Point Inspection','Ladder Assist','Loss Control','DI / UDI Inspections']
+# Official Hancock service list, dictated by Ryan 2026-07-28.
+SERVICE_LINES = ['Ladder Assist','Direct Inspection','Direct Inspection with Estimate','Contents','Tree Removal & Restoration','Tarps','Leak Detection','Underwriting Inspections (4-Point Inspection)','Engineering Services','Appraisals']
 RATE_LIMITS = {}
 BOT_RUN_LOCK = threading.Lock()
 CHAT_REQUESTS = {}

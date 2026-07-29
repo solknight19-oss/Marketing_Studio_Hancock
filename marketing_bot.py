@@ -84,25 +84,37 @@ amid into over under out up down more most less least about after before during
 inc llc says say said report reveals revealed top best how why what when who which
 2025 2026 q1 q2 q3 q4 u.s us usa update guide released share shares insurance claim claims""".split())
 
+# Official Hancock service list (Ryan, 2026-07-28) plus market/tech catchalls for stories
+# that matter to the business without belonging to one service.
 SERVICE_RULES = {
-    "Storm / CAT Damage": ["storm", "hail", "wind", "catastrophe", "tornado", "hurricane", "cat ", "severe weather"],
-    "Underwriting Inspection": ["underwriting", "renewal", "risk", "nonrenew", "pre-loss", "roof age", "loss control"],
-    "Roofing": ["roof", "shingle", "roofing", "slope", "hail damage"],
-    "Technology & Imagery": ["ai", "drone", "xactimate", "verisk", "hover", "eagleview", "cotality", "satellite", "imagery"],
-    "Commercial": ["commercial", "business property"],
-    "Residential / 4-Point": ["residential", "homeowner", "4-point", "four point"],
+    "Ladder Assist": ["ladder assist", "steep roof", "roof inspection", "shingle", "roofing", "hail damage"],
+    "Direct Inspection": ["direct inspection", "field inspection", "site inspection", "property inspection"],
+    "Direct Inspection with Estimate": ["estimate", "xactimate", "scope of loss", "scoping"],
     "Contents": ["contents", "inventory", "personal property"],
+    "Tree Removal & Restoration": ["tree", "debris removal", "fallen tree", "limb"],
+    "Tarps": ["tarp", "temporary repair", "roof cover", "board-up"],
+    "Leak Detection": ["leak", "water intrusion", "moisture", "water damage"],
+    "Underwriting Inspections (4-Point Inspection)": ["underwriting", "renewal", "nonrenew", "pre-loss", "roof age", "4-point", "four point", "loss control", "eligibility"],
+    "Engineering Services": ["engineer", "structural", "cause and origin", "foundation"],
+    "Appraisals": ["appraisal", "appraiser", "umpire"],
+    "Storm / CAT Response": ["storm", "hail", "wind", "catastrophe", "tornado", "hurricane", "cat ", "severe weather"],
+    "Technology & Imagery": ["ai", "drone", "verisk", "hover", "eagleview", "cotality", "satellite", "imagery"],
     "Carrier / Market": ["carrier", "premium", "rate", "policy", "coverage", "reinsurance"],
 }
 
 ANGLE_BY_LINE = {
-    "Storm / CAT Damage": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
-    "Underwriting Inspection": "Tie the signal to pre-loss risk identification. The cheapest claim is the one that never happens.",
-    "Roofing": "Bring it back to full roof-system documentation, original photo files, and repairability that is tested rather than assumed.",
-    "Technology & Imagery": "Technology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.",
-    "Commercial": "Frame this around lifecycle property intelligence for carrier and commercial risk teams.",
-    "Residential / 4-Point": "Focus on clear documentation, communication with the insured, and consistent reporting for residential property decisions.",
+    "Ladder Assist": "Bring it back to full roof-system documentation, test squares, original photo files, and repairability that is tested rather than assumed.",
+    "Direct Inspection": "Position trained eyes on the property producing a file the adjuster can act on without a re-touch — fewer handoffs, fewer callbacks.",
+    "Direct Inspection with Estimate": "Connect the inspection to an estimate-ready file: clear scope, defensible documentation, and less back-and-forth for the desk.",
     "Contents": "Position contents work as documentation, valuation support, and defensible reconstruction of personal property information.",
+    "Tree Removal & Restoration": "Frame fast, documented tree response as mitigation that shrinks secondary damage and keeps the claim file clean from day one.",
+    "Tarps": "Frame emergency tarping as documented mitigation — protecting the property and the file while the claim moves.",
+    "Leak Detection": "Position leak detection as finding the source once, documenting it clearly, and cutting repeat visits out of the claim.",
+    "Underwriting Inspections (4-Point Inspection)": "Tie the signal to pre-loss risk identification. The cheapest claim is the one that never happens.",
+    "Engineering Services": "Position engineering as the defensible expert layer when causation or structure is in question.",
+    "Appraisals": "Frame appraisal work around documentation quality — the file that holds up is the one built before the dispute.",
+    "Storm / CAT Response": "Connect the trend to fast CAT response, clear communication, and documentation that holds up after the storm surge of files arrives.",
+    "Technology & Imagery": "Technology should support field operations, not replace them. Hancock can pair better tools with trained inspection judgment.",
     "Carrier / Market": "Relate the market pressure to trust, consistency, defensibility, and reduced claim cycle time.",
 }
 
