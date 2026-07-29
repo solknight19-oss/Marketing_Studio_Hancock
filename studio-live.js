@@ -1116,6 +1116,59 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       if(typeof showStage==="function")showStage("create");
     }
   };
+  window.HancockKeywordBank={
+    cache:{},
+    pending:null,
+    QUESTION_RX:/^(how|what|why|when|where|who|which|can|does|do|is|are|should|will)\b/i,
+    async attach(){
+      const hosts=document.querySelectorAll(".kwLive");
+      if(!hosts.length)return;
+      const f=(typeof serviceFocus==="function")?serviceFocus():null;
+      if(!f){hosts.forEach(h=>h.innerHTML="");return}
+      if(this.cache[f.id]){this.paint(hosts,f,this.cache[f.id]);return}
+      const token=this.pending=f.id;
+      let d;
+      try{d=await api("/api/keyword-data",{keywords:f.keywords,seed:f.seed||f.keywords[0]})}
+      catch(e){d={ok:false,error:"unreachable",message:e.message}}
+      if(this.pending!==token)return;
+      if(d.ok)this.cache[f.id]=d;
+      this.paint(document.querySelectorAll(".kwLive"),f,d);
+    },
+    paint(hosts,f,d){
+      const fmt=n=>n==null?"—":Number(n).toLocaleString();
+      let html;
+      if(d&&d.error==="not_connected"){
+        html='<p class="muted" style="margin:0">Static bank shown — DataForSEO is not connected on this server yet, so no live volumes. '+escapeHtml(d.message||"")+'</p>';
+      }else if(!d||!d.ok){
+        html='<p class="muted" style="margin:0">Live keyword data unreachable right now — the static bank above still works. ('+escapeHtml((d&&d.message)||"no response")+')</p>';
+      }else{
+        const vols=(d.volumes||[]).filter(v=>v.searchVolume!=null).sort((a,b)=>(b.searchVolume||0)-(a.searchVolume||0));
+        const sugg=(d.suggestions||[]).filter(s=>s.keyword);
+        const questions=sugg.filter(s=>this.QUESTION_RX.test(s.keyword));
+        const plain=sugg.filter(s=>!this.QUESTION_RX.test(s.keyword)&&!f.keywords.includes(s.keyword)).sort((a,b)=>(b.searchVolume||0)-(a.searchVolume||0));
+        html='<p style="margin:6px 0 4px"><b>Live SEO keywords</b> <span class="muted">— real search volume ('+escapeHtml(d.source||"DataForSEO")+', US, monthly). Click to add.</span></p>'
+          +'<div class="chips">'+vols.slice(0,10).map(v=>`<button class="chip gold" onclick="addKeyword('${escapeHtml(v.keyword)}')">${escapeHtml(v.keyword)} · ${fmt(v.searchVolume)}/mo</button>`).join("")+'</div>'
+          +(plain.length?'<p style="margin:10px 0 4px"><b>What people actually search</b> <span class="muted">— related terms with demand.</span></p><div class="chips">'+plain.slice(0,10).map(s=>`<button class="chip" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}/mo</button>`).join("")+'</div>':"")
+          +(questions.length?'<p style="margin:10px 0 4px"><b>AEO questions people ask</b> <span class="muted">— answer these directly in the blog FAQ.</span></p><div class="chips">'+questions.slice(0,8).map(s=>`<button class="chip" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)}${s.searchVolume!=null?" · "+fmt(s.searchVolume)+"/mo":""}</button>`).join("")+'</div>':"")
+          +'<div style="margin-top:10px"><button class="mini" onclick="HancockKeywordBank.useTop()">Build content from top live keywords</button></div>';
+      }
+      hosts.forEach(h=>h.innerHTML=html);
+    },
+    useTop(){
+      const f=(typeof serviceFocus==="function")?serviceFocus():null;
+      if(!f)return;
+      const d=this.cache[f.id];
+      if(!d){return}
+      const vols=(d.volumes||[]).filter(v=>v.searchVolume!=null).sort((a,b)=>(b.searchVolume||0)-(a.searchVolume||0));
+      const sugg=(d.suggestions||[]).filter(s=>s.keyword&&s.searchVolume!=null).sort((a,b)=>(b.searchVolume||0)-(a.searchVolume||0));
+      const top=[...new Set([...vols.map(v=>v.keyword),...sugg.map(s=>s.keyword)])].slice(0,5);
+      if(!top.length)return;
+      if(q("keywords"))q("keywords").value=top.join(", ");
+      if(f.line&&q("contentLine"))q("contentLine").value=f.line;
+      showTab("content");
+      if(typeof showStage==="function")showStage("create");
+    }
+  };
   window.HancockKeywordData={
     hosts:{plan:"kwDataPlan",optimize:"kwDataOptimize"},
     async pull(which){
@@ -1151,6 +1204,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   };
   load().then(function(){HancockStormBoard.scan()});
   if(q("liveWireBody"))HancockRadarWire.load();
+  if(document.querySelector(".kwLive"))HancockKeywordBank.attach();
   setInterval(load,30000);
   if(q("socialList"))social.render();
 })();

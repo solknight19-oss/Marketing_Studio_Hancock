@@ -191,40 +191,40 @@ main{max-width:1280px;margin:0 auto;padding:28px 24px 44px}.view{display:none}.v
 const SERVICE_LINES = ["Ladder Assist","Direct Inspection","Direct Inspection with Estimate","Contents","Tree Removal & Restoration","Tarps","Leak Detection","Underwriting Inspections (4-Point Inspection)","Engineering Services","Appraisals"];
 // Service focus tabs. Every keyword is real insurance-industry search language — on point, no filler.
 const SERVICE_TABS=[
-  {id:"ladder",label:"Ladder Assist",line:"Ladder Assist",
+  {id:"ladder",label:"Ladder Assist",line:"Ladder Assist",seed:"ladder assist",
    keywords:["ladder assist services","steep roof inspection","roof inspection for adjusters","two-story roof access","hail damage roof inspection","test square documentation","shingle damage assessment","roof measurement report","adjuster roof safety","soft metal damage indicators"],
    match:["ladder assist","roof inspection","steep roof","roof claim","shingle","roofing"]},
-  {id:"direct",label:"Direct Inspection",line:"Direct Inspection",
+  {id:"direct",label:"Direct Inspection",line:"Direct Inspection",seed:"property inspection services",
    keywords:["direct inspection services","property claim field inspection","on-site damage inspection","insurance inspection services","exterior elevation documentation","interior damage documentation","claim photo documentation standards","inspection turnaround time"],
    match:["direct inspection","field inspection","site inspection","property inspection","claims inspection"]},
-  {id:"estimate",label:"DI + Estimate",line:"Direct Inspection with Estimate",
+  {id:"estimate",label:"DI + Estimate",line:"Direct Inspection with Estimate",seed:"property damage estimate",
    keywords:["inspection with estimate","claim scope and estimate","property damage estimate services","repair estimate documentation","damage scope report","estimate-ready claim file","Xactimate estimate support"],
    match:["estimate","xactimate","scope of loss","scoping"]},
-  {id:"contents",label:"Contents",line:"Contents",
+  {id:"contents",label:"Contents",line:"Contents",seed:"contents inventory",
    keywords:["contents inventory services","contents valuation claim","total loss contents inventory","contents pack-out documentation","room-by-room inventory","personal property claim documentation","actual cash value contents","salvage assessment","high-value contents appraisal","contents claim cycle time"],
    match:["contents","personal property","inventory","pack-out","pack out","salvage","belongings"]},
-  {id:"tree",label:"Tree Removal",line:"Tree Removal & Restoration",
+  {id:"tree",label:"Tree Removal",line:"Tree Removal & Restoration",seed:"tree removal insurance claim",
    keywords:["tree removal insurance claim","tree on roof damage claim","emergency tree removal services","storm debris removal","fallen tree property damage","tree damage documentation","restoration after tree damage"],
    match:["tree","debris","fallen","limb"]},
-  {id:"tarps",label:"Tarps",line:"Tarps",
+  {id:"tarps",label:"Tarps",line:"Tarps",seed:"roof tarping",
    keywords:["emergency roof tarping","roof tarp installation","temporary roof protection","tarping after storm damage","prevent secondary water damage","mitigation tarping services","board-up services"],
    match:["tarp","temporary repair","board-up","mitigation"]},
-  {id:"leak",label:"Leak Detection",line:"Leak Detection",
+  {id:"leak",label:"Leak Detection",line:"Leak Detection",seed:"leak detection",
    keywords:["leak detection services","roof leak detection","water intrusion inspection","moisture mapping","leak source identification","water damage claim inspection","plumbing leak detection"],
    match:["leak","water intrusion","moisture","water damage"]},
-  {id:"underwriting",label:"Underwriting / 4-Point",line:"Underwriting Inspections (4-Point Inspection)",
+  {id:"underwriting",label:"Underwriting / 4-Point",line:"Underwriting Inspections (4-Point Inspection)",seed:"4 point inspection",
    keywords:["underwriting inspection services","4-point inspection","four point inspection insurance","roof condition report underwriting","insurance-to-value inspection","roof age verification","home insurance eligibility inspection","pre-bind property inspection","condition and hazard survey","aerial imagery verification"],
    match:["underwriting","4-point","four-point","four point","insurance-to-value","renewal","aerial imagery","nonrenewal","non-renewal","eligibility","electrical","plumbing","hvac"]},
-  {id:"engineering",label:"Engineering",line:"Engineering Services",
+  {id:"engineering",label:"Engineering",line:"Engineering Services",seed:"structural engineer inspection",
    keywords:["structural damage engineering assessment","cause and origin investigation","engineering report property claims","foundation movement claims","wind versus wear analysis","structural integrity evaluation","building envelope assessment","expert report claim litigation"],
    match:["engineer","structural","cause and origin","foundation","forensic"]},
-  {id:"appraisals",label:"Appraisals",line:"Appraisals",
+  {id:"appraisals",label:"Appraisals",line:"Appraisals",seed:"insurance appraisal",
    keywords:["insurance appraisal process","appraisal clause property claim","property damage appraisal","appraisal umpire process","independent appraiser insurance claims","claim dispute appraisal","appraisal award documentation"],
    match:["appraisal","appraiser","umpire"]},
-  {id:"weather",label:"Weather",line:"",intel:true,
+  {id:"weather",label:"Weather",line:"",intel:true,seed:"storm damage inspection",
    keywords:["severe weather outlook","SPC convective outlook","hail swath map","damaging wind event","hurricane season forecast","tropical storm track","tornado outbreak","storm season preparedness","NOAA weather alerts","post-storm inspection demand"],
    match:["weather","hail","storm","hurricane","tornado","wind","flood","wildfire","noaa","forecast","tropical","heat"]},
-  {id:"insight",label:"Insurance Intelligence",line:"",intel:true,
+  {id:"insight",label:"Insurance Intelligence",line:"",intel:true,seed:"property insurance claims",
    keywords:["property insurance market trends","claims cycle time benchmarks","loss adjustment expense","indemnity leakage","insurance litigation trends","assignment of benefits reform","roof depreciation schedules","state insurance regulation","reinsurance renewals property","claims technology adoption","vendor consolidation claims","policyholder satisfaction claims"],
    match:["rate","regulation","litigation","market","reinsurance","carrier","insurer","legislation","commissioner","technology","artificial intelligence","cycle time","expense","fraud","lawsuit","legal","court"]}
 ];
@@ -253,12 +253,14 @@ function serviceMatches(text){
 }
 function bankHtml(){
   const f=serviceFocus();
-  if(!f)return '<p class="muted" style="margin:0"><b>Keyword bank:</b> pick a service tab above — Ladder Assist, Contents, Weather, Insurance Intelligence, or any service line — and its industry keyword bank loads here. Click a keyword to add it to the campaign.</p>';
-  return '<p style="margin:0 0 4px"><b>'+escapeHtml(f.label)+' keyword bank</b> <span class="muted">— on point, no filler. Click to add to the campaign keywords.</span></p><div class="chips" style="margin-top:6px">'+f.keywords.map(function(k){return '<button class="chip" onclick="addKeyword(\''+escapeHtml(k)+'\')">'+escapeHtml(k)+'</button>'}).join("")+'</div>'
+  if(!f)return '<p class="muted" style="margin:0"><b>Keyword bank:</b> pick a service tab above — Ladder Assist, Contents, Weather, Insurance Intelligence, or any service line — and real SEO/AEO keyword data for that service loads here, ready to build content from.</p>';
+  return '<p style="margin:0 0 4px"><b>'+escapeHtml(f.label)+' keyword bank</b> <span class="muted">— click any keyword to add it to the campaign.</span></p><div class="chips" style="margin-top:6px">'+f.keywords.map(function(k){return '<button class="chip" onclick="addKeyword(\''+escapeHtml(k)+'\')">'+escapeHtml(k)+'</button>'}).join("")+'</div>'
+    +'<div class="kwLive" style="margin-top:8px"><p class="muted" style="margin:0">Pulling live SEO/AEO keyword data…</p></div>'
     +'<div style="margin-top:10px"><button class="mini" onclick="useAllKeywords()">Use top 5 in campaign</button><button class="mini" onclick="showTab(\'content\')">Open Content tab</button></div>';
 }
 function renderKeywordBanks(){
   ["kwBankRadar","kwBankContent"].forEach(function(id){const el=$(id);if(el)el.innerHTML=bankHtml()});
+  if(window.HancockKeywordBank)HancockKeywordBank.attach();
 }
 function addKeyword(k){
   const input=$("keywords");if(!input)return;
@@ -350,6 +352,6 @@ if(TABS.some(function(tab){return tab[0]===initialTab})){showTab(initialTab)}
 </script>
 <script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);window.CHAD_CONFIG={apiBase:"",briefingKey:window.CHAD_BRIEFING_KEY,holdBriefingNavigation:true};</script>
 <script src="chad-widget.js"></script>
-<script src="studio-live.js?v=20260728b"></script>
+<script src="studio-live.js?v=20260728c"></script>
 </body>
 </html>

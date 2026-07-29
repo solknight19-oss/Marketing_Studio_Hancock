@@ -1250,7 +1250,7 @@ def keyword_data(keywords,seed=''):
     seed=(seed or keywords[0]).strip().lower()
     try:
         data=dataforseo_request('/v3/dataforseo_labs/google/keyword_suggestions/live',
-            [{'keyword':seed,'location_code':2840,'language_code':'en','limit':10}])
+            [{'keyword':seed,'location_code':2840,'language_code':'en','limit':30}])
         for task in data.get('tasks') or []:
             for block in task.get('result') or []:
                 for item in block.get('items') or []:
