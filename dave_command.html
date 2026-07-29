@@ -57,7 +57,7 @@ body.focusing .module:not(.activeFocus){opacity:.62;filter:saturate(.72)}
   <header class="topline">
     <div class="dates" id="dateStrip"></div>
     <div class="brand"><strong>Dave Hud - Email Automation</strong><small id="statusLine">Initializing briefing feed...</small></div>
-    <div class="topActions"><button class="hudBtn primary" id="openDaveBtn" onclick="openDave()">Open Dave</button><button class="hudBtn" onclick="briefMe()">Brief me</button><button class="hudBtn" onclick="briefLeader('ryan')">Brief Ryan</button><button class="hudBtn" onclick="briefLeader('noah')">Brief Noah</button><button class="hudBtn" id="talkBtn" onclick="startConversation()">Live Mic</button><button class="hudBtn" onclick="runCore()">Run Core</button><button class="hudBtn" onclick="loadBriefing()">Refresh</button><button class="hudBtn" onclick="location.href='/email-automation'">Email Automation</button><button class="hudBtn" onclick="location.href='/dashboard'">Workspace</button><button class="hudBtn warn" onclick="stopVoice()">Stop</button></div>
+    <div class="topActions"><button class="hudBtn primary" id="openDaveBtn" onclick="openDave()">Open Dave</button><button class="hudBtn" onclick="briefMe()">Brief me</button><button class="hudBtn primary" onclick="briefLeader('leadership')">Leadership Brief</button><button class="hudBtn" onclick="briefLeader('team')">Team Brief</button><button class="hudBtn" onclick="briefLeader('ryan')">Brief Ryan</button><button class="hudBtn" onclick="briefLeader('noah')">Brief Noah</button><button class="hudBtn" id="talkBtn" onclick="startConversation()">Live Mic</button><button class="hudBtn" onclick="runCore()">Run Core</button><button class="hudBtn" onclick="loadBriefing()">Refresh</button><button class="hudBtn" onclick="location.href='/email-automation'">Email Automation</button><button class="hudBtn" onclick="location.href='/dashboard'">Workspace</button><button class="hudBtn warn" onclick="stopVoice()">Stop</button></div>
   </header>
   <main class="stage">
     <aside class="rail left">
@@ -143,22 +143,36 @@ const RESPONSE_EVENTS=[
   {bot:'Operations Bot',adjuster:'Ryan Patel',carrier:'Harbor National',reply:'Can someone confirm who handles after-hours CAT escalation?',need:'CAT escalation path',department:'Operations',owner:'Jason Harris',region:'Southeast CAT desk',action:'Route question to Operations and prepare approved escalation-path response.',status:'route to ops'},
   {bot:'Expansion Mapper',adjuster:'Marcus Reed',carrier:'Continental Shield',reply:'We may need estimates added to these ladder assist files.',need:'DI with Estimate cross-sell',department:'BD / Operations',owner:'Jennifer',region:'Midwest',action:'Prepare service-fit note and ask rep to confirm timing before pitching.',status:'rep review'}
 ];
-const LEADER_BRIEFS={
-  ryan:{
-    name:'Ryan',
-    focus:'actions',
-    title:'Ryan executive brief',
-    voice:'Ryan, Dave has the email automation floor under control. 25 new adjuster welcome emails went out, 30 first-week check-ins went to key carriers, and 18 replies are being monitored for friction or service opportunities. The one decision item is Operations Bot: Alicia Brown at Keystone Casualty says she cannot reach the Nashville territory manager. Dave has the external response locked and is preparing an internal permission request to Jason Harris before any contact information goes back out. Noah can monitor tomorrow queue, Cassie can review the welcome lane, Jennifer can review the cross-sell lane, and you only need to touch approvals, escalations, and blocked accounts.',
-    body:'Decision lane: approve the Jason Harris permission request path, keep suppression-locked records blocked, and let Dave continue routing normal follow-ups without pulling you into the weeds.'
-  },
-  noah:{
-    name:'Noah',
-    focus:'automation',
-    title:'Noah operator handoff',
-    voice:'Noah, Dave is handing you the operating picture. The active lanes are 25 welcome emails, 30 week-one check-ins, 5 department routes, and 3 permission requests. Watch the next-day queue first: Maya Thompson and Chris Valdez are clean welcome-lane candidates; Alicia Brown is not an outbound reply yet because Operations Bot needs Jason Harris permission; Evan Keller stays blocked because Compliance Sentinel found a vendor-management flag. Your job is to keep the queue moving, make sure every held reply has an owner, and verify tomorrow emails pass suppression, merge fields, and template approval before anything leaves the building.',
-    body:'Operator lane: monitor tomorrow queue, keep every hold assigned, and confirm Draft Control clears suppression, merge fields, template lock, and human approval.'
-  }
-};
+function nWord(x,w){return x+' '+w+(x===1?'':'s')}
+function composeBrief(person){
+  const c=(DAVE&&DAVE.counts)||{};
+  const na=((DAVE&&DAVE.next_actions)||[])[0]||'Review the workspace queues.';
+  const A=c.carrier_batch_accounts||0,H=c.carrier_batch_held||0;
+  const desk=A?('The live carrier desk is tracking '+nWord(A,'account')+', with '+H+' held under contract-negotiation suppression. '):'';
+  const briefs={
+    leadership:{
+      name:'Leadership',focus:'automation',title:'Leadership brief — Brad, Chuck, Ray',
+      body:'All-systems read for leadership: live intelligence, live storm tracking, live carrier desk, and the approval guardrail. Efficiencies compound because every department works from one picture.',
+      voice:"Good morning, Brad, Chuck, and Ray. I'm Dave, Hancock's operating intelligence, and all systems are online. The Marketing Studio is live. Search and answer-engine data is flowing through live APIs. Social Pulse is reading the industry conversation in real time, and NOAA storm tracking is watching the carrier footprint around the clock. "+desk+"Right now I'm holding "+nWord(c.bot_alerts||0,'intelligence signal')+" and "+nWord(c.open_tasks||0,'open work item')+" across departments. One team, one picture — that is how the efficiencies compound, and how the relationships stay ahead of the storm. Nothing reaches a carrier without a human yes. The system prepares. Hancock decides."
+    },
+    team:{
+      name:'Team',focus:'actions',title:'Team brief',
+      body:'Working picture for Cassie, Jennifer, Noah, and Ryan: queues, due items, live signals, and the standing rule — nothing sends without approval.',
+      voice:"Good morning, Cassie, Jennifer, Noah, Ryan — and leadership with us this morning. All systems are online and every feed is live. Team picture: "+nWord(c.emails_waiting||0,'email')+" waiting on review, "+nWord(c.open_tasks||0,'open task')+", "+nWord(c.calendar_due_today||0,'calendar item')+" due today, and "+nWord(c.bot_alerts||0,'intelligence signal')+" to work. "+desk+"Queues are loaded in the workspace. Prepare, review, approve — nothing leaves the building without a yes."
+    },
+    ryan:{
+      name:'Ryan',focus:'actions',title:'Ryan executive brief',
+      body:'Decision lane: approvals, waiting email, urgent tasks, and suppressed accounts. Everything else keeps moving without you.',
+      voice:"Ryan, your decision lane: "+nWord(c.core_approvals||0,'approval')+" waiting, "+nWord(c.emails_waiting||0,'email')+" that need your eyes, and "+nWord(c.urgent_tasks||0,'urgent task')+" flagged. "+(H?("The carrier desk holds "+nWord(H,'account')+" in contract negotiation — no outbound touches there. "):"")+"Next action: "+na
+    },
+    noah:{
+      name:'Noah',focus:'automation',title:'Noah operator brief',
+      body:'Operator lane: open tasks, live signals, due items. Every trigger stays in prepare mode until it clears review.',
+      voice:"Noah, the operating picture: "+nWord(c.open_tasks||0,'open team task')+", "+nWord(c.bot_alerts||0,'intelligence signal')+", and "+nWord(c.calendar_due_today||0,'item')+" due today. "+desk+"Every trigger stays in prepare mode until it clears review and approval. Next action: "+na
+    }
+  };
+  return briefs[person]||briefs.team;
+}
 function dateStrip(){let now=new Date(),html='';for(let i=1;i<=31;i++){html+='<span class="'+(i===now.getDate()?'active':'')+'">'+String(i).padStart(2,'0')+'</span>'}$('dateStrip').innerHTML=html}
 function item(title,body,cls,tags,focus){let target=esc(focus||'general');return "<div class=\"item "+esc(cls||'')+"\" data-focus=\""+target+"\" onclick=\"setFocus('"+target+"')\">"+(tags||[]).filter(Boolean).map(function(t){return '<span class="tag">'+esc(t)+'</span>'}).join('')+'<h3>'+esc(title||'Untitled')+'</h3><p>'+esc(body||'No detail logged.')+'</p></div>'}
 function ring(label,value,cls){let target=esc(cls||'command');return "<button class=\"miniRing "+target+"\" onclick=\"setFocus('"+target+"')\"><div><strong>"+esc(value)+"</strong><span>"+esc(label)+"</span></div></button>"}
@@ -279,8 +293,8 @@ function startMicWatch(){stopMicWatch();if(conversationMode)$('statusLine').text
 async function attachAudioMeter(audio){try{await ensureAudio();let source=audioCtx.createMediaElementSource(audio);source.connect(analyser);startViz()}catch(e){$('waveLine').classList.add('live')}}
 async function speakDave(text,onend){stopListening(true);stopPlayback();setCoreState('thinking');try{let response=await fetch('/api/dave-speak',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:text})});if(!response.ok)throw new Error('Dave voice unavailable');let blob=await response.blob();let audio=new Audio(URL.createObjectURL(blob));currentAudio=audio;audio.onplay=function(){setCoreState('speaking');attachAudioMeter(audio)};audio.onended=function(){if(currentAudio!==audio)return;currentAudio=null;stopViz();setCoreState('');setFocus('actions');if(onend)onend();if(conversationMode)queueListening(650)};audio.onerror=function(){if(currentAudio===audio)currentAudio=null;voiceUnavailable('Dave answered in text. Voice playback failed in the browser.',onend);if(conversationMode)queueListening(900)};await audio.play()}catch(e){voiceUnavailable('Dave answered in text. Voice playback is blocked until the browser allows audio.',onend);if(conversationMode)queueListening(900)}}
 async function briefMe(){if(!DAVE)await loadBriefing();stopMicWatch();stopPlayback();focusTimers.forEach(clearTimeout);focusTimers=[];let text=DAVE.spoken||'Dave is online.';scheduleBriefingFocus();await speakDave(text)}
-function requestedLeaderBrief(message){let lower=(message||'').toLowerCase();if(/\bbrief\s+ryan\b|\bryan\s+brief\b/.test(lower))return'ryan';if(/\bbrief\s+noah\b|\bnoah\s+brief\b/.test(lower))return'noah';return''}
-async function briefLeader(person){let brief=LEADER_BRIEFS[person]||LEADER_BRIEFS.ryan;if(!DAVE)await loadBriefing();stopMicWatch();stopPlayback();focusTimers.forEach(clearTimeout);focusTimers=[];conversationMode=false;$('openDaveBtn').classList.remove('primary');$('talkBtn').classList.remove('primary');$('statusLine').textContent='Dave prepared '+brief.name+' briefing.';$('transcript').textContent='Dave to '+brief.name+': '+brief.voice;setFocus(brief.focus);$('commandTitle').textContent=brief.title;$('commandBody').textContent=brief.body;await speakDave(brief.voice,function(){setFocus(brief.focus);$('commandTitle').textContent=brief.title;$('commandBody').textContent=brief.body})}
+function requestedLeaderBrief(message){let lower=(message||'').toLowerCase();if(/\bleadership\s+brief\b|\bbrief\s+leadership\b|\bboardroom\b/.test(lower))return'leadership';if(/\bteam\s+brief\b|\bbrief\s+the\s+team\b/.test(lower))return'team';if(/\bbrief\s+ryan\b|\bryan\s+brief\b/.test(lower))return'ryan';if(/\bbrief\s+noah\b|\bnoah\s+brief\b/.test(lower))return'noah';return''}
+async function briefLeader(person){if(!DAVE)await loadBriefing();let brief=composeBrief(person);stopMicWatch();stopPlayback();focusTimers.forEach(clearTimeout);focusTimers=[];conversationMode=false;$('openDaveBtn').classList.remove('primary');$('talkBtn').classList.remove('primary');$('statusLine').textContent='Dave prepared the '+brief.name+' briefing.';$('transcript').textContent='Dave: '+brief.voice;setFocus(brief.focus);$('commandTitle').textContent=brief.title;$('commandBody').textContent=brief.body;await speakDave(brief.voice,function(){setFocus(brief.focus);$('commandTitle').textContent=brief.title;$('commandBody').textContent=brief.body})}
 function detectFocus(text){let lower=(text||'').toLowerCase();if(/email automation|carrier email|bd email|win-back|win back|cross-sell|cross sell|automation studio/.test(lower))return'automation';if(/email|mail|inbox|reply/.test(lower))return'email';if(/calendar|meeting|appointment|teams|schedule/.test(lower))return'calendar';if(/task|todo|to do|priority|next action/.test(lower))return'tasks';if(/bot|chad|report|signal/.test(lower))return'bots';return'actions'}
 function openEmailAutomation(){location.href='/email-automation'}
 function isStandbyCommand(message){let lower=(message||'').toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();return lower==='standby'||lower==='stand by'||lower==='dave standby'||lower==='dave stand by'||lower==='go standby'||lower==='go stand by'||lower==='quiet'||lower==='go quiet'}

@@ -1776,8 +1776,16 @@ def dave_briefing(user):
     core_summary=core.get('last_summary') or {}
     if core_summary.get('checked_at'):
         spoken_parts.append(f"Dave Core: handled {core_summary.get('handled',0)} internal item{'s' if core_summary.get('handled',0)!=1 else ''}, surfaced {core_summary.get('surfaced',0)} active signal{'s' if core_summary.get('surfaced',0)!=1 else ''}, and flagged {core_summary.get('needs_approval',0)} item{'s' if core_summary.get('needs_approval',0)!=1 else ''} for approval.")
+    live_batch=live_carrier_batch()
+    live_batch_accounts=live_batch_held=0
+    if live_batch:
+        batch_lines=[l for l in live_batch.splitlines() if l.strip()]
+        live_batch_accounts=max(0,len(batch_lines)-1)
+        live_batch_held=sum(1 for l in batch_lines if 'contract_negotiation' in l)
     if email_auto.get('installed'):
         spoken_parts.append(f"Carrier email automation is loaded in prepare-check-export mode with {email_auto.get('sequences')} sequences and {email_auto.get('templates')} templates. Sending remains approval-gated.")
+        if live_batch_accounts:
+            spoken_parts.append(f"The live carrier desk is tracking {live_batch_accounts} accounts this morning, with {live_batch_held} held under contract-negotiation suppression.")
     spoken_parts.append("Next action: "+next_actions[0])
     return {
         'generated_at':now(),
@@ -1799,6 +1807,8 @@ def dave_briefing(user):
             'core_done_actions':(core.get('counts') or {}).get('done_actions',0),
             'email_automation_ready':1 if email_auto.get('installed') else 0,
             'email_automation_sequences':email_auto.get('sequences',0),
+            'carrier_batch_accounts':live_batch_accounts,
+            'carrier_batch_held':live_batch_held,
         },
         'spoken':" ".join(spoken_parts),
         'next_actions':next_actions[:5],
