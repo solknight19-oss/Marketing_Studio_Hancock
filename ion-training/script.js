@@ -45,7 +45,7 @@ const slides = [
       "If the assignment is missing, refresh before calling support."
     ],
     practice: "Choose the correct report for the sample property: Insured Guy at 12321 Kingdom Way.",
-    filled: "Selected: Insured Guy Underwriting Report. Reason: it matches the sample insured and property file used throughout this training."
+    filled: "Selected: Insured Guy Underwriting Report. Reason: it matches the sample insured and property file used throughout this calibration."
   },
   {
     section: "ION Underwriting Form",
@@ -469,7 +469,7 @@ const slides = [
     fields: [
       ["Outbox", "0 items expected"],
       ["Sent", "Completed report visible"],
-      ["Training report", "JAMIE KNIGHT - ION Underwriting Report.pdf"],
+      ["Calibration report", "JAMIE KNIGHT - ION Underwriting Report.pdf"],
       ["Completion status", "Uploaded"]
     ],
     checks: [
