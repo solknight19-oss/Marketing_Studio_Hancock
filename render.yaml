@@ -46,7 +46,7 @@ services:
       - key: ADMIN_PASSWORD
         sync: false
   - type: web
-    name: hancock-ion-training
+    name: hancock-ion-calibration
     env: docker
     plan: free
     dockerfilePath: ./ion-training/Dockerfile

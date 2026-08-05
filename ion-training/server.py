@@ -43,7 +43,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         route = urllib.parse.urlparse(self.path).path
         if route == "/healthz":
-            self.send_json({"ok": True, "service": "hancock-ion-training"})
+            self.send_json({"ok": True, "service": "hancock-ion-calibration"})
             return
 
         if route in ("", "/"):

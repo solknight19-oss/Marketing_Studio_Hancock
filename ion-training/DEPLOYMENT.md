@@ -6,7 +6,7 @@ Production domain:
 
 Render service URL:
 
-`https://hancock-ion-training.onrender.com`
+`https://hancock-ion-calibration.onrender.com`
 
 ## What this is
 
@@ -26,8 +26,8 @@ Publish the entire `ION_Guide_Walkthrough` folder:
 
 ## Recommended launch path
 
-1. Deploy the `hancock-ion-training` Render service from this folder.
-2. Confirm `https://hancock-ion-training.onrender.com` opens the training site.
+1. Deploy the `hancock-ion-calibration` Render service from this folder.
+2. Confirm `https://hancock-ion-calibration.onrender.com` opens the calibration site.
 3. Add the custom domain `ion-training.hancockclaims.com` to that Render service.
 4. In DNS for `hancockclaims.com`, add the CNAME record requested by Render.
 5. Enable HTTPS/SSL in the Render dashboard.
