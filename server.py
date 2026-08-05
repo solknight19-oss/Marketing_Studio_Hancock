@@ -1162,22 +1162,151 @@ def pulse_sweep_data():
         'suggestedTitles':suggested,
     }
 
+def data_file_age_hours(stamp):
+    """Hours since a data-file timestamp, or None if unparseable. Never guesses."""
+    stamp=str(stamp or '')
+    for parse in (lambda v:dt.datetime.fromisoformat(v),lambda v:dt.datetime.strptime(v,'%Y-%m-%dT%H:%M:%S%z')):
+        try:
+            gen=parse(stamp)
+            now=dt.datetime.now(gen.tzinfo) if gen.tzinfo else dt.datetime.now()
+            return max(0,int((now-gen).total_seconds()//3600))
+        except Exception:
+            continue
+    return None
+
+def read_data_js(name):
+    """Parse a data/*.js payload (window.X = {...};) into a dict, or None."""
+    try:
+        raw=(ROOT/'data'/name).read_text(encoding='utf-8')
+        return json.loads(raw.split('=',1)[1].strip().rstrip(';'))
+    except Exception:
+        return None
+
 def radar_story_data():
     """Read the Scout-vetted Industry Radar payload (data/latest_bot.js) so Chad can prompt on the
     market data the Radar tab is actually showing. This file is hard-rule-checked before deploy."""
-    path=ROOT/'data'/'latest_bot.js'
-    try:
-        raw=path.read_text(encoding='utf-8')
-        body=raw.split('=',1)[1].strip().rstrip(';')
-        data=json.loads(body)
-    except Exception:
-        return None
+    data=read_data_js('latest_bot.js')
+    if not data: return None
     stories=[s for s in (data.get('stories') or []) if s.get('title')]
     if not stories: return None
     return {
         'generatedHuman':data.get('generatedHuman') or '',
+        'ageHours':data_file_age_hours(data.get('generatedAt')),
         'stories':stories,
         'hot':[s for s in stories if (s.get('tag') or '').lower()=='hot'],
+        'lines':sorted({s.get('line') for s in stories if s.get('line')}),
+    }
+
+def content_plays_data():
+    """Read Maya's daily content plays (data/content_plays.js) for Chad."""
+    data=read_data_js('content_plays.js')
+    if not data: return None
+    plays=[p for p in (data.get('plays') or []) if p.get('title')]
+    if not plays: return None
+    return {
+        'generatedHuman':data.get('generatedHuman') or '',
+        'ageHours':data_file_age_hours(data.get('generated') or data.get('generatedAt')),
+        'plays':[{'title':p.get('title'),'platform':p.get('platform'),'signal':p.get('signal')} for p in plays],
+        'marketRead':[m.get('point') for m in (data.get('marketRead') or []) if m.get('point')],
+    }
+
+def weekly_longform_data():
+    """Read Leo's weekly long-form article (data/weekly_longform.js) for Chad."""
+    data=read_data_js('weekly_longform.js')
+    article=(data or {}).get('article') or {}
+    if not article.get('title'): return None
+    return {
+        'generatedHuman':data.get('generatedHuman') or '',
+        'ageHours':data_file_age_hours(data.get('generated') or data.get('generatedAt')),
+        'title':article.get('title'),
+        'subtitle':article.get('subtitle') or '',
+        'signal':article.get('signal') or '',
+    }
+
+def cached_feed(cache,fetch,max_age):
+    """Return cached relay data if present; otherwise warm the cache in the background and
+    return whatever exists now (possibly None). Keeps /api/state fast — Chad's context reads
+    must never block the Studio poll on live HTTP fetches."""
+    if cache['data'] is not None and time.time()-cache['at']<max_age:
+        return cache['data']
+    threading.Thread(target=fetch,daemon=True).start()
+    return cache['data']
+
+def studio_intel():
+    """One picture of everything the Studio knows right now, with per-feed freshness and a
+    ranked what-matters-now list. This is Chad's window into the 2026-08-05 Studio build:
+    Scout radar, pulse sweeps, Maya's plays, Leo's long-form, confirmed SPC storm reports,
+    the relevance-sorted Live Wire, and NHC tropical — each honestly stamped, and reported
+    as stale or dark when it is. A quiet feed is an ops finding, not a blank."""
+    radar=radar_story_data()
+    pulse=pulse_sweep_data()
+    plays=content_plays_data()
+    longform=weekly_longform_data()
+    reports=cached_feed(SPC_REPORTS_CACHE,spc_storm_reports,1800)
+    wire=cached_feed(RADAR_FEED_CACHE,radar_feed_items,900)
+    nhc=cached_feed(NHC_CACHE,nhc_current_storms,900)
+    # Confirmed ground truth, condensed: last-48h and 4-day totals by peril, top states.
+    report_summary=None
+    if reports and reports.get('ok'):
+        recent={'tornado':{},'hail':{},'wind':{}}
+        total={'tornado':0,'hail':0,'wind':0}
+        for i,day in enumerate(reports.get('days') or []):
+            for peril in ('tornado','hail','wind'):
+                for item in day.get(peril) or []:
+                    total[peril]+=1
+                    if i<2:
+                        recent[peril][item.get('state') or '?']=recent[peril].get(item.get('state') or '?',0)+1
+        def top(m,n=5):
+            return ', '.join(f"{st} x{c}" for st,c in sorted(m.items(),key=lambda kv:-kv[1])[:n])
+        report_summary={
+            'recent48h':{p:top(recent[p]) for p in recent if recent[p]},
+            'recentCount':sum(sum(m.values()) for m in recent.values()),
+            'total4day':total,
+            'source':reports.get('source') or 'SPC storm reports',
+        }
+    # Feed health. Weekday-morning feeds are stale past ~30h; Leo past 8 days. On the LIVE
+    # site the git-deployed feeds only advance when Ryan approves a deploy push.
+    health=[]
+    def check(name,payload,age,limit,note):
+        if payload is None:
+            health.append({'feed':name,'status':'dark','age':'no readable data','note':note})
+        elif age is None:
+            health.append({'feed':name,'status':'unknown-age','age':'timestamp unreadable','note':note})
+        elif age>limit:
+            health.append({'feed':name,'status':'stale','age':f'{age}h old','note':note})
+    task_note=("refreshed by the weekday-morning scheduled task on Ryan's workstation; if stale, that scheduler is "
+               "probably not running (it needs the Claude app open, Chrome up, and the Mac awake) — and the live site "
+               "only advances when Ryan approves a deploy push")
+    check('Industry Radar (Scout sweep)',radar,radar and radar.get('ageHours'),30,task_note)
+    check('Social Pulse sweeps',pulse,pulse and pulse.get('ageHours'),30,task_note)
+    check("Maya's content plays",plays,plays and plays.get('ageHours'),30,task_note)
+    check("Leo's weekly long-form",longform,longform and longform.get('ageHours'),8*24,task_note)
+    for name,payload in (('SPC storm reports relay',report_summary),('Live Wire trade press',wire and wire.get('ok') and wire),('NHC tropical relay',nhc and nhc.get('ok') and nhc)):
+        if not payload:
+            health.append({'feed':name,'status':'dark','age':'relay has not returned data yet this cycle','note':'live server relay; report it as unreachable, never as quiet weather/news'})
+    # What matters now, in order. Deterministic, so Chad's sense of priority is stable.
+    priorities=[]
+    alerts=active_storm_alerts()
+    if alerts:
+        priorities.append(f"ACTIVE WEATHER: {len(alerts)} claim-relevant NWS alert(s) — safety-first content only while threats are live.")
+    if report_summary and report_summary['recentCount']:
+        bits='; '.join(f"{p}: {v}" for p,v in report_summary['recent48h'].items())
+        priorities.append(f"CONFIRMED DAMAGE (last 48h storm reports): {bits} — post-event documentation content is in play in those states.")
+    stale_feeds=[h['feed'] for h in health if h['status'] in ('stale','dark')]
+    if stale_feeds:
+        priorities.append(f"OPS: these feeds are stale or dark and someone should tell Ryan: {', '.join(stale_feeds)}.")
+    if radar and radar.get('hot'):
+        priorities.append(f"MARKET: {len(radar['hot'])} Hot radar stor{'y' if len(radar['hot'])==1 else 'ies'} — lead: \"{radar['hot'][0].get('title')}\".")
+    if pulse and pulse.get('postCount'):
+        priorities.append(f"ENGAGEMENT: {pulse['postCount']} drafted LinkedIn conversation(s) waiting on human review in Social Pulse.")
+    if plays and (plays.get('ageHours') or 99)<30:
+        priorities.append(f"READY TO PUBLISH: Maya's {len(plays['plays'])} plays from {plays['generatedHuman']} await review.")
+    if longform and (longform.get('ageHours') or 0)<8*24:
+        priorities.append(f"READY TO PUBLISH: Leo's article \"{longform['title']}\" awaits review.")
+    return {
+        'radar':radar,'pulse':pulse,'plays':plays,'longform':longform,
+        'reports':report_summary,'wire':wire,'nhc':nhc,
+        'health':health,'priorities':priorities,
     }
 
 NHC_CACHE={'at':0.0,'data':None}
@@ -2217,8 +2346,43 @@ def chad_context(user):
         f"Source: {item.get('source') or 'internal seasonal trigger'}"
         for item in state.get('seasonalTriggers',[])[:6]
     ) or '- no seasonal triggers loaded'
-    top=(state['botData'].get('stories') or [])[:4]
-    signals='\n'.join(f"- {s.get('title')}: {s.get('angle')}" for s in top) or '- no scan yet'
+    intel=studio_intel()
+    # Market signals come from the Scout-vetted radar (the file the Radar tab shows),
+    # not the unchecked auto-bot feed. Fall back to the auto-bot only when Scout is dark,
+    # and say so.
+    if intel['radar']:
+        signals='\n'.join(
+            f"- [{s.get('tag') or 'Trend'} · {s.get('line') or 'general'}] {s.get('title')}: {s.get('angle')}"
+            for s in intel['radar']['stories'][:6]
+        )+f"\n  (Scout sweep from {intel['radar']['generatedHuman']})"
+    else:
+        top=(state['botData'].get('stories') or [])[:4]
+        signals=('\n'.join(f"- {s.get('title')}: {s.get('angle')}" for s in top)+
+                 '\n  (UNVETTED auto-bot feed — the Scout sweep is dark; label anything from here as unvetted)') if top else '- no scan yet'
+    priorities_block='\n'.join(f"{i+1}. {p}" for i,p in enumerate(intel['priorities'])) or '- quiet board: pre-loss education and evergreen content windows are open'
+    health_block='\n'.join(f"- {h['feed']}: {h['status'].upper()} ({h['age']}) — {h['note']}" for h in intel['health']) or '- all Studio feeds are fresh'
+    reports_block='- no confirmed tornado/hail/wind reports in the last 4 days (a pre-loss content window)'
+    if intel['reports'] and intel['reports']['recentCount']:
+        reports_block='\n'.join(f"- last 48h {p}: {v}" for p,v in intel['reports']['recent48h'].items())
+        totals=intel['reports']['total4day']
+        reports_block+=f"\n- 4-day totals: {totals['tornado']} tornado, {totals['hail']} hail, {totals['wind']} wind reports ({intel['reports']['source']})"
+    elif intel['reports']:
+        totals=intel['reports']['total4day']
+        reports_block=f"- quiet last 48h; 4-day totals: {totals['tornado']} tornado, {totals['hail']} hail, {totals['wind']} wind reports"
+    wire_block='- Live Wire relay warming or unreachable — reported as such, not as a quiet news day'
+    if intel['wire'] and intel['wire'].get('ok'):
+        relevant=[it for it in intel['wire'].get('items') or [] if it.get('relevance',0)>0][:5]
+        wire_block='\n'.join(f"- {it.get('source')}: {it.get('title')}" for it in relevant) or '- wire reachable but nothing Hancock-relevant right now'
+    plays_block='- none loaded'
+    if intel['plays']:
+        plays_block='\n'.join(f"- [{p.get('platform')}] {p.get('title')} (why now: {(p.get('signal') or '')[:140]})" for p in intel['plays']['plays'])+f"\n  (from {intel['plays']['generatedHuman']})"
+    longform_block='- none loaded'
+    if intel['longform']:
+        longform_block=f"- \"{intel['longform']['title']}\" — {intel['longform']['subtitle'][:200]} (from {intel['longform']['generatedHuman']})"
+    pulse_block='- no sweep loaded'
+    if intel['pulse']:
+        pulse_block=(f"- {intel['pulse']['postCount']} drafted conversation(s) across topics: {', '.join([t for t in intel['pulse']['topics'] if t][:5])}"
+                     f" (from {intel['pulse']['generatedHuman']}; every follow/comment/post needs Ryan's individual approval)")
     priority=(feed.get('mainSpeakingBot') or {}).get('priority','Run the bot council and pick one useful content opportunity.')
     recent_turns=conversation_history(user['id'])
     teammate_turns=teammate_conversation(user['id'])
@@ -2231,11 +2395,33 @@ def chad_context(user):
     ) or '- no recent teammate conversation'
     return f"""Current user: {user['name']} ({user['role']}).
 Current priority: {priority}
+
+WHAT MATTERS NOW (ranked; lead with #1 when asked what's important, and weave the top items into briefings):
+{priorities_block}
+
+STUDIO FEED HEALTH (if anything here is STALE or DARK, say so plainly and early — stale data must never be presented as current; a dead feed is an ops finding to surface, not a quiet result):
+{health_block}
+
+Confirmed storm reports on the ground (NWS/SPC — these persist after warnings expire; the Storm Watch tab shows the full card):
+{reports_block}
+
+Live Wire — Hancock-relevant trade-press headlines right now:
+{wire_block}
+
+Maya's content plays today (drafts awaiting review in the Content tab):
+{plays_block}
+
+Leo's weekly long-form (draft awaiting review in the Content tab):
+{longform_block}
+
+Social Pulse queue:
+{pulse_block}
+
 Open work:
 {tasks}
 Recent shared activity:
 {activity}
-Current market signals:
+Current market signals (Scout-vetted radar — every story carries its Hancock service line):
 {signals}
 Durable memory:
 {memory}
@@ -2329,6 +2515,8 @@ Our Marketing Calendar is the team's production operating system. Refer to it by
 Lead users to Our Marketing Calendar at purposeful handoff points: during the daily briefing when assigned work is overdue, due today, or coming next; after a strong research or storm signal has been turned into a production brief; when a user asks what to produce, what is due, what is ready, or what the monthly theme is; and after preparing content that now needs an owner or publish date. Explain why you are taking them there and identify the single item or decision that needs attention. Do not navigate there merely because the word "calendar" appears, and do not repeatedly interrupt an unrelated conversation. Research first when evidence is needed, prepare the work, then use the calendar to create accountability.
 
 Seasonal Triggers help the team think ahead. Use time-of-year windows such as hurricane season, spring hail and wind, wildfire/smoke risk, winter freeze, and underwriting planning to forecast content before the market is already reacting. Treat a trigger as a planning signal, not a claim that a storm will hit. Pair seasonal timing with current official sources, live radar, and Ryan's playbook. When a trigger is in prep, active, or peak phase, suggest "Things to Know" content, calendar briefs, customer education, carrier-facing explainers, and safety-first posts. If current weather or official outlook data is needed, research or scan before making specific claims.
+
+WHAT MATTERS — your standing priority order when briefing or asked "what's important": (1) active claim-relevant weather (safety-first, never sell into danger); (2) confirmed storm damage on the ground in the last 48 hours (NWS/SPC storm reports persist after warnings expire — this is where post-event documentation content has a live hook); (3) the health of the Studio's own intelligence feeds — if the live context marks a feed STALE or DARK, surface it early, name the age, and route it to Ryan; never present stale panels as current and never let a dead feed read as a quiet day; (4) Hot stories on the Scout-vetted Industry Radar, tied to their Hancock service line; (5) work waiting on humans: drafted Social Pulse conversations, Maya's daily plays, Leo's weekly long-form — these are finished drafts dying of old age until someone reviews them; (6) overdue and due-today production on Our Marketing Calendar; (7) seasonal windows. Everything you recommend leads with the efficiency Hancock adds to carrier accounts — fewer handoffs, fewer callbacks, files complete enough to act on without a re-touch — and efficiency claims stay conceptual unless a sourced benchmark backs them. The Scout sweep (latest_bot.js) is the trusted market feed; the auto-bot feed is unvetted background and must be labeled as such if used.
 
 Storm Watch priority for Hancock is hail, damaging wind, tornadoes, straight-line wind, derechos, and hurricane or tropical wind first because those are the strongest inspection-volume signals. Use official SPC preliminary storm reports, SPC convective outlooks, NWS active alerts, and NHC tropical advisories as the preferred storm sources. Heavy rain, flooding, wildfire, smoke, and fire-weather signals still matter, but usually frame them as contents, water, smoke, inventory, mitigation timeline, and documentation opportunities. Do not lead with generic Air Quality Alerts; ignore them unless there is a clear wildfire/smoke property-documentation angle. While a threat is active, stay safety-first and do not sell into danger. After the threat clears, shift quickly into practical roof, exterior, openings, structural indicators, contents, original-photo preservation, and defensible inspection documentation guidance.
 
@@ -2582,6 +2770,56 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None, team_events
             'action_prompt':'walk me through the Social Pulse engagement queue and what we should post today',
             'ui_action':{'type':'tab','target':'social'},
         })
+    intel=studio_intel()
+    stale_feeds=[h for h in intel['health'] if h['status'] in ('stale','dark') and 'relay' not in h['feed'].lower()]
+    if stale_feeds:
+        names=', '.join(h['feed'] for h in stale_feeds[:3])
+        ages='; '.join(f"{h['feed']} ({h['age']})" for h in stale_feeds[:3])
+        candidates.append({
+            'theme':'ops_health',
+            'opening':'Before content: an operational flag I will not sit on.',
+            'headline':'A Studio intelligence feed has gone quiet',
+            'situation':f"Stale or dark right now: {ages}. These refresh from the weekday-morning scheduled tasks on Ryan's workstation, and the live site only advances when Ryan approves a deploy push — so a stale feed usually means the scheduler is down or a push is waiting.",
+            'proposal':'Tell Ryan which feeds are stale so the scheduler gets checked. I will keep flagging this until the stamps are current — stale intelligence presented as fresh is how bad content happens.',
+            'action_label':'Review feed freshness',
+            'action_prompt':f'which Studio feeds are stale and what has to happen to refresh them ({names})',
+            'ui_action':{'type':'tab','target':'radar'},
+        })
+    if intel['reports'] and intel['reports']['recentCount']:
+        bits='; '.join(f"{p}: {v}" for p,v in intel['reports']['recent48h'].items())
+        candidates.append({
+            'theme':'storm_reports',
+            'opening':'The ground truth from the last 48 hours is worth a look.',
+            'headline':'Confirmed storm damage reports are on the board',
+            'situation':f"NWS local storm reports confirm {bits} in the last 48 hours. Warnings expire, but these reports persist — this is where post-event documentation content has a real news hook.",
+            'proposal':'I can turn the strongest state cluster into safety-first, documentation-forward content: what property owners should photograph, why original files matter, and how a complete file helps the adjuster move.',
+            'action_label':'Open Storm Watch',
+            'action_prompt':'walk me through the confirmed storm reports and draft post-event documentation content for the hardest-hit states',
+            'ui_action':{'type':'tab','target':'storm'},
+        })
+    if intel['plays'] and (intel['plays'].get('ageHours') or 99)<30:
+        first=intel['plays']['plays'][0]
+        candidates.append({
+            'theme':'plays_ready',
+            'opening':'Maya already did the morning legwork.',
+            'headline':"Today's content plays are drafted and waiting",
+            'situation':f"Maya turned this morning's intel into {len(intel['plays']['plays'])} complete drafts — leading with “{first.get('title')}” for {first.get('platform')}. Each one is tied to a live signal, not a template.",
+            'proposal':'Review them in the Content tab, pick the one that fits today, and publish it yourself — the drafting is already done.',
+            'action_label':"Open Today's Plays",
+            'action_prompt':"walk me through today's content plays and which one to publish first",
+            'ui_action':{'type':'tab','target':'content'},
+        })
+    if intel['longform'] and (intel['longform'].get('ageHours') or 999)<8*24:
+        candidates.append({
+            'theme':'longform_ready',
+            'opening':"Leo's week-defining piece is on the desk.",
+            'headline':f"This week's long-form: “{intel['longform']['title']}”",
+            'situation':f"{intel['longform']['subtitle'][:220]}",
+            'proposal':'Read it in the Content tab; if it holds up, it anchors the week — the plays and pulse comments can all point back to it.',
+            'action_label':'Read the article',
+            'action_prompt':"show me this week's long-form article and how the rest of the week's content should orbit it",
+            'ui_action':{'type':'tab','target':'content'},
+        })
     doctrine=pick(doctrine_topics,71)
     candidates.append({
         'theme':'doctrine',
@@ -2633,8 +2871,16 @@ def proactive_briefing(user, tasks, drafts, activity, calendar=None, team_events
         key_hash=hashlib.sha256(briefing_key.encode('utf-8')).hexdigest()[:16]
         cache_key=f"briefing_theme_{user['id']}_{key_hash}"
         cached_theme=setting_get(cache_key,'')
+    ops_candidate=next((candidate for candidate in candidates if candidate['theme']=='ops_health'),None)
     if urgent_alerts:
         chosen=next((candidate for candidate in candidates if candidate['theme']=='weather'),None)
+    elif ops_candidate and setting_get(last_theme_key,'')!='ops_health':
+        # A stale intelligence feed outranks content ideas — the team just lived through
+        # eight silent days of it. Alternates with other themes so it nags, not drones.
+        chosen=ops_candidate
+        if cache_key:
+            setting_set(cache_key,chosen['theme'])
+            setting_set(last_theme_key,chosen['theme'])
     elif seasonal_trigger and seasonal_candidate and setting_get(last_theme_key,'')!='seasonal':
         chosen=seasonal_candidate
         if cache_key:
@@ -2759,6 +3005,11 @@ def bot_welcome(user, tasks, drafts, activity, calendar=None, team_events=None):
         if radar_data:
             top=(radar_data['hot'] or radar_data['stories'])[0]
             parts.append(f"On the market side, the Industry Radar is tracking “{top.get('title')}” ({top.get('source') or 'trade press'}) — ask me about it and I will connect it to a content play.")
+    if briefing.get('theme')!='ops_health':
+        stale=[h for h in studio_intel()['health'] if h['status'] in ('stale','dark') and 'relay' not in h['feed'].lower()]
+        if stale:
+            names=', '.join(f"{h['feed']} ({h['age']})" for h in stale[:3])
+            parts.append(f"One honest flag: {names} — that intelligence is not current, and the morning scheduler on Ryan's workstation is the usual suspect. Worth telling Ryan before leaning on those panels.")
     return ' '.join(parts)
 def prepare_recommended_draft(user):
     state=collect_state()
