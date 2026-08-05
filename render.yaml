@@ -45,10 +45,3 @@ services:
         value: Hancock Marketing Studio <studio@hancockclaims.com>
       - key: ADMIN_PASSWORD
         sync: false
-  - type: web
-    name: hancock-ion-calibration
-    env: docker
-    plan: free
-    dockerfilePath: ./ion-training/Dockerfile
-    dockerContext: ./ion-training
-    healthCheckPath: /healthz
