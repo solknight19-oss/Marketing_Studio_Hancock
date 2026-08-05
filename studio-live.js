@@ -14,7 +14,15 @@
   async function load(){
     try{
       [state,bots]=await Promise.all([api("/api/state?briefing="+encodeURIComponent(window.CHAD_BRIEFING_KEY||"")),api("/api/bots")]);
-      window.HANCOCK_BOT_DATA=state.botData;
+      // The Radar tab is owned by the git-deployed, hard-rule-checked Scout sweep
+      // (data/latest_bot.js, loaded via script tag). The server's botData comes from
+      // latest_bot.json (auto-bot, unchecked) and is only a fallback when the Scout
+      // payload is missing — never an override. (Decision 2026-07-27, regressed here
+      // until 2026-08-05: this line used to clobber unconditionally.)
+      if(!window.HANCOCK_BOT_DATA||!((window.HANCOCK_BOT_DATA.stories||[]).length)){
+        window.HANCOCK_BOT_DATA=state.botData;
+        if(typeof window.runBriefing==="function")window.runBriefing();
+      }
       if(window.ChadWidget)window.ChadWidget.setUser(state.user.name.split(" ")[0]);
       const mode=q("mode");
       if(mode){
@@ -639,7 +647,9 @@
       if(!this._hotLoaded){this._hotLoaded=true;this.loadHotChips()}
     },
     hotChips:[],
-    HOT_STATES:{MO:"Missouri",GA:"Georgia",FL:"Florida",TX:"Texas",OK:"Oklahoma",KY:"Kentucky",TN:"Tennessee",NC:"North Carolina",SC:"South Carolina",AL:"Alabama",LA:"Louisiana",MS:"Mississippi",AR:"Arkansas",IN:"Indiana",OH:"Ohio",IL:"Illinois",KS:"Kansas",NE:"Nebraska",IA:"Iowa",CO:"Colorado"},
+    // Full state map (defined once in the Studio HTML). Falls back to a Southeast/Midwest core
+    // if the page didn't define it — but the point is: no more 20-state ceiling.
+    get HOT_STATES(){return window.HANCOCK_STATE_NAMES||{MO:"Missouri",GA:"Georgia",FL:"Florida",TX:"Texas",OK:"Oklahoma",KY:"Kentucky",TN:"Tennessee",NC:"North Carolina",SC:"South Carolina",AL:"Alabama",LA:"Louisiana",MS:"Mississippi",AR:"Arkansas",IN:"Indiana",OH:"Ohio",IL:"Illinois",KS:"Kansas",NE:"Nebraska",IA:"Iowa",CO:"Colorado"}},
     HOT_PERILS:[[/hurricane|tropical/i,"Hurricane"],[/tornado/i,"Tornado"],[/hail/i,"Hail"],[/derecho|high wind|extreme wind|wind/i,"Wind"],[/severe thunderstorm/i,"Storm"]],
     async loadHotChips(){
       const stamp=q("hotChipsStamp");if(!q("hotChips"))return;
@@ -654,21 +664,26 @@
       });
       let noaaFailed=false;
       try{
-        const codes=Object.keys(this.HOT_STATES);
-        const results=await Promise.allSettled(codes.map(st=>fetch("https://api.weather.gov/alerts/active?area="+st,{headers:{Accept:"application/geo+json"}}).then(r=>{if(!r.ok)throw new Error(st);return r.json()})));
-        if(results.every(r=>r.status==="rejected"))noaaFailed=true;
-        results.forEach((res,i)=>{
-          if(res.status!=="fulfilled"||!res.value)return;
-          (res.value.features||[]).forEach(f=>{
-            const ev=((f.properties||{}).event)||"";
-            for(const [rx,peril] of this.HOT_PERILS){
-              if(rx.test(ev)){
-                const key=codes[i]+"|"+peril;
-                if(!seen.has(key)&&chips.length<12){seen.add(key);chips.push({label:this.HOT_STATES[codes[i]]+" "+peril+" Damage",kw:this.HOT_STATES[codes[i]]+" "+peril.toLowerCase()+" damage",src:"noaa",detail:ev})}
-                break;
-              }
+        // One nationwide request (comma-joined ?area=) instead of one fetch per state.
+        const names=this.HOT_STATES;
+        const codes=Object.keys(names);
+        const r=await fetch("https://api.weather.gov/alerts/active?area="+codes.join(","),{headers:{Accept:"application/geo+json"}});
+        if(!r.ok)throw new Error("NOAA "+r.status);
+        const data=await r.json();
+        (data.features||[]).forEach(f=>{
+          const p=f.properties||{};
+          const ev=p.event||"";
+          const states=new Set();
+          ((p.geocode||{}).UGC||[]).forEach(u=>{const st=String(u).slice(0,2);if(names[st])states.add(st)});
+          for(const [rx,peril] of this.HOT_PERILS){
+            if(rx.test(ev)){
+              states.forEach(st=>{
+                const key=st+"|"+peril;
+                if(!seen.has(key)&&chips.length<14){seen.add(key);chips.push({label:names[st]+" "+peril+" Damage",kw:names[st]+" "+peril.toLowerCase()+" damage",src:"noaa",detail:ev})}
+              });
+              break;
             }
-          });
+          }
         });
       }catch(e){noaaFailed=true}
       const bot=window.HANCOCK_BOT_DATA;
@@ -731,8 +746,8 @@
       const ageH=gen&&!isNaN(gen)?Math.floor((Date.now()-gen.getTime())/3600000):null;
       const ageTxt=ageH==null?"":ageH<1?"updated under an hour ago":ageH<24?"updated "+ageH+"h ago":"updated "+Math.floor(ageH/24)+" day"+(Math.floor(ageH/24)===1?"":"s")+" ago";
       const isStale=ageH!=null&&ageH>=24;
-      if(stamp)stamp.textContent=`Drafted queue from ${data.generatedHuman||data.generated} — ${ageTxt||"age unknown"} · refreshes weekday mornings at 7am · drafts only, you post everything yourself.`;
-      const staleBanner=isStale?`<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.45)"><b>⚠️ This drafted queue is ${ageTxt.replace("updated ","").replace(" ago"," old")}.</b> It refreshes automatically on weekday mornings at 7am, or tell Claude "sweep &lt;topic&gt;" for a fresh one right now. For live posts this second, pick a keyword above and hit New Scan.</div>`:"";
+      if(stamp)stamp.textContent=`Drafted queue from ${data.generatedHuman||data.generated} — ${ageTxt||"age unknown"} · sweeps run weekday mornings at 7am from Ryan's workstation (they need his logged-in LinkedIn) · drafts only, you post everything yourself.`;
+      const staleBanner=isStale?`<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.45)"><b>⚠️ This drafted queue is ${ageTxt.replace("updated ","").replace(" ago"," old")}.</b> Sweeps are generated on Ryan's workstation by the 7:08am weekday task (they need his logged-in LinkedIn Chrome) — if this stays stale, that scheduler isn't running and Ryan should be told. "↻ Refresh topic chips" below only refreshes the live NOAA/Radar keyword chips, not this queue. For live posts this second, pick a keyword and hit New Scan.</div>`:"";
       if(!this.activeSweep||!sweeps.some(s=>s.topic===this.activeSweep))this.activeSweep=sweeps[0].topic;
       if(chips)chips.innerHTML=sweeps.map(s=>`<button class="chip${s.topic===this.activeSweep?" active":""}" onclick="HancockSocial.showSweep('${escapeHtml(s.topic)}')">${escapeHtml(s.label||s.topic)}${s.auto?" ⚡":""}</button>`).join("");
       const s=sweeps.find(x=>x.topic===this.activeSweep);
@@ -929,7 +944,9 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   renderLongform();
   const SPC_RISK_ORDER={TSTM:1,MRGL:2,SLGT:3,ENH:4,MDT:5,HIGH:6};
   const SPC_RISK_NAMES={TSTM:"General thunderstorms",MRGL:"Marginal risk",SLGT:"Slight risk",ENH:"Enhanced risk",MDT:"Moderate risk",HIGH:"High risk"};
-  const SPC_STATE_POINTS={GA:[-83.4,32.6],FL:[-81.5,28.6],TX:[-99.3,31.5],OK:[-97.5,35.6],KY:[-85.3,37.5],TN:[-86.3,35.9],NC:[-79.4,35.6],SC:[-80.9,33.9],AL:[-86.8,32.8],LA:[-92.0,31.0],MS:[-89.7,32.7],AR:[-92.4,34.9],MO:[-92.5,38.4],IN:[-86.3,39.9],OH:[-82.8,40.3],IL:[-89.2,40.0],KS:[-98.4,38.5],NE:[-99.8,41.5],IA:[-93.5,42.0],CO:[-105.5,39.0]};
+  // Approximate state-center points for the SPC outlook polygon test — the full lower 48 + DC,
+  // not a 20-state shortlist (team punch list, 2026-08-05). AK/HI excluded: SPC outlooks are CONUS-only.
+  const SPC_STATE_POINTS={AL:[-86.8,32.8],AZ:[-111.7,34.3],AR:[-92.4,34.9],CA:[-119.4,36.8],CO:[-105.5,39.0],CT:[-72.7,41.6],DE:[-75.5,39.0],DC:[-77.0,38.9],FL:[-81.5,28.6],GA:[-83.4,32.6],ID:[-114.6,44.4],IL:[-89.2,40.0],IN:[-86.3,39.9],IA:[-93.5,42.0],KS:[-98.4,38.5],KY:[-85.3,37.5],LA:[-92.0,31.0],ME:[-69.2,45.4],MD:[-76.8,39.0],MA:[-71.8,42.3],MI:[-84.7,43.5],MN:[-94.3,46.3],MS:[-89.7,32.7],MO:[-92.5,38.4],MT:[-109.6,47.0],NE:[-99.8,41.5],NV:[-116.6,39.3],NH:[-71.6,43.7],NJ:[-74.7,40.2],NM:[-106.1,34.4],NY:[-75.5,42.9],NC:[-79.4,35.6],ND:[-100.5,47.5],OH:[-82.8,40.3],OK:[-97.5,35.6],OR:[-120.6,44.0],PA:[-77.8,40.9],RI:[-71.5,41.7],SC:[-80.9,33.9],SD:[-100.2,44.4],TN:[-86.3,35.9],TX:[-99.3,31.5],UT:[-111.7,39.3],VT:[-72.7,44.0],VA:[-78.8,37.5],WA:[-120.4,47.4],WV:[-80.6,38.6],WI:[-89.8,44.6],WY:[-107.5,43.0]};
   function spcPointInRing(pt,ring){
     let inside=false;
     for(let i=0,j=ring.length-1;i<ring.length;j=i++){
@@ -981,15 +998,60 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   }
   window.HancockStormBoard={
     scanning:false,
+    rescanTimer:null,
+    // Called when the user changes the watched-state chips — debounced so a burst of
+    // clicks becomes one scan. This is what makes "select a state → alerts populate" work.
+    rescanSoon(){clearTimeout(this.rescanTimer);this.rescanTimer=setTimeout(()=>this.scan(),600)},
+    watched(){
+      const f=window.hancockWatchedStates;
+      const list=typeof f==="function"?f():null;
+      if(!list||!list.length)return null;
+      const all=window.HANCOCK_STATE_NAMES?Object.keys(window.HANCOCK_STATE_NAMES).length:51;
+      return list.length>=all?null:new Set(list);
+    },
     async scan(){
       if(this.scanning)return;this.scanning=true;
-      const stamp=q("hzStamp"),up=q("hzUpBody"),pot=q("hzPotBody"),wk=q("hzWeekBody"),sea=q("hzSeasonBody");
+      const stamp=q("hzStamp"),up=q("hzUpBody"),pot=q("hzPotBody"),wk=q("hzWeekBody"),sea=q("hzSeasonBody"),rep=q("hzReportsBody");
       const broken=[];
-      if(stamp)stamp.textContent="Scanning NWS alerts, SPC outlooks, and NHC tropical…";
+      const sel=this.watched();
+      if(stamp)stamp.textContent="Scanning NWS alerts, SPC outlooks, storm reports, and NHC tropical…";
       // Upcoming: live alerts + SPC Days 1-3
       let alerts=[],spc13=null;
       try{if(typeof checkSkies==="function"){await checkSkies();alerts=window.HANCOCK_STORM_ALERTS||[]}}catch(e){broken.push("NWS alerts")}
       try{spc13=await hzSpcDays13()}catch(e){broken.push("SPC Days 1–3")}
+      if(sel&&spc13)spc13.forEach(r=>{r.severe=r.severe.filter(([st])=>sel.has(st));r.top=r.severe.length?SPC_RISK_NAMES[r.severe[0][1].label]:null});
+      // Confirmed: SPC filtered storm reports, last 4 days (server relay — shows the
+      // tornadoes that already happened, which active-alert feeds forget immediately)
+      let reports=null;
+      try{
+        const r=await fetch("/api/storm-reports");
+        if(!r.ok)throw new Error("HTTP "+r.status);
+        const d=await r.json();
+        if(!d.ok)throw new Error(d.error||"reports failed");
+        reports=d;
+      }catch(e){broken.push("SPC storm reports")}
+      if(rep){
+        if(!reports){rep.innerHTML='<p class="muted">SPC storm reports unreachable — reported as unreachable, not as quiet.</p>'}
+        else{
+          const icons={tornado:"🌪 Tornado",hail:"🧊 Hail",wind:"💨 Wind"};
+          const dayRows=(reports.days||[]).map(day=>{
+            const parts=[];
+            ["tornado","hail","wind"].forEach(type=>{
+              const counts={};
+              (day[type]||[]).forEach(x=>{if(!sel||sel.has(x.state))counts[x.state]=(counts[x.state]||0)+1});
+              const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+              if(entries.length)parts.push("<b>"+icons[type]+":</b> "+entries.slice(0,10).map(([st,n])=>st+" ×"+n).join(", ")+(entries.length>10?", …":""));
+            });
+            return parts.length?`<p style="margin:6px 0"><b>${escapeHtml(day.label)}</b> — ${parts.join(" · ")}</p>`:"";
+          }).filter(Boolean);
+          const rated=(reports.days||[]).flatMap(day=>(day.tornado||[]).filter(x=>(!sel||sel.has(x.state))&&/EF\s?\d/i.test(x.comments||x.mag)).map(x=>({...x,label:day.label})));
+          const ratedLine=rated.length?`<p style="margin:6px 0"><b>Rated tornadoes:</b> ${rated.slice(0,4).map(x=>escapeHtml(x.state+" — "+(x.location||x.county))).join("; ")}</p>`:"";
+          rep.innerHTML=dayRows.length
+            ?dayRows.join("")+ratedLine+`<p class="muted" style="margin:6px 0 0">Confirmed NWS local storm reports${sel?" in your selected states":""} — these persist after warnings expire. <button class="mini" onclick="HancockStormBoard.draftReports()">Draft from these</button></p>`
+            :`<p class="muted">No confirmed tornado, hail, or wind reports${sel?" in the selected states":""} in the last 4 days. That is a pre-loss content window.</p>`;
+          window.HANCOCK_STORM_REPORTS=reports;
+        }
+      }
       if(up){
         const alertLine=alerts.length
           ?`<p style="margin:0 0 6px"><b>${alerts.length} active claim-relevant alert${alerts.length===1?"":"s"}</b> — ${alerts.slice(0,3).map(a=>escapeHtml((a.event||"Alert")+" ("+(a._state||"")+")")).join(", ")}${alerts.length>3?", …":""}. Full cards below.</p>`
@@ -1004,6 +1066,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       // Potential: SPC Days 4-8 + NHC tropical
       let spc48=null,nhc=null;
       try{spc48=await hzSpcDays48()}catch(e){broken.push("SPC Days 4–8")}
+      if(sel&&spc48)spc48.forEach(r=>{r.hits=r.hits.filter(([st])=>sel.has(st))});
       try{const r=await fetch("/api/nhc");if(!r.ok)throw new Error("HTTP "+r.status);const d=await r.json();if(!d.ok)throw new Error(d.error||"NHC failed");nhc=d.storms||[]}catch(e){broken.push("NHC tropical relay")}
       if(pot){
         let html="";
@@ -1056,6 +1119,15 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     draftSeason(i){
       const t=(window.HANCOCK_SEASONAL||[])[i];if(!t)return;
       stormDraft(t.name,t.regions||"",t.service_line||"Storm / CAT Damage",(t.action||"")+" "+(t.outlook||""));
+    },
+    draftReports(){
+      const d=window.HANCOCK_STORM_REPORTS;if(!d)return;
+      const sel=this.watched();
+      const states={};
+      (d.days||[]).forEach(day=>["tornado","hail","wind"].forEach(t=>(day[t]||[]).forEach(x=>{if(!sel||sel.has(x.state))states[x.state]=true})));
+      const list=Object.keys(states).slice(0,6).join(", ");
+      stormDraft("Confirmed storm damage reports",list,"Storm / CAT Damage",
+        "NWS local storm reports confirm tornado, hail, and wind events in "+(list||"the watched states")+" over the last few days. Post-event content should lead with safety and clear documentation guidance: photograph conditions before temporary repairs, keep original photo files, and communicate clearly with the carrier. Cite only what the reports actually state.");
     }
   };
   window.HancockRadarWire={
@@ -1123,7 +1195,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     async attach(){
       const hosts=document.querySelectorAll(".kwLive");
       if(!hosts.length)return;
-      const f=(typeof serviceFocus==="function")?serviceFocus():null;
+      const f=(typeof bankFocus==="function")?bankFocus():((typeof serviceFocus==="function")?serviceFocus():null);
       if(!f){hosts.forEach(h=>h.innerHTML="");return}
       if(this.cache[f.id]){this.paint(hosts,f,this.cache[f.id]);return}
       const token=this.pending=f.id;
@@ -1147,15 +1219,15 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
         const questions=sugg.filter(s=>this.QUESTION_RX.test(s.keyword));
         const plain=sugg.filter(s=>!this.QUESTION_RX.test(s.keyword)&&!f.keywords.includes(s.keyword)).sort((a,b)=>(b.searchVolume||0)-(a.searchVolume||0));
         html='<p style="margin:6px 0 4px"><b>Live SEO keywords</b> <span class="muted">— real search volume ('+escapeHtml(d.source||"DataForSEO")+', US, monthly). Click to add.</span></p>'
-          +'<div class="chips">'+vols.slice(0,10).map(v=>`<button class="chip gold" onclick="addKeyword('${escapeHtml(v.keyword)}')">${escapeHtml(v.keyword)} · ${fmt(v.searchVolume)}/mo</button>`).join("")+'</div>'
-          +(plain.length?'<p style="margin:10px 0 4px"><b>What people actually search</b> <span class="muted">— related terms with demand.</span></p><div class="chips">'+plain.slice(0,10).map(s=>`<button class="chip" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}/mo</button>`).join("")+'</div>':"")
-          +(questions.length?'<p style="margin:10px 0 4px"><b>AEO questions people ask</b> <span class="muted">— answer these directly in the blog FAQ.</span></p><div class="chips">'+questions.slice(0,8).map(s=>`<button class="chip" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)}${s.searchVolume!=null?" · "+fmt(s.searchVolume)+"/mo":""}</button>`).join("")+'</div>':"")
+          +'<div class="chips">'+vols.slice(0,10).map(v=>`<button class="chip gold" data-kw="${escapeHtml(v.keyword)}" onclick="addKeyword(this.dataset.kw)">${escapeHtml(v.keyword)} · ${fmt(v.searchVolume)}/mo</button>`).join("")+'</div>'
+          +(plain.length?'<p style="margin:10px 0 4px"><b>What people actually search</b> <span class="muted">— related terms with demand.</span></p><div class="chips">'+plain.slice(0,10).map(s=>`<button class="chip" data-kw="${escapeHtml(s.keyword)}" onclick="addKeyword(this.dataset.kw)">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}/mo</button>`).join("")+'</div>':"")
+          +(questions.length?'<p style="margin:10px 0 4px"><b>AEO questions people ask</b> <span class="muted">— answer these directly in the blog FAQ.</span></p><div class="chips">'+questions.slice(0,8).map(s=>`<button class="chip" data-kw="${escapeHtml(s.keyword)}" onclick="addKeyword(this.dataset.kw)">${escapeHtml(s.keyword)}${s.searchVolume!=null?" · "+fmt(s.searchVolume)+"/mo":""}</button>`).join("")+'</div>':"")
           +'<div style="margin-top:10px"><button class="mini" onclick="HancockKeywordBank.useTop()">Build content from top live keywords</button></div>';
       }
       hosts.forEach(h=>h.innerHTML=html);
     },
     useTop(){
-      const f=(typeof serviceFocus==="function")?serviceFocus():null;
+      const f=(typeof bankFocus==="function")?bankFocus():((typeof serviceFocus==="function")?serviceFocus():null);
       if(!f)return;
       const d=this.cache[f.id];
       if(!d){return}
@@ -1189,7 +1261,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       if(!d.ok){host.innerHTML='<p class="muted" style="margin-top:10px">'+escapeHtml(d.message||"Keyword data unavailable — reported as unavailable, not guessed.")+'</p>';return}
       const fmt=n=>n==null?"—":Number(n).toLocaleString();
       const rows=(d.volumes||[]).map(v=>`<tr><td>${escapeHtml(v.keyword||"")}</td><td>${fmt(v.searchVolume)}</td><td>${escapeHtml(String(v.competition==null?"—":v.competition))}</td><td>${v.cpc==null?"—":"$"+Number(v.cpc).toFixed(2)}</td></tr>`).join("");
-      const sugg=(d.suggestions||[]).filter(s=>s.keyword).map(s=>`<button class="chip" title="${fmt(s.searchVolume)} searches/mo" onclick="addKeyword('${escapeHtml(s.keyword)}')">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}</button>`).join("");
+      const sugg=(d.suggestions||[]).filter(s=>s.keyword).map(s=>`<button class="chip" title="${fmt(s.searchVolume)} searches/mo" data-kw="${escapeHtml(s.keyword)}" onclick="addKeyword(this.dataset.kw)">${escapeHtml(s.keyword)} · ${fmt(s.searchVolume)}</button>`).join("");
       host.innerHTML=`<div style="margin-top:10px"><p style="margin:0 0 6px"><b>Live keyword data</b> <span class="muted">— ${escapeHtml(d.source||"DataForSEO")}, US, monthly searches. Real numbers, not model guesses.</span></p>
         ${rows?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:4px 8px 4px 0">Keyword</th><th style="text-align:left;padding:4px 8px 4px 0">Searches/mo</th><th style="text-align:left;padding:4px 8px 4px 0">Competition</th><th style="text-align:left;padding:4px 8px 4px 0">CPC</th></tr>${rows}</table></div>`:""}
         ${sugg?`<p style="margin:10px 0 4px"><b>Related keywords people actually search</b> <span class="muted">— click to add</span></p><div class="chips">${sugg}</div>`:""}

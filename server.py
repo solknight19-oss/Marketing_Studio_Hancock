@@ -1204,6 +1204,64 @@ def nhc_current_storms():
     NHC_CACHE['data']=payload
     return payload
 
+SPC_REPORTS_CACHE={'at':0.0,'data':None}
+def spc_storm_reports():
+    """Server-side relay for SPC filtered local storm reports (tornado/hail/wind), last 4 days.
+    The CSVs are not CORS-open, so the Studio calls /api/storm-reports. 30-min cache.
+    This is what lets Storm Watch show tornadoes that already touched down — active-alert
+    feeds go quiet the moment a warning expires, but the reports stay."""
+    now=time.time()
+    if SPC_REPORTS_CACHE['data'] is not None and now-SPC_REPORTS_CACHE['at']<1800:
+        return SPC_REPORTS_CACHE['data']
+    today=dt.date.today()
+    sources=[('Today','https://www.spc.noaa.gov/climo/reports/today_filtered.csv',today)]
+    for n in (1,2,3):
+        day=today-dt.timedelta(days=n)
+        label='Yesterday' if n==1 else day.strftime('%a %b %-d')
+        url=('https://www.spc.noaa.gov/climo/reports/yesterday_filtered.csv' if n==1
+             else 'https://www.spc.noaa.gov/climo/reports/%s_rpts_filtered.csv'%day.strftime('%y%m%d'))
+        sources.append((label,url,day))
+    days=[]
+    broken=[]
+    for label,url,day in sources:
+        try:
+            req=urllib.request.Request(url,headers={'User-Agent':'HancockMarketingStudio'})
+            with urllib.request.urlopen(req,timeout=12) as r:
+                raw=r.read().decode('utf-8','replace')
+            bucket={'tornado':[],'wind':[],'hail':[]}
+            current=None
+            for line in raw.splitlines():
+                line=line.strip()
+                if not line: continue
+                if line.startswith('Time,'):
+                    head=line.split(',')[1].lower()
+                    current='tornado' if head=='f_scale' else 'wind' if head=='speed' else 'hail' if head=='size' else None
+                    continue
+                if not current: continue
+                parts=line.split(',')
+                if len(parts)<8: continue
+                mag=parts[1].strip()
+                if current=='hail':
+                    # SPC reports hail size in hundredths of an inch (e.g. 175 = 1.75")
+                    try: mag='%.2f"'%(int(mag)/100.0)
+                    except ValueError: pass
+                elif current=='wind' and mag not in ('UNK',''):
+                    mag=mag+' mph'
+                bucket[current].append({
+                    'time':parts[0].strip(),'mag':mag,
+                    'location':parts[2].strip(),'county':parts[3].strip(),'state':parts[4].strip(),
+                    'comments':(','.join(parts[7:])).strip()[:220],
+                })
+            days.append({'date':day.isoformat(),'label':label,
+                         'tornado':bucket['tornado'],'wind':bucket['wind'],'hail':bucket['hail']})
+        except Exception as e:
+            broken.append(f'{label}: {str(e)[:120]}')
+    payload={'ok':bool(days),'fetchedAt':dt.datetime.now().isoformat(),
+             'source':'NOAA Storm Prediction Center filtered storm reports','days':days,'broken':broken}
+    SPC_REPORTS_CACHE['at']=now
+    SPC_REPORTS_CACHE['data']=payload
+    return payload
+
 DATAFORSEO_AUTH=(os.environ.get('DATAFORSEO_AUTH') or local_secret(ROOT/'dataforseo_key.txt', ROOT.parent/'Hancock_CoPilot'/'dataforseo_key.txt')).strip()
 DATAFORSEO_CACHE={}
 def dataforseo_request(path,payload):
@@ -1274,7 +1332,28 @@ def keyword_data(keywords,seed=''):
 RADAR_FEEDS=[
     ('Claims Journal','https://www.claimsjournal.com/rss/news/national/'),
     ('Insurance Journal','https://www.insurancejournal.com/rss/news/national/'),
+    ('Insurance Journal Southeast','https://www.insurancejournal.com/rss/news/southeast/'),
+    ('Insurance Journal Midwest','https://www.insurancejournal.com/rss/news/midwest/'),
+    ('Risk & Insurance','https://riskandinsurance.com/feed/'),
 ]
+# Terms that make a trade-press headline useful to Hancock's service lines. Weighted:
+# title hits count double. Items scoring 0 still return, but sorted after relevant ones
+# so the wire leads with what the team can actually use.
+RADAR_RELEVANCE_TERMS=[
+    'roof','hail','storm','hurricane','tornado','wind','derecho','catastrophe',' cat ','wildfire',
+    'property claim','property claims','homeowner','property insurance','inspection','inspector',
+    'adjuster','underwriting','contents','appraisal','appraiser','leak','water damage','tree',
+    'tarp','engineering','structural','mitigation','restoration','siding','flood claim',
+    'claims technology','cycle time','documentation','estimate','xactimate','damage','severe weather',
+]
+def radar_relevance(item):
+    title=(' '+(item.get('title') or '')+' ').lower()
+    body=(' '+(item.get('summary') or '')+' '+' '.join(item.get('categories') or [])+' ').lower()
+    score=0
+    for term in RADAR_RELEVANCE_TERMS:
+        if term in title: score+=2
+        elif term in body: score+=1
+    return score
 RADAR_FEED_CACHE={'at':0.0,'data':None}
 def radar_feed_items():
     """Server-side relay for the trade-press feeds the Industry Radar reads live.
@@ -1312,7 +1391,17 @@ def radar_feed_items():
                               'summary':summary,'categories':cats[:8]})
         except Exception as e:
             broken.append(f'{source}: {str(e)[:120]}')
-    items.sort(key=lambda x:x.get('dateIso') or '',reverse=True)
+    # The regional feeds overlap the national ones — keep the first copy of each story.
+    seen=set(); deduped=[]
+    for item in items:
+        key=item.get('url') or item.get('title')
+        if key in seen: continue
+        seen.add(key); deduped.append(item)
+    items=deduped
+    for item in items:
+        item['relevance']=radar_relevance(item)
+    # Relevant-to-Hancock first, then freshest first inside each band.
+    items.sort(key=lambda x:(x.get('relevance',0)>0,x.get('dateIso') or ''),reverse=True)
     payload={'ok':bool(items),'fetchedAt':dt.datetime.now().isoformat(),
              'sources':[s for s,_ in RADAR_FEEDS],'items':items,'broken':broken}
     RADAR_FEED_CACHE['at']=now
@@ -3585,6 +3674,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             user=self.current_user()
             if not user: self.send_json({'ok':False,'error':'Login required','items':[]},401); return
             self.send_json(radar_feed_items()); return
+        if path=='/api/storm-reports':
+            user=self.current_user()
+            if not user: self.send_json({'ok':False,'error':'Login required','days':[]},401); return
+            self.send_json(spc_storm_reports()); return
         if path=='/api/state':
             user=self.require_user();
             if user:

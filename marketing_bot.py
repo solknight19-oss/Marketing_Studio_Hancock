@@ -221,11 +221,9 @@ def extract_clusters(stories):
         terms = [word for word, _ in counts.most_common(10)][:6]
         if terms:
             clusters.append({"category": line, "keywords": terms})
-    all_words = tokenize(" ".join(s["title"] + " " + s["summary"] for s in stories))
-    bigrams = Counter(zip(all_words, all_words[1:]))
-    hot_terms = [f"{a} {b}" for (a, b), n in bigrams.most_common(20) if n >= 2]
-    if hot_terms:
-        clusters.insert(0, {"category": "Trending Keywords", "keywords": hot_terms[:8]})
+    # "Trending Keywords" (bigram frequency over scraped headlines) removed 2026-08-05 at the
+    # team's request — it surfaced random word pairs. The Studio's keyword banks + live
+    # DataForSEO data are the only keyword sources now.
     return clusters[:6]
 
 
