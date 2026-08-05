@@ -76,6 +76,21 @@
     + '#chadw .cw-pick .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}'
     + '#chadw .cw-pick button{background:rgba(47,111,191,.2);border:1px solid rgba(79,147,224,.5);color:#eaf2fb;font-weight:700;font-size:13px;padding:9px 14px;border-radius:10px;cursor:pointer}'
     + '#chadw .cw-pick button:hover{background:#2f6fbf;color:#fff}'
+    + '#chadw .cw-panel{width:380px;height:540px;max-height:78vh;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);background:linear-gradient(180deg,rgba(13,44,74,.96),rgba(8,28,48,.97));box-shadow:0 30px 80px rgba(3,10,20,.65),inset 0 0 0 1px rgba(79,147,224,.16)}'
+    + '#chadw .cw-msgs::-webkit-scrollbar{width:8px}#chadw .cw-msgs::-webkit-scrollbar-thumb{background:rgba(79,147,224,.35);border-radius:8px}#chadw .cw-msgs::-webkit-scrollbar-track{background:transparent}'
+    + '#chadw .cw-typing{display:flex;gap:4px;align-items:center;padding:12px 14px;width:58px}'
+    + '#chadw .cw-typing span{width:6px;height:6px;border-radius:50%;background:#7fb3ea;animation:cwblink 1.2s infinite}'
+    + '#chadw .cw-typing span:nth-child(2){animation-delay:.2s}#chadw .cw-typing span:nth-child(3){animation-delay:.4s}'
+    + '@keyframes cwblink{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}'
+    + '#chadw .cw-status{align-self:flex-start;font-size:11px;color:#8fb4dd;padding:1px 6px;font-style:italic;animation:cwrise .2s ease both}'
+    + '#chadw .cw-status.done{color:#79d2a6;font-style:normal}'
+    + '#chadw .cw-suggest{display:flex;gap:6px;flex-wrap:wrap;align-self:flex-start;padding:2px 0;animation:cwrise .25s ease both}'
+    + '#chadw .cw-suggest button{background:rgba(79,147,224,.14);border:1px solid rgba(79,147,224,.55);color:#cfe4ff;font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:16px;cursor:pointer;transition:background .12s,transform .12s}'
+    + '#chadw .cw-suggest button:hover{background:#2f6fbf;color:#fff;transform:translateY(-1px)}'
+    + '#chadw .cw-caret{display:inline-block;width:7px;height:13px;background:#9cc4f2;margin-left:2px;vertical-align:-2px;animation:cwblink .9s infinite}'
+    + '#chadw .cw-m.chad p{margin:0 0 6px}#chadw .cw-m.chad p:last-child{margin-bottom:0}'
+    + '#chadw .cw-m.chad ul{margin:4px 0 6px;padding-left:18px}#chadw .cw-m.chad li{margin:2px 0}'
+    + '#chadw .cw-m.chad .cw-h{display:block;margin:6px 0 3px;color:#fff}'
     + '@media(max-width:600px){#chadw .cw-panel{left:10px!important;right:10px!important;top:auto!important;bottom:126px!important;width:auto;max-width:none;height:min(520px,70vh)}}';
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
 
@@ -147,6 +162,46 @@
   function bubble(t, who) {
     var d = document.createElement("div"); d.className = "cw-m " + who;
     d.innerHTML = who === "chad" ? t.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>') : t;
+    msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  }
+  function md(t) {
+    var s = esc(t);
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    s = s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    var lines = s.split("\n"), out = [], inList = false;
+    lines.forEach(function (l) {
+      if (/^\s*[-•*] +/.test(l)) { if (!inList) { out.push("<ul>"); inList = true; } out.push("<li>" + l.replace(/^\s*[-•*] +/, "") + "</li>"); }
+      else {
+        if (inList) { out.push("</ul>"); inList = false; }
+        if (/^#{1,3} +/.test(l)) out.push('<b class="cw-h">' + l.replace(/^#{1,3} +/, "") + "</b>");
+        else if (l.trim()) out.push("<p>" + l + "</p>");
+      }
+    });
+    if (inList) out.push("</ul>");
+    return out.join("");
+  }
+  function stripSuggest(t) { return String(t || "").replace(/\n?\s*SUGGEST:[\s\S]*$/, ""); }
+  function showTyping() { removeTyping(); var d = document.createElement("div"); d.className = "cw-m chad cw-typing"; d.id = "cwTyping"; d.innerHTML = "<span></span><span></span><span></span>"; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
+  function removeTyping() { var d = root.querySelector("#cwTyping"); if (d) d.remove(); }
+  function statusLine(text, done) { var d = document.createElement("div"); d.className = "cw-status" + (done ? " done" : ""); d.innerHTML = (done ? "&#10003; " : "") + esc(text); msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; }
+  function liveBubble() {
+    var d = document.createElement("div"); d.className = "cw-m chad"; msgs.appendChild(d);
+    var raw = "";
+    return {
+      append: function (t) { raw += t; d.innerHTML = md(stripSuggest(raw)) + '<span class="cw-caret"></span>'; msgs.scrollTop = msgs.scrollHeight; },
+      finish: function () { var visible = stripSuggest(raw); if (!visible.trim()) { d.remove(); return; } d.innerHTML = md(visible); msgs.scrollTop = msgs.scrollHeight; }
+    };
+  }
+  function clearSuggestions() { var d = root.querySelector("#cwSuggest"); if (d) d.remove(); }
+  function renderSuggestions(list) {
+    clearSuggestions();
+    if (!list || !list.length) return;
+    var d = document.createElement("div"); d.id = "cwSuggest"; d.className = "cw-suggest";
+    list.slice(0, 3).forEach(function (sug) {
+      var b = document.createElement("button"); b.textContent = sug;
+      b.onclick = function () { clearSuggestions(); send(sug); };
+      d.appendChild(b);
+    });
     msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
   }
   function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -529,12 +584,95 @@
     var thisRequest=++requestNumber;
     var requestId=Date.now().toString(36)+"-"+thisRequest.toString(36);
     activeRequest=window.AbortController ? new AbortController() : null;
+    clearSuggestions();
     bubble(esc(text), "me"); setState("THINKING");
     startBargeIn("",650);
+    var payload = { message: text, request_id: requestId, page_context: collectStudioPageContext() };
+    streamChat(payload, thisRequest).catch(function (error) {
+      if (error && error.name === "AbortError") return;
+      if (thisRequest !== requestNumber) return;
+      legacyChat(payload, thisRequest);
+    });
+  }
+  /* Streaming chat: Chad's words appear as he writes them, tool steps narrate live,
+     and the final frame carries actions + tappable follow-ups. Falls back to the
+     classic request/response endpoint if streaming is unavailable. */
+  function streamChat(payload, thisRequest) {
+    if (!window.ReadableStream || !window.TextDecoder || !window.fetch) return Promise.reject(new Error("no-stream"));
+    showTyping();
+    var live = null, gotFrame = false, finished = false, sawDelta = false, buf = "";
+    function finishLive() { if (live) { live.finish(); live = null; } }
+    function handle(ev) {
+      if (thisRequest !== requestNumber) return;
+      gotFrame = true;
+      if (ev.type === "delta") {
+        sawDelta = true;
+        removeTyping();
+        if (!live) live = liveBubble();
+        live.append(ev.text || "");
+      } else if (ev.type === "status") {
+        finishLive();
+        removeTyping();
+        statusLine(ev.text || "Working…", !!ev.done_step);
+        if (!ev.done_step) showTyping();
+      } else if (ev.type === "done") {
+        finished = true; removeTyping(); finishLive();
+        if (ev.error) {
+          if (!sawDelta) { legacyChat(payload, thisRequest); return; }
+          bubble(esc("I hit a snag mid-thought: " + ev.error), "chad"); setState("ONLINE"); queueListening(1000); return;
+        }
+        if (ev.superseded) return;
+        activeRequest = null;
+        renderSuggestions(ev.suggestions);
+        sourceButtons(ev.sources);
+        var spoken = ev.final_text || ev.reply || "";
+        if (spoken) speak(stripSuggest(spoken));
+        if (!curSource) setState("ONLINE");
+        if (ev.ui_action) setTimeout(function () { navigate(ev.ui_action); }, 450);
+      }
+    }
+    return fetch(API + "/api/bot-stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: activeRequest ? activeRequest.signal : undefined
+    }).then(function (r) {
+      if (!r.ok || !r.body) { var e = new Error("stream-unavailable"); e.status = r.status; throw e; }
+      var reader = r.body.getReader(), dec = new TextDecoder();
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) {
+            if (!gotFrame && !finished) throw new Error("empty-stream");
+            if (!finished) { removeTyping(); finishLive(); setState("ONLINE"); queueListening(900); }
+            return;
+          }
+          buf += dec.decode(res.value, { stream: true });
+          var idx;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            var frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+            frame.split("\n").forEach(function (l) {
+              if (l.indexOf("data:") === 0) { try { handle(JSON.parse(l.slice(5))); } catch (e) {} }
+            });
+          }
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (error) {
+      removeTyping(); finishLive();
+      if (error && error.name === "AbortError") throw error;
+      if (gotFrame) {
+        if (thisRequest === requestNumber && !finished) { bubble("The connection dropped mid-answer — ask me that again.", "chad"); setState("ONLINE"); queueListening(1000); }
+        return;
+      }
+      throw error;
+    });
+  }
+  function legacyChat(payload, thisRequest) {
     fetch(API + "/api/bot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, request_id: requestId, page_context: collectStudioPageContext() }),
+      body: JSON.stringify(payload),
       signal: activeRequest ? activeRequest.signal : undefined
     })
       .then(function (r) {
@@ -552,7 +690,7 @@
         if (thisRequest !== requestNumber || d.superseded) return;
         activeRequest=null;
         var reply = d.reply || "…";
-        bubble(esc(reply), "chad");
+        bubble(md(reply), "chad");
         sourceButtons(d.sources);
         speak(reply);
         if (!curSource) setState("ONLINE");

@@ -467,7 +467,7 @@ const initialTab = location.hash.slice(1);
 if(TABS.some(function(tab){return tab[0]===initialTab})){showTab(initialTab)}
 </script>
 <script>window.CHAD_BRIEFING_KEY=sessionStorage.getItem("chad_briefing_key")||((window.crypto&&crypto.randomUUID)?crypto.randomUUID():(Date.now()+"-"+Math.random()));sessionStorage.setItem("chad_briefing_key",window.CHAD_BRIEFING_KEY);window.CHAD_CONFIG={apiBase:"",briefingKey:window.CHAD_BRIEFING_KEY,holdBriefingNavigation:true};</script>
-<script src="chad-widget.js"></script>
+<script src="chad-widget.js?v=20260805b"></script>
 <script src="studio-live.js?v=20260805a"></script>
 </body>
 </html>
