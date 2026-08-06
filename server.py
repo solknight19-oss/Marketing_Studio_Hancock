@@ -1531,24 +1531,54 @@ RADAR_FEEDS=[
     ('Risk & Insurance','https://riskandinsurance.com/feed/'),
     ('Insurance Business America','https://www.insurancebusinessmag.com/us/rss/'),
 ]
-# Terms that make a trade-press headline useful to Hancock's service lines. Weighted:
-# title hits count double. Items scoring 0 still return, but sorted after relevant ones
-# so the wire leads with what the team can actually use.
-RADAR_RELEVANCE_TERMS=[
-    'roof','hail','storm','hurricane','tornado','wind','derecho','catastrophe',' cat ','wildfire',
-    'property claim','property claims','homeowner','property insurance','inspection','inspector',
-    'adjuster','underwriting','contents','appraisal','appraiser','leak','water damage','tree',
-    'tarp','engineering','structural','mitigation','restoration','siding','flood claim',
-    'claims technology','cycle time','documentation','estimate','xactimate','damage','severe weather',
+# Strict relevance gate (team ask 2026-08-07): the Radar carries ONLY articles about
+# the claims industry, property inspection, and Hancock's service lines. An article is
+# relevant only if it hits a CORE term — generic insurance-business words don't count —
+# and clearly off-topic lines (auto, cyber, life, health, workers' comp) push it out.
+RADAR_CORE_TERMS=[
+    # storms / CAT (the inspection-volume signal)
+    'roof','roofing','hail','tornado','hurricane','tropical storm','derecho','storm damage',
+    'severe weather','wind damage','straight-line wind','catastrophe',' cat claim','wildfire',
+    'flood claim','flood insurance','storm surge',
+    # property claims & the people in them
+    'property claim','property claims','property insurance','homeowner','home insurance',
+    'policyholder','adjuster','claims adjust','property loss','dwelling',
+    # inspection & Hancock service lines
+    'inspection','inspector','ladder assist','contents','personal property','pack-out',
+    'appraisal','appraiser','umpire','underwriting','4-point','four-point','insurance-to-value',
+    'aerial imagery','leak','water damage','water intrusion','moisture','mitigation','restoration',
+    'tarp','board-up','tree removal','debris removal','xactimate','scope of loss',
+    'structural damage','cause and origin','engineering report','siding',
+    # claims-industry mechanics & regulation that shape Hancock's world
+    'claims technology','cycle time','loss adjustment expense','indemnity','assignment of benefits',
+    'bad faith','claims litigation','insurance fraud','reinsurance','depreciation','replacement cost',
+    'actual cash value','supplement','reinspection',
+]
+RADAR_OFFTOPIC_TERMS=[
+    'auto insurance','commercial auto','motor insurance','cyber','life insurance','health insurance',
+    'annuity','annuities','medicare','medicaid','workers comp',"workers' comp",'workers’ comp',
+    'malpractice','pet insurance','crop insurance','marine insurance','aviation','surety',
+    'employment practices','professional liability','directors and officers','d&o',
+    # finance-and-people news genre — trade-press staples that aren't claims work
+    'net income','earnings','quarterly results','financial results','q1 ','q2 ','q3 ','q4 ',
+    'profit','revenue','merger','merged','acquires','acquisition','acquired','hall of fame',
+    'appoints','appointed','hires','promotes','named president','named ceo','stock','shares',
 ]
 def radar_relevance(item):
     title=(' '+(item.get('title') or '')+' ').lower()
     body=(' '+(item.get('summary') or '')+' '+' '.join(item.get('categories') or [])+' ').lower()
     score=0
-    for term in RADAR_RELEVANCE_TERMS:
-        if term in title: score+=2
-        elif term in body: score+=1
-    return score
+    core_hit=False
+    for term in RADAR_CORE_TERMS:
+        if term in title: score+=3; core_hit=True
+        elif term in body: score+=1; core_hit=True
+    for term in RADAR_OFFTOPIC_TERMS:
+        if term in title: score-=4
+        elif term in body: score-=1
+    if not core_hit: return 0
+    # Minimum bar: one title hit (3) or two body hits (2). A single stray body-text
+    # mention is not a claims story.
+    return score if score>=2 else 0
 RADAR_FEED_CACHE={'at':0.0,'data':None}
 def radar_feed_items():
     """Server-side relay for the trade-press feeds the Industry Radar reads live.
@@ -1609,7 +1639,9 @@ def radar_feed_items():
     # The regional feeds overlap the national ones — keep the first copy of each story.
     seen=set(); deduped=[]
     for item in items:
-        key=item.get('url') or item.get('title')
+        # Headline-based: the same story shows up with different tracking URLs and
+        # across the regional feeds — one copy is enough.
+        key=re.sub(r'\s+',' ',str(item.get('title') or item.get('url') or '')).strip().lower()
         if key in seen: continue
         seen.add(key); deduped.append(item)
     items=deduped
