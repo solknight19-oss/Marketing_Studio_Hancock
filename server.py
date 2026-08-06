@@ -822,6 +822,15 @@ def init_db():
         cur.execute('alter table content_calendar add column published_url text')
     if 'completed_at' not in calendar_columns:
         cur.execute('alter table content_calendar add column completed_at text')
+    # Post-performance tracking (team ask 2026-08-06): numbers come from LinkedIn's own
+    # analytics, entered by the team (or a future API sync) — never invented.
+    for perf_column in ('perf_impressions','perf_clicks','perf_reactions','perf_comments','perf_target'):
+        if perf_column not in calendar_columns:
+            cur.execute(f'alter table content_calendar add column {perf_column} integer')
+    event_columns = {row['name'] for row in cur.execute('pragma table_info(team_events)')}
+    for event_column in ('attendees','leads','follow_ups'):
+        if event_column not in event_columns:
+            cur.execute(f'alter table team_events add column {event_column} integer')
     cur.execute('create unique index if not exists users_email_unique on users(lower(email)) where email is not null and email != ""')
     cur.execute("update users set email=?,role='owner' where username='admin'", ('rknight@hancockclaims.com',))
     cur.execute("update users set password_reset_required=case when email is null or email='' then 1 else password_reset_required end,email=?,role='admin' where username='cassie'", ('ctant@hancockclaims.com',))
@@ -1391,6 +1400,61 @@ def spc_storm_reports():
     SPC_REPORTS_CACHE['data']=payload
     return payload
 
+SHAREPOINT_ICS_URL=(os.environ.get('SHAREPOINT_ICS_URL') or local_secret(ROOT/'sharepoint_ics_url.txt', ROOT.parent/'Hancock_CoPilot'/'sharepoint_ics_url.txt')).strip()
+SHAREPOINT_ICS_CACHE={'at':0.0,'data':None}
+def sharepoint_events():
+    """Read-only merge of the team's SharePoint calendar via its published ICS link.
+    No credentials are stored: SharePoint/Outlook can publish a calendar as an .ics URL —
+    set SHAREPOINT_ICS_URL on Render (or sharepoint_ics_url.txt locally) and those events
+    appear alongside manual Team Events, tagged with their source. 30-min cache. Until the
+    URL is set this honestly reports not-connected instead of pretending."""
+    if not SHAREPOINT_ICS_URL: return {'connected':False,'events':[]}
+    now_ts=time.time()
+    if SHAREPOINT_ICS_CACHE['data'] is not None and now_ts-SHAREPOINT_ICS_CACHE['at']<1800:
+        return SHAREPOINT_ICS_CACHE['data']
+    try:
+        req=urllib.request.Request(SHAREPOINT_ICS_URL,headers={'User-Agent':'HancockMarketingStudio'})
+        with urllib.request.urlopen(req,timeout=15) as r:
+            raw=r.read().decode('utf-8','replace')
+        raw=raw.replace('\r\n ','').replace('\n ','')
+        events=[]
+        for block in re.findall(r'BEGIN:VEVENT(.*?)END:VEVENT',raw,re.S):
+            def field(name):
+                m=re.search(r'^'+name+r'[^:\n]*:(.*)$',block,re.M)
+                return (m.group(1).strip() if m else '').replace('\\,',',').replace('\\n',' ')
+            def day(name):
+                v=field(name)
+                m=re.match(r'(\d{4})(\d{2})(\d{2})',v)
+                return (f"{m.group(1)}-{m.group(2)}-{m.group(3)}",'T' not in v) if m else ('',False)
+            title=field('SUMMARY')
+            start,_=day('DTSTART')
+            if not title or not start: continue
+            end,all_day=day('DTEND')
+            if end and all_day and end>start:
+                # ICS all-day DTEND is exclusive (the morning after) — show the real last day.
+                try: end=(dt.date.fromisoformat(end)-dt.timedelta(days=1)).isoformat()
+                except ValueError: pass
+            events.append({'id':'sp-'+hashlib.sha256((title+start).encode('utf-8')).hexdigest()[:10],
+                           'title':title,'start_date':start,'end_date':end or start,
+                           'location':field('LOCATION')[:240],'category':'SharePoint',
+                           'description':field('DESCRIPTION')[:500],'source':'sharepoint','readonly':True})
+        payload={'connected':True,'events':events,'fetchedAt':dt.datetime.now().isoformat()}
+    except Exception as e:
+        payload={'connected':True,'error':str(e)[:200],'events':[]}
+    SHAREPOINT_ICS_CACHE['at']=now_ts
+    SHAREPOINT_ICS_CACHE['data']=payload
+    return payload
+
+def merge_sharepoint_events(team_events):
+    sp=sharepoint_events()
+    if not sp.get('events'): return team_events
+    manual_keys={(str(e.get('title') or '').strip().lower(),str(e.get('start_date') or '')[:10]) for e in team_events}
+    merged=list(team_events)
+    for event in sp['events']:
+        if (event['title'].strip().lower(),event['start_date']) in manual_keys: continue
+        merged.append(event)
+    return merged
+
 DATAFORSEO_AUTH=(os.environ.get('DATAFORSEO_AUTH') or local_secret(ROOT/'dataforseo_key.txt', ROOT.parent/'Hancock_CoPilot'/'dataforseo_key.txt')).strip()
 DATAFORSEO_CACHE={}
 def dataforseo_request(path,payload):
@@ -1460,10 +1524,12 @@ def keyword_data(keywords,seed=''):
 
 RADAR_FEEDS=[
     ('Claims Journal','https://www.claimsjournal.com/rss/news/national/'),
+    ('Claims Journal Southeast','https://www.claimsjournal.com/rss/news/southeast/'),
     ('Insurance Journal','https://www.insurancejournal.com/rss/news/national/'),
     ('Insurance Journal Southeast','https://www.insurancejournal.com/rss/news/southeast/'),
     ('Insurance Journal Midwest','https://www.insurancejournal.com/rss/news/midwest/'),
     ('Risk & Insurance','https://riskandinsurance.com/feed/'),
+    ('Insurance Business America','https://www.insurancebusinessmag.com/us/rss/'),
 ]
 # Terms that make a trade-press headline useful to Hancock's service lines. Weighted:
 # title hits count double. Items scoring 0 still return, but sorted after relevant ones
@@ -1497,7 +1563,27 @@ def radar_feed_items():
             req=urllib.request.Request(url,headers={'User-Agent':'HancockMarketingStudio'})
             with urllib.request.urlopen(req,timeout=12) as r:
                 raw=r.read().decode('utf-8','replace')
-            for block in re.findall(r'<item>(.*?)</item>',raw,re.S)[:15]:
+            blocks=re.findall(r'<item>(.*?)</item>',raw,re.S)[:15]
+            if not blocks:
+                # Atom feed (e.g. Insurance Business America): <entry> instead of <item>.
+                for entry in re.findall(r'<entry>(.*?)</entry>',raw,re.S)[:15]:
+                    def afield(name):
+                        m=re.search(r'<'+name+r'[^>]*>(.*?)</'+name+r'>',entry,re.S)
+                        if not m: return ''
+                        value=re.sub(r'^<!\[CDATA\[(.*)\]\]>$',r'\1',m.group(1).strip(),flags=re.S)
+                        return html.unescape(re.sub(r'<[^>]+>','',value)).strip()
+                    title=afield('title')
+                    link_match=re.search(r'<link[^>]*href="([^"]+)"',entry)
+                    link=html.unescape(link_match.group(1)) if link_match else ''
+                    if not title or not link: continue
+                    pub=afield('published') or afield('updated')
+                    pub_iso=''
+                    try: pub_iso=dt.datetime.fromisoformat(pub.replace('Z','+00:00')).isoformat()
+                    except Exception: pass
+                    items.append({'source':source,'title':title,'url':link,'date':pub,'dateIso':pub_iso,
+                                  'summary':(afield('summary') or afield('content'))[:400],'categories':[]})
+                continue
+            for block in blocks:
                 def field(name):
                     m=re.search(r'<'+name+r'>(.*?)</'+name+r'>',block,re.S)
                     if not m: return ''
@@ -1600,7 +1686,7 @@ def collect_state():
            from team_events te left join users c on c.id=te.created_by left join users u on u.id=te.updated_by
            order by te.start_date,te.title limit 300""")]
     activity=[dict(r) for r in con.execute('select a.*, u.name as user_name from activity a left join users u on u.id=a.user_id order by a.id desc limit 30')]
-    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'teamEvents':team_events,'activity':activity,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers()}
+    con.close(); return {'tasks':tasks,'drafts':drafts,'calendar':calendar,'teamEvents':merge_sharepoint_events(team_events),'activity':activity,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers()}
 def upcoming_team_events(events, days=90, limit=8):
     today=dt.date.today()
     horizon=today+dt.timedelta(days=max(1,int(days or 90)))
@@ -4362,7 +4448,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         briefing_user=dict(user)
         if briefing_key:
             briefing_user['briefing_key']=briefing_key
-        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'teamEvents':team_events,'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers(),'serviceLines':SERVICE_LINES,'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar,team_events),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar,team_events)})
+        self.send_json({'user':{k:user[k] for k in ('id','username','email','name','role')},'users':users,'drafts':drafts,'tasks':tasks,'calendar':calendar,'teamEvents':merge_sharepoint_events(team_events),'activity':activity,'chadUpdates':updates,'botData':latest_bot_data(),'seasonalTriggers':seasonal_triggers(),'serviceLines':SERVICE_LINES,'sharePoint':{'connected':sharepoint_events().get('connected',False),'error':sharepoint_events().get('error') or ''},'welcome':bot_welcome(briefing_user,tasks,drafts,activity,calendar,team_events),'chadBriefing':proactive_briefing(briefing_user,tasks,drafts,activity,calendar,team_events)})
     def api_codex_updates(self,user):
         if user['role']!='owner':
             self.send_json({'error':'Only Ryan can export the Codex update brief.'},403); return
@@ -4397,6 +4483,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             end_date=start_date
         if end_date < start_date:
             end_date=start_date
+        def metric(key):
+            raw=str(data.get(key) or '').strip()
+            return int(raw) if raw.isdigit() else None
         values={
             'title':title,
             'start_date':start_date,
@@ -4405,6 +4494,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             'category':str(data.get('category') or 'Team Event')[:80],
             'description':str(data.get('description') or '')[:4000],
             'source_url':str(data.get('source_url') or '')[:1500],
+            'attendees':metric('attendees'),
+            'leads':metric('leads'),
+            'follow_ups':metric('follow_ups'),
         }
         event_id=str(data.get('id') or '').strip()
         stamp=now(); con=db()
@@ -4413,16 +4505,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not existing:
                 con.close(); self.send_json({'error':'Event not found.'},404); return
             con.execute(
-                """update team_events set title=?,start_date=?,end_date=?,location=?,category=?,description=?,source_url=?,updated_by=?,updated_at=?
+                """update team_events set title=?,start_date=?,end_date=?,location=?,category=?,description=?,source_url=?,attendees=?,leads=?,follow_ups=?,updated_by=?,updated_at=?
                    where id=?""",
-                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url'))+(user['id'],stamp,int(event_id)),
+                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url','attendees','leads','follow_ups'))+(user['id'],stamp,int(event_id)),
             )
             action='updated team event'
         else:
             cur=con.execute(
-                """insert into team_events(title,start_date,end_date,location,category,description,source_url,created_by,updated_by,created_at,updated_at)
-                   values(?,?,?,?,?,?,?,?,?,?,?)""",
-                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url'))+(user['id'],user['id'],stamp,stamp),
+                """insert into team_events(title,start_date,end_date,location,category,description,source_url,attendees,leads,follow_ups,created_by,updated_by,created_at,updated_at)
+                   values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                tuple(values[key] for key in ('title','start_date','end_date','location','category','description','source_url','attendees','leads','follow_ups'))+(user['id'],user['id'],stamp,stamp),
             )
             event_id=cur.lastrowid
             action='created team event'
@@ -4479,6 +4571,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             'notes':str(data.get('notes') or '')[:8000],
             'published_url':str(data.get('published_url') or '')[:1500],
         }
+        # Post performance (team ask 2026-08-06): whole numbers copied from the platform's
+        # own analytics. Blank means not recorded — never zero-filled, never invented.
+        for perf_key in ('perf_impressions','perf_clicks','perf_reactions','perf_comments','perf_target'):
+            raw=str(data.get(perf_key) or '').strip().replace(',','')
+            values[perf_key]=int(raw) if raw.isdigit() else None
         entry_id=str(data.get('id') or '').strip()
         con=db()
         if assigned_to and not con.execute('select id from users where id=?',(assigned_to,)).fetchone():
@@ -4493,9 +4590,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             con.execute(
                 """update content_calendar set title=?,status=?,content_type=?,platforms=?,assigned_to=?,priority=?,
                    requested_date=?,due_date=?,publish_at=?,service_line=?,region=?,location=?,people=?,talking_points=?,
-                   cta=?,tone=?,duration=?,source_type=?,source_ref=?,notes=?,published_url=?,completed_at=?,updated_by=?,updated_at=?
+                   cta=?,tone=?,duration=?,source_type=?,source_ref=?,notes=?,published_url=?,
+                   perf_impressions=?,perf_clicks=?,perf_reactions=?,perf_comments=?,perf_target=?,completed_at=?,updated_by=?,updated_at=?
                    where id=?""",
-                tuple(values[key] for key in ('title','status','content_type','platforms','assigned_to','priority','requested_date','due_date','publish_at','service_line','region','location','people','talking_points','cta','tone','duration','source_type','source_ref','notes','published_url'))+
+                tuple(values[key] for key in ('title','status','content_type','platforms','assigned_to','priority','requested_date','due_date','publish_at','service_line','region','location','people','talking_points','cta','tone','duration','source_type','source_ref','notes','published_url','perf_impressions','perf_clicks','perf_reactions','perf_comments','perf_target'))+
                 (completed_at,user['id'],stamp,int(entry_id)),
             )
             action='updated calendar production item'
@@ -4511,9 +4609,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             cur=con.execute(
                 """insert into content_calendar(title,status,content_type,platforms,assigned_to,priority,requested_date,
                    due_date,publish_at,service_line,region,location,people,talking_points,cta,tone,duration,source_type,
-                   source_ref,notes,published_url,completed_at,created_by,updated_by,created_at,updated_at)
-                   values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                tuple(values[key] for key in ('title','status','content_type','platforms','assigned_to','priority','requested_date','due_date','publish_at','service_line','region','location','people','talking_points','cta','tone','duration','source_type','source_ref','notes','published_url'))+
+                   source_ref,notes,published_url,perf_impressions,perf_clicks,perf_reactions,perf_comments,perf_target,
+                   completed_at,created_by,updated_by,created_at,updated_at)
+                   values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                tuple(values[key] for key in ('title','status','content_type','platforms','assigned_to','priority','requested_date','due_date','publish_at','service_line','region','location','people','talking_points','cta','tone','duration','source_type','source_ref','notes','published_url','perf_impressions','perf_clicks','perf_reactions','perf_comments','perf_target'))+
                 (completed_at,user['id'],user['id'],stamp,stamp),
             )
             entry_id=cur.lastrowid

@@ -228,7 +228,10 @@
       q("eventsAgenda").innerHTML=items.map(item=>{
         const start=this.dateOnly(item.start_date),end=this.dateOnly(item.end_date||item.start_date);
         const span=end&&end!==start?`${start} to ${end}`:start;
-        return `<div class="eventsAgendaItem ${this.categoryClass(item)}"><span class="badge">${escapeHtml(item.category||"Team Event")}</span><h3>${escapeHtml(item.title)}</h3><p class="muted">${escapeHtml(span)}${item.location?" · "+escapeHtml(item.location):""}</p>${item.description?`<p>${escapeHtml(item.description)}</p>`:""}<button class="mini" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">Edit</button><button class="mini danger" onclick="HancockEvents.removeById('${escapeHtml(item.id)}')">Delete</button></div>`;
+        const isSp=item.readonly||String(item.id).indexOf("sp-")===0;
+        const perfBits=["attendees","leads","follow_ups"].filter(k=>item[k]!=null&&item[k]!=="").map(k=>({attendees:"attended",leads:"leads",follow_ups:"follow-ups booked"})[k]+": "+item[k]);
+        const perf=perfBits.length?`<p><b>Results:</b> ${escapeHtml(perfBits.join(" · "))}</p>`:"";
+        return `<div class="eventsAgendaItem ${this.categoryClass(item)}"><span class="badge${isSp?" live":""}">${escapeHtml(isSp?"SharePoint":item.category||"Team Event")}</span><h3>${escapeHtml(item.title)}</h3><p class="muted">${escapeHtml(span)}${item.location?" · "+escapeHtml(item.location):""}</p>${item.description?`<p>${escapeHtml(item.description)}</p>`:""}${perf}${isSp?'<p class="muted" style="font-size:.85em">From the SharePoint calendar feed — read-only here.</p>':`<button class="mini" onclick="HancockEvents.edit('${escapeHtml(item.id)}')">Edit / log results</button><button class="mini danger" onclick="HancockEvents.removeById('${escapeHtml(item.id)}')">Delete</button>`}</div>`;
       }).join("")||'<div class="panel empty"><h3>No events this month</h3><p>Add the next industry conference, outing, or team date.</p></div>';
     },
     setMonth(year,month){
@@ -249,7 +252,7 @@
       this.render();
     },
     clear(){
-      ["eventId","eventTitle","eventStart","eventEnd","eventLocation","eventDescription","eventSourceUrl"].forEach(id=>{if(q(id))q(id).value=""});
+      ["eventId","eventTitle","eventStart","eventEnd","eventLocation","eventDescription","eventSourceUrl","eventAttendees","eventLeads","eventFollowUps"].forEach(id=>{if(q(id))q(id).value=""});
       q("eventCategory").value="Team Event";
       q("eventFormHeading").textContent="Event Details";
       q("eventSaveStatus").textContent="";
@@ -270,8 +273,9 @@
     edit(id){
       const item=this.eventItems().find(event=>String(event.id)===String(id));
       if(!item)return;
+      if(item.readonly||String(item.id).indexOf("sp-")===0){alert("This event comes from the SharePoint calendar feed — edit it in SharePoint and it updates here within 30 minutes.");return}
       q("eventsForm").classList.add("open");
-      const map={eventId:item.id,eventTitle:item.title,eventStart:this.dateOnly(item.start_date),eventEnd:this.dateOnly(item.end_date||item.start_date),eventCategory:item.category||"Team Event",eventLocation:item.location||"",eventDescription:item.description||"",eventSourceUrl:item.source_url||""};
+      const map={eventId:item.id,eventTitle:item.title,eventStart:this.dateOnly(item.start_date),eventEnd:this.dateOnly(item.end_date||item.start_date),eventCategory:item.category||"Team Event",eventLocation:item.location||"",eventDescription:item.description||"",eventSourceUrl:item.source_url||"",eventAttendees:item.attendees==null?"":item.attendees,eventLeads:item.leads==null?"":item.leads,eventFollowUps:item.follow_ups==null?"":item.follow_ups};
       Object.entries(map).forEach(([key,value])=>{if(q(key))q(key).value=value});
       q("eventFormHeading").textContent="Edit Event";
       q("eventSaveStatus").textContent="";
@@ -279,7 +283,7 @@
       q("eventsForm").scrollIntoView({behavior:"smooth",block:"start"});
     },
     payload(){
-      return {id:q("eventId").value,title:q("eventTitle").value,start_date:q("eventStart").value,end_date:q("eventEnd").value,category:q("eventCategory").value,location:q("eventLocation").value,description:q("eventDescription").value,source_url:q("eventSourceUrl").value};
+      return {id:q("eventId").value,title:q("eventTitle").value,start_date:q("eventStart").value,end_date:q("eventEnd").value,category:q("eventCategory").value,location:q("eventLocation").value,description:q("eventDescription").value,source_url:q("eventSourceUrl").value,attendees:q("eventAttendees")?q("eventAttendees").value:"",leads:q("eventLeads")?q("eventLeads").value:"",follow_ups:q("eventFollowUps")?q("eventFollowUps").value:""};
     },
     async save(){
       try{
@@ -443,9 +447,24 @@
       items.sort((a,b)=>this.dateOnly(a.due_date||a.publish_at).localeCompare(this.dateOnly(b.due_date||b.publish_at)));
       q("calendarView").innerHTML=`<div class="calendarAgenda">${items.map(item=>this.rowHtml(item,today)).join("")||'<div class="panel empty"><h3>No production scheduled here</h3><p>Ask Chad to forecast the next useful content opportunity.</p></div>'}</div>`;
     },
+    perfBadge(item){
+      // Pass/fail color vs the team's own target — green at/above target, amber at half,
+      // red below. No target set = neutral gray (we never invent a benchmark).
+      const imp=item.perf_impressions,target=item.perf_target;
+      if(imp==null&&item.perf_clicks==null&&item.perf_reactions==null&&item.perf_comments==null)return"";
+      const nums=[["imp",imp],["clicks",item.perf_clicks],["reactions",item.perf_reactions],["comments",item.perf_comments]].filter(x=>x[1]!=null).map(x=>Number(x[1]).toLocaleString()+" "+x[0]).join(" · ");
+      let cls="",verdict="";
+      if(target!=null&&imp!=null){
+        const ratio=imp/Math.max(1,target);
+        if(ratio>=1){cls="live";verdict=" · PASS"}
+        else if(ratio>=0.5){cls="warn";verdict=" · BELOW TARGET"}
+        else{cls="hot";verdict=" · MISS"}
+      }
+      return `<span class="badge ${cls}" style="margin-left:4px" title="${target!=null?"Target: "+Number(target).toLocaleString()+" impressions":"No target set — numbers shown without a verdict"}">${escapeHtml(nums+verdict)}</span>`;
+    },
     rowHtml(item,today){
       const overdue=this.dateOnly(item.due_date)&&this.dateOnly(item.due_date)<today&&!["posted","archived"].includes(item.status);
-      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span><div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Edit</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}<button class="mini danger" onclick="HancockCalendar.deleteEntry(${item.id})">Delete</button></div></div>`;
+      return `<div class="calendarRow ${overdue?"overdue":""}"><div><span class="badge ${item.status==="posted"?"live":item.status==="blocked"?"hot":"warn"}">${escapeHtml(this.statusLabel(item.status))}</span>${this.perfBadge(item)}<div class="calendarMeta">Due ${escapeHtml(this.dateOnly(item.due_date)||"not set")}<br>Publish ${escapeHtml(String(item.publish_at||"not set").replace("T"," "))}</div></div><div><h3>${escapeHtml(item.title)}</h3><div class="calendarMeta">${escapeHtml(item.content_type)} · ${escapeHtml(item.platforms||"No platform")} · ${escapeHtml(item.assigned_name||"Unassigned")} · ${escapeHtml(item.priority)} priority</div>${item.talking_points?`<div class="calendarBrief">${escapeHtml(item.talking_points)}</div>`:""}</div><div class="calendarActions"><button class="mini" onclick="HancockCalendar.edit(${item.id})">Edit</button>${item.status!=="posted"?`<button class="mini" onclick="HancockCalendar.status(${item.id},'in_progress')">Working</button><button class="mini" onclick="HancockCalendar.status(${item.id},'ready_to_post')">Ready</button><button class="mini" onclick="HancockCalendar.status(${item.id},'posted')">Produced</button>`:"<b>Produced ✓</b>"}<button class="mini danger" onclick="HancockCalendar.deleteEntry(${item.id})">Delete</button></div></div>`;
     },
     renderGrid(){
       const first=new Date(this.month.getFullYear(),this.month.getMonth(),1),start=new Date(first);
@@ -478,7 +497,7 @@
       q("calendarView").innerHTML=`<div class="leadershipGrid"><div class="leadershipBlock"><h3>Execution</h3><p><b>${active.length}</b> forecasted</p><p><b>${posted.length}</b> produced</p><p><b>${items.filter(i=>i.status==="blocked").length}</b> blocked</p></div>${blocks("Service-line focus",counts("service_line"))}${blocks("Platform mix",counts("platforms"))}${blocks("Production types",counts("content_type"))}${blocks("Regional focus",counts("region"))}${blocks("Ownership",counts("assigned_name"))}</div><div class="panel" style="margin-top:14px"><h3>Forecast and production record</h3><div class="calendarAgenda">${items.map(item=>this.rowHtml(item,this.isoDate(new Date()))).join("")}</div></div>`;
     },
     clear(){
-      ["calId","calTitle","calDue","calPublish","calRegion","calDuration","calTone","calLocation","calPeople","calTalking","calCta","calNotes","calPublishedUrl"].forEach(id=>{if(q(id))q(id).value=""});
+      ["calId","calTitle","calDue","calPublish","calRegion","calDuration","calTone","calLocation","calPeople","calTalking","calCta","calNotes","calPublishedUrl","calPerfTarget","calPerfImpressions","calPerfClicks","calPerfReactions","calPerfComments"].forEach(id=>{if(q(id))q(id).value=""});
       q("calStatus").value="draft";q("calPriority").value="medium";q("calAssigned").value="";q("calService").value="";
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=false);
       q("calFormHeading").textContent="Production Brief";q("calSaveStatus").textContent="";
@@ -491,7 +510,7 @@
       showTab("calendar");
       const entry=this.localDate(this.entryDate(item));
       if(entry)this.month=new Date(entry.getFullYear(),entry.getMonth(),1);
-      const map={calId:item.id,calTitle:item.title,calStatus:item.status,calPriority:item.priority,calType:item.content_type,calAssigned:item.assigned_to||"",calDue:this.dateOnly(item.due_date),calPublish:String(item.publish_at||"").slice(0,16),calService:item.service_line||"",calRegion:item.region||"",calDuration:item.duration||"",calTone:item.tone||"",calLocation:item.location||"",calPeople:item.people||"",calTalking:item.talking_points||"",calCta:item.cta||"",calNotes:item.notes||"",calPublishedUrl:item.published_url||""};
+      const map={calId:item.id,calTitle:item.title,calStatus:item.status,calPriority:item.priority,calType:item.content_type,calAssigned:item.assigned_to||"",calDue:this.dateOnly(item.due_date),calPublish:String(item.publish_at||"").slice(0,16),calService:item.service_line||"",calRegion:item.region||"",calDuration:item.duration||"",calTone:item.tone||"",calLocation:item.location||"",calPeople:item.people||"",calTalking:item.talking_points||"",calCta:item.cta||"",calNotes:item.notes||"",calPublishedUrl:item.published_url||"",calPerfTarget:item.perf_target==null?"":item.perf_target,calPerfImpressions:item.perf_impressions==null?"":item.perf_impressions,calPerfClicks:item.perf_clicks==null?"":item.perf_clicks,calPerfReactions:item.perf_reactions==null?"":item.perf_reactions,calPerfComments:item.perf_comments==null?"":item.perf_comments};
       Object.entries(map).forEach(([id,value])=>{if(q(id))q(id).value=value});
       const chosen=String(item.platforms||"").split(",").map(x=>x.trim());
       q("calPlatforms").querySelectorAll("input").forEach(input=>input.checked=chosen.includes(input.value));
@@ -503,7 +522,7 @@
       this.open();
     },
     payload(){
-      return {id:q("calId").value,title:q("calTitle").value,status:q("calStatus").value,priority:q("calPriority").value,content_type:q("calType").value,assigned_to:q("calAssigned").value,due_date:q("calDue").value,publish_at:q("calPublish").value,service_line:q("calService").value,region:q("calRegion").value,platforms:Array.from(q("calPlatforms").querySelectorAll("input:checked")).map(input=>input.value).join(", "),duration:q("calDuration").value,tone:q("calTone").value,location:q("calLocation").value,people:q("calPeople").value,talking_points:q("calTalking").value,cta:q("calCta").value,notes:q("calNotes").value,published_url:q("calPublishedUrl").value,requested_date:new Date().toISOString().slice(0,10),source_type:q("calId").value?"Manual edit":"Manual"};
+      return {id:q("calId").value,title:q("calTitle").value,status:q("calStatus").value,priority:q("calPriority").value,content_type:q("calType").value,assigned_to:q("calAssigned").value,due_date:q("calDue").value,publish_at:q("calPublish").value,service_line:q("calService").value,region:q("calRegion").value,platforms:Array.from(q("calPlatforms").querySelectorAll("input:checked")).map(input=>input.value).join(", "),duration:q("calDuration").value,tone:q("calTone").value,location:q("calLocation").value,people:q("calPeople").value,talking_points:q("calTalking").value,cta:q("calCta").value,notes:q("calNotes").value,published_url:q("calPublishedUrl").value,perf_target:q("calPerfTarget")?q("calPerfTarget").value:"",perf_impressions:q("calPerfImpressions")?q("calPerfImpressions").value:"",perf_clicks:q("calPerfClicks")?q("calPerfClicks").value:"",perf_reactions:q("calPerfReactions")?q("calPerfReactions").value:"",perf_comments:q("calPerfComments")?q("calPerfComments").value:"",requested_date:new Date().toISOString().slice(0,10),source_type:q("calId").value?"Manual edit":"Manual"};
     },
     async save(){
       try{
@@ -902,6 +921,20 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
   };
   window.HancockSocial=social;
 
+  window.HancockPanelToggle={
+    key:id=>"hancock-panel-collapsed-"+id,
+    collapsed(id){return localStorage.getItem(this.key(id))==="1"},
+    apply(id){
+      const host=q(id+"Out"),btn=q(id+"Toggle");
+      const hidden=this.collapsed(id);
+      if(host)host.style.display=hidden?"none":"";
+      if(btn)btn.textContent=hidden?"▸ Show drafts":"▾ Hide drafts";
+    },
+    flip(id){
+      localStorage.setItem(this.key(id),this.collapsed(id)?"0":"1");
+      this.apply(id);
+    }
+  };
   function renderContentPlays(){
     const host=q("playsOut"),stamp=q("playsStamp");
     if(!host)return;
@@ -914,6 +947,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     const stale=ageH!=null&&ageH>=24?`<div style="margin:0 0 12px;padding:10px 12px;border-radius:10px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.45)"><b>⚠️ These plays are ${ageTxt.replace(" ago"," old")}.</b> They refresh weekday mornings at 7:45, or tell Claude "run Maya's plays" for fresh ones.</div>`:"";
     const read=(Array.isArray(data.marketRead)&&data.marketRead.length)?`<div style="margin:0 0 12px;padding:10px 12px;border:1px solid rgba(139,92,246,.35);border-radius:10px"><p style="margin:0 0 6px"><b>Maya's market read</b> <span class="muted">— her own research, every point sourced</span></p>${data.marketRead.map(m=>`<p class="muted" style="margin:4px 0">• ${escapeHtml(m.point||"")} ${m.url?`<a href="${escapeHtml(m.url)}" target="_blank" rel="noopener">${escapeHtml(m.source||"source")}</a>`:`(${escapeHtml(m.source||"")})`}</p>`).join("")}</div>`:"";
     host.innerHTML=stale+read+data.plays.map((p,i)=>`<div class="eventsAgendaItem" style="border-left-color:#8b5cf6"><span class="badge">${escapeHtml(p.platform||"Content")}</span><h3>${escapeHtml(p.title||"")}</h3>${p.signal?`<p class="muted">Why now: ${escapeHtml(p.signal)}</p>`:""}${p.angle?`<p><b>The play:</b> ${escapeHtml(p.angle)}</p>`:""}${p.draft?`<p style="white-space:pre-wrap">${escapeHtml(p.draft)}</p>`:""}<button class="mini" onclick="HancockPlays.copy(${i})">Copy draft</button></div>`).join("");
+    HancockPanelToggle.apply("plays");
   }
   window.HancockPlays={
     copy(i){
@@ -933,6 +967,7 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
     const ageD=gen&&!isNaN(gen)?Math.floor((Date.now()-gen.getTime())/86400000):null;
     if(stamp)stamp.textContent=`Leo's article from ${d.generatedHuman||d.generated}${ageD!=null&&ageD>=7?" — over a week old, a fresh one lands Monday 8:15am":""} · draft — you publish.`;
     host.innerHTML=`<div class="eventsAgendaItem" style="border-left-color:#177245"><span class="badge">Long-form</span><h3>${escapeHtml(a.title||"")}</h3>${a.subtitle?`<p class="muted">${escapeHtml(a.subtitle)}</p>`:""}${a.signal?`<p class="muted">Why now: ${escapeHtml(a.signal)}</p>`:""}<p style="white-space:pre-wrap">${escapeHtml(a.body)}</p><button class="mini" onclick="HancockLongform.copy()">Copy article</button></div>`;
+    HancockPanelToggle.apply("longform");
   }
   window.HancockLongform={
     copy(){
@@ -1159,20 +1194,27 @@ Rules: under 120 words. Plain, direct, helpful-first — answer the point before
       const focus=(typeof serviceFocus==="function")?serviceFocus():null;
       let items=d.items;
       let note="";
+      // Default to Hancock-relevant headlines only (team ask 2026-08-06) — the full wire
+      // is one click away, never hidden, and an empty relevant set falls back honestly.
+      const relevant=items.filter(it=>(it.relevance||0)>0);
+      const screened=items.length-relevant.length;
+      if(!this.showAll&&relevant.length){items=relevant}
       if(focus){
         const matched=items.filter(it=>serviceMatches([it.title,it.summary,(it.categories||[]).join(" ")].join(" ")));
         if(matched.length){items=matched;note=`${matched.length} headline${matched.length===1?"":"s"} matching ${focus.label}`}
-        else{note=`No current headline matches ${focus.label} — showing the full wire`}
+        else{note=`No current headline matches ${focus.label} — showing the wire`}
       }
+      if(!this.showAll&&relevant.length&&screened>0){note=(note?note+" · ":"")+`${screened} off-topic headline${screened===1?"":"s"} screened out`}
       if(stamp){
         const when=d.fetchedAt?new Date(d.fetchedAt):null;
         stamp.textContent=(note?note+" · ":"")+"Live from "+(d.sources||[]).join(" + ")+(when&&!isNaN(when)?" · pulled "+when.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"")+((d.broken&&d.broken.length)?" · PARTIAL: "+d.broken.join("; "):"");
       }
       body.innerHTML=items.slice(0,20).map((it,i)=>{
         const idx=d.items.indexOf(it);
-        return `<details class="wireItem"><summary><span class="wireSource">${escapeHtml(it.source||"")}</span><span class="wireTitle">${escapeHtml(it.title||"")}</span><span class="wireCaret" aria-hidden="true">▾</span></summary><div class="wireBody"><p class="muted" style="margin:6px 0 2px">${escapeHtml(it.summary||"")}</p><p class="muted" style="margin:2px 0 8px">${escapeHtml(it.date||"")}</p><div class="wireBtns"><button class="mini" onclick="HancockRadarWire.draft(${idx})">Draft from this</button><button class="mini" onclick="window.open('${escapeHtml(it.url||"")}','_blank')">Read full article</button></div></div></details>`;
-      }).join("");
+        return `<details class="wireItem"><summary><span class="wireSource">${escapeHtml(it.source||"")}</span><span class="wireTitle">${escapeHtml(it.title||"")}</span><span class="wireCaret" aria-hidden="true">▾</span></summary><div class="wireBody"><p class="muted" style="margin:6px 0 2px">${escapeHtml(it.summary||"")}</p><p class="muted" style="margin:2px 0 8px">${escapeHtml(it.date||"")}</p><div class="wireBtns"><button class="mini" onclick="HancockRadarWire.draft(${idx})">Draft from this</button><button class="mini" data-url="${escapeHtml(it.url||"")}" onclick="window.open(this.dataset.url,'_blank')">Read full article</button></div></div></details>`;
+      }).join("")+`<p style="margin:8px 0 0"><button class="mini" onclick="HancockRadarWire.toggleAll()">${this.showAll?"Show Hancock-relevant only":"Show all headlines ("+d.items.length+")"}</button></p>`;
     },
+    toggleAll(){this.showAll=!this.showAll;this.render()},
     draft(i){
       const it=(this.data&&this.data.items||[])[i];
       if(!it)return;
